@@ -11,7 +11,7 @@ function buildFilterParams(
   containerType: string[],
   businessType: string[],
   search: string
-) {
+): URLSearchParams {
   const params = new URLSearchParams();
   
   if (years.length > 0) params.set('year', years.join(','));
@@ -22,7 +22,7 @@ function buildFilterParams(
   if (businessType.length > 0) params.set('businessType', businessType.join(','));
   if (search) params.set('search', search);
   
-  return params.toString();
+  return params;
 }
 
 export interface FishFarm {
@@ -84,7 +84,7 @@ export function useFishFarms(page: number = 1, pageSize: number = 20) {
       const params = buildFilterParams(years, kecamatan, desa, fishType, containerType, businessType, search);
       params.set('page', page.toString());
       params.set('pageSize', pageSize.toString());
-      const res = await fetch(`/api/fish-farms?${params}`);
+      const res = await fetch(`/api/fish-farms?${params.toString()}`);
       if (!res.ok) throw new Error('Failed to fetch fish farms');
       return res.json();
     },
@@ -104,7 +104,7 @@ export function useFishFarmStats() {
     queryKey: ['fish-farms-stats', years, kecamatan, desa, fishType, containerType, businessType, search],
     queryFn: async () => {
       const params = buildFilterParams(years, kecamatan, desa, fishType, containerType, businessType, search);
-      const res = await fetch(`/api/fish-farms/stats?${params}`);
+      const res = await fetch(`/api/fish-farms/stats?${params.toString()}`);
       if (!res.ok) throw new Error('Failed to fetch stats');
       return res.json();
     },
@@ -125,7 +125,7 @@ export function useAllFishFarms() {
     queryFn: async () => {
       const params = buildFilterParams(years, kecamatan, desa, fishType, containerType, businessType, search);
       params.set('pageSize', '1000');
-      const res = await fetch(`/api/fish-farms?${params}`);
+      const res = await fetch(`/api/fish-farms?${params.toString()}`);
       if (!res.ok) throw new Error('Failed to fetch fish farms');
       return res.json();
     },

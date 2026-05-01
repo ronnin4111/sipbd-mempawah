@@ -7,7 +7,7 @@ import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { useFilterStore } from '@/store/filter-store';
 
-function buildFilterParams() {
+function buildFilterString() {
   const state = useFilterStore.getState();
   const params = new URLSearchParams();
   if (state.years.length > 0) params.set('year', state.years.join(','));
@@ -17,25 +17,24 @@ function buildFilterParams() {
   if (state.containerType.length > 0) params.set('containerType', state.containerType.join(','));
   if (state.businessType.length > 0) params.set('businessType', state.businessType.join(','));
   if (state.search) params.set('search', state.search);
-  return params.toString();
+  const str = params.toString();
+  return str ? `?${str}` : '';
 }
 
 export function ExportSection() {
   const handleExportExcel = () => {
-    const params = buildFilterParams();
-    const url = `/api/fish-farms/export${params ? `?${params}` : ''}`;
+    const queryStr = buildFilterString();
     const a = document.createElement('a');
-    a.href = url;
+    a.href = `/api/fish-farms/export${queryStr}`;
     a.download = 'data-perikanan-budidaya.xlsx';
     a.click();
     toast.success('Export Excel dimulai');
   };
 
   const handleExportPdf = () => {
-    const params = buildFilterParams();
-    const url = `/api/fish-farms/export-pdf${params ? `?${params}` : ''}`;
+    const queryStr = buildFilterString();
     const a = document.createElement('a');
-    a.href = url;
+    a.href = `/api/fish-farms/export-pdf${queryStr}`;
     a.download = 'laporan-perikanan-budidaya.pdf';
     a.click();
     toast.success('Export PDF dimulai');

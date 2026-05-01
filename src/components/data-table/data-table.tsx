@@ -5,13 +5,12 @@ import {
   useReactTable,
   getCoreRowModel,
   getSortedRowModel,
-  getPaginationRowModel,
   flexRender,
   type ColumnDef,
   type SortingState,
   type VisibilityState,
 } from '@tanstack/react-table';
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ArrowUpDown, Eye, EyeOff } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ArrowUpDown, Eye } from 'lucide-react';
 import {
   Table,
   TableBody,
@@ -42,22 +41,17 @@ interface DataTableProps {
 }
 
 export function DataTable({ page, pageSize, onPageChange, onPageSizeChange }: DataTableProps) {
-  const { data, isLoading } = useFishFarms(page, pageSize);
-  const [sorting, setSorting] = useState<SortingState>([{ id: 'year', desc: true }]);
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
-    targetQty: true,
-    productionValue: true,
-  });
+  const { data, isLoading, isError } = useFishFarms(page, pageSize);
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
 
   const columns = useMemo<ColumnDef<FishFarm>[]>(
     () => [
       {
         id: 'no',
         header: 'No',
-        cell: ({ row, table }) => {
-          const pageIndex = table.getState().pagination.pageIndex;
-          const pageSizeVal = table.getState().pagination.pageSize;
-          return (pageIndex * pageSizeVal + row.index + 1);
+        cell: ({ row }) => {
+          return (page - 1) * pageSize + row.index + 1;
         },
         size: 50,
       },
@@ -137,44 +131,47 @@ export function DataTable({ page, pageSize, onPageChange, onPageSizeChange }: Da
           </button>
         ),
         size: 110,
-        cell: ({ row }) => formatNumber(row.getValue('productionQty')),
+        cell: ({ row }) => formatNumber(row.getValue('productionQty') as number),
       },
       {
         accessorKey: 'rtpCount',
         header: 'RTP',
         size: 60,
-        cell: ({ row }) => formatNumber(row.getValue('rtpCount')),
+        cell: ({ row }) => formatNumber(row.getValue('rtpCount') as number),
       },
       {
         accessorKey: 'farmerCount',
         header: 'Pembudidaya',
         size: 100,
-        cell: ({ row }) => formatNumber(row.getValue('farmerCount')),
+        cell: ({ row }) => formatNumber(row.getValue('farmerCount') as number),
       },
       {
         accessorKey: 'groupCount',
         header: 'Kelompok',
         size: 80,
-        cell: ({ row }) => formatNumber(row.getValue('groupCount')),
+        cell: ({ row }) => formatNumber(row.getValue('groupCount') as number),
       },
       {
         accessorKey: 'targetQty',
         header: 'Target (kg)',
         size: 100,
-        cell: ({ row }) => formatNumber(row.getValue('targetQty')),
+        cell: ({ row }) => formatNumber(row.getValue('targetQty') as number),
       },
       {
         accessorKey: 'productionValue',
         header: 'Nilai Produksi (Rp)',
         size: 140,
-        cell: ({ row }) => formatCurrency(row.getValue('productionValue')),
+        cell: ({ row }) => formatCurrency(row.getValue('productionValue') as number),
       },
     ],
-    []
+    [page, pageSize]
   );
 
+  const tableData = data?.data ?? [];
+  const totalPages = data ? Math.ceil(data.total / pageSize) : 0;
+
   const table = useReactTable({
-    data: data?.data ?? [],
+    data: tableData,
     columns,
     state: {
       sorting,
@@ -184,19 +181,18 @@ export function DataTable({ page, pageSize, onPageChange, onPageSizeChange }: Da
     onColumnVisibilityChange: setColumnVisibility,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
     manualPagination: true,
-    pageCount: data ? Math.ceil(data.total / pageSize) : 0,
+    pageCount: totalPages || -1,
   });
-
-  const totalPages = data ? Math.ceil(data.total / pageSize) : 0;
 
   return (
     <div className="space-y-3">
       {/* Column visibility toggle */}
       <div className="flex items-center justify-between">
         <p className="text-xs text-muted-foreground">
-          {data ? `${formatNumber(data.total)} data ditemukan` : 'Memuat...'}
+          {isLoading ? 'Memuat data...' :
+           isError ? 'Gagal memuat data' :
+           data ? `${formatNumber(data.total)} data ditemukan` : 'Memuat...'}
         </p>
         <Popover>
           <PopoverTrigger asChild>
@@ -273,6 +269,12 @@ export function DataTable({ page, pageSize, onPageChange, onPageSizeChange }: Da
                     ))}
                   </TableRow>
                 ))
+              ) : isError ? (
+                <TableRow>
+                  <TableCell colSpan={columns.length} className="h-24 text-center text-destructive text-sm">
+                    Gagal memuat data. Silakan coba lagi.
+                  </TableCell>
+                </TableRow>
               ) : table.getRowModel().rows.length > 0 ? (
                 table.getRowModel().rows.map((row) => (
                   <TableRow key={row.id} className="hover:bg-accent/50">
@@ -312,6 +314,9 @@ export function DataTable({ page, pageSize, onPageChange, onPageSizeChange }: Da
                 <option key={s} value={s}>{s}</option>
               ))}
             </select>
+            <span className="text-xs text-muted-foreground">
+              Menampilkan {((page - 1) * pageSize) + 1}-{Math.min(page * pageSize, data.total)} dari {formatNumber(data.total)}
+            </span>
           </div>
           <div className="flex items-center gap-1">
             <Button
