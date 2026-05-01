@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Menu, Moon, Sun, Fish } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useFilterStore } from '@/store/filter-store';
+import { useMounted } from '@/hooks/use-mounted';
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -12,11 +13,7 @@ interface HeaderProps {
 export function Header({ onMenuClick }: HeaderProps) {
   const { theme, setTheme } = useTheme();
   const [scrolled, setScrolled] = useState(false);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const mounted = useMounted();
 
   useEffect(() => {
     const handler = () => setScrolled(window.scrollY > 20);

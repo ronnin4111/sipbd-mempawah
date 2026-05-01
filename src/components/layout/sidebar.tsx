@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useFilterStore } from '@/store/filter-store';
 import { useTheme } from 'next-themes';
+import { useMounted } from '@/hooks/use-mounted';
 
 const menuItems = [
   { id: 'dashboard', label: 'Ringkasan Produksi', icon: LayoutDashboard, description: 'Ringkasan & statistik' },
@@ -30,7 +31,8 @@ export function Sidebar({ open, onClose }: SidebarProps) {
   const activeSection = useFilterStore((s) => s.activeSection);
   const setActiveSection = useFilterStore((s) => s.setActiveSection);
   const { theme } = useTheme();
-  const isDark = theme === 'dark';
+  const mounted = useMounted();
+  const isDark = mounted ? theme === 'dark' : true;
 
   const handleMenuClick = (section: string) => {
     setActiveSection(section);
