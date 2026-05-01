@@ -50,6 +50,8 @@ function buildWhere(searchParams: URLSearchParams) {
       { desa: { contains: searchParam } },
       { fishType: { contains: searchParam } },
       { containerType: { contains: searchParam } },
+      { farmerName: { contains: searchParam } },
+      { groupName: { contains: searchParam } },
     ];
   }
 

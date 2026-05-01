@@ -67,6 +67,8 @@ export async function GET(request: NextRequest) {
         { desa: { contains: searchParam } },
         { fishType: { contains: searchParam } },
         { containerType: { contains: searchParam } },
+        { farmerName: { contains: searchParam } },
+        { groupName: { contains: searchParam } },
       ];
     }
 

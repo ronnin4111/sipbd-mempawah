@@ -121,6 +121,24 @@ export function DataTable({ page, pageSize, onPageChange, onPageSizeChange }: Da
         ),
       },
       {
+        accessorKey: 'farmerName',
+        header: 'Nama Pembudidaya',
+        size: 150,
+        cell: ({ row }) => {
+          const val = row.getValue('farmerName') as string;
+          return val ? <span className="text-xs">{val}</span> : <span className="text-xs text-muted-foreground">-</span>;
+        },
+      },
+      {
+        accessorKey: 'groupName',
+        header: 'Nama Kelompok',
+        size: 150,
+        cell: ({ row }) => {
+          const val = row.getValue('groupName') as string;
+          return val ? <span className="text-xs">{val}</span> : <span className="text-xs text-muted-foreground">-</span>;
+        },
+      },
+      {
         accessorKey: 'productionQty',
         header: ({ column }) => (
           <button
@@ -223,6 +241,8 @@ export function DataTable({ page, pageSize, onPageChange, onPageSizeChange }: Da
                      col.id === 'fishType' ? 'Jenis Ikan' :
                      col.id === 'containerType' ? 'Jenis Wadah' :
                      col.id === 'businessType' ? 'Jenis Usaha' :
+                     col.id === 'farmerName' ? 'Nama Pembudidaya' :
+                     col.id === 'groupName' ? 'Nama Kelompok' :
                      col.id === 'productionQty' ? 'Produksi (kg)' :
                      col.id === 'rtpCount' ? 'RTP' :
                      col.id === 'farmerCount' ? 'Pembudidaya' :

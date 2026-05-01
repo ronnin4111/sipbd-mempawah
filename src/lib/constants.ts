@@ -98,7 +98,7 @@ export const CONTAINER_TYPES = ["KJA", "Kolam Air Tenang", "Tambak", "Bioflok", 
 
 export const BUSINESS_TYPES = ["Pembesaran", "Pembenihan"];
 
-export const YEARS = [2020, 2021, 2022, 2023, 2024];
+export const YEARS = [2020, 2021, 2022, 2023, 2024, 2025];
 
 // Approximate coordinates for each kecamatan center in Kab. Mempawah
 export const KECAMATAN_COORDS: Record<string, { lat: number; lng: number }> = {

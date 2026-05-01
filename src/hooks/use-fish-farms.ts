@@ -33,6 +33,8 @@ export interface FishFarm {
   fishType: string;
   containerType: string;
   businessType: string;
+  farmerName: string;
+  groupName: string;
   productionQty: number;
   rtpCount: number;
   farmerCount: number;
@@ -108,6 +110,18 @@ export function useFishFarmStats() {
       if (!res.ok) throw new Error('Failed to fetch stats');
       return res.json();
     },
+  });
+}
+
+export function useAvailableYears() {
+  return useQuery<{ years: number[] }>({
+    queryKey: ['fish-farms-years'],
+    queryFn: async () => {
+      const res = await fetch('/api/fish-farms/years');
+      if (!res.ok) throw new Error('Failed to fetch years');
+      return res.json();
+    },
+    staleTime: 1000 * 60 * 5, // cache for 5 minutes
   });
 }
 

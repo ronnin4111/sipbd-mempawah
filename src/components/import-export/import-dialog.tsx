@@ -26,6 +26,8 @@ interface PreviewRow {
   fishType: string;
   containerType: string;
   businessType: string;
+  farmerName: string;
+  groupName: string;
   productionQty: number;
   rtpCount: number;
   farmerCount: number;
@@ -38,6 +40,7 @@ interface PreviewRow {
 
 const REQUIRED_HEADERS = [
   'year', 'kecamatan', 'desa', 'fishType', 'containerType', 'businessType',
+  'farmerName', 'groupName',
   'productionQty', 'rtpCount', 'farmerCount', 'groupCount', 'targetQty',
   'productionValue', 'latitude', 'longitude',
 ];
@@ -115,6 +118,8 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
           fishType: String(row.fishType || ''),
           containerType: String(row.containerType || ''),
           businessType: String(row.businessType || ''),
+          farmerName: String(row.farmerName || ''),
+          groupName: String(row.groupName || ''),
           productionQty: Number(row.productionQty) || 0,
           rtpCount: Number(row.rtpCount) || 0,
           farmerCount: Number(row.farmerCount) || 0,
@@ -299,6 +304,8 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
                       <th className="px-2 py-1.5 text-left font-medium">Ikan</th>
                       <th className="px-2 py-1.5 text-left font-medium">Wadah</th>
                       <th className="px-2 py-1.5 text-left font-medium">Usaha</th>
+                      <th className="px-2 py-1.5 text-left font-medium">Pembudidaya</th>
+                      <th className="px-2 py-1.5 text-left font-medium">Kelompok</th>
                       <th className="px-2 py-1.5 text-right font-medium">Produksi</th>
                     </tr>
                   </thead>
@@ -311,6 +318,8 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
                         <td className="px-2 py-1">{row.fishType}</td>
                         <td className="px-2 py-1">{row.containerType}</td>
                         <td className="px-2 py-1">{row.businessType}</td>
+                        <td className="px-2 py-1">{row.farmerName || '-'}</td>
+                        <td className="px-2 py-1">{row.groupName || '-'}</td>
                         <td className="px-2 py-1 text-right">{formatNumber(row.productionQty)}</td>
                       </tr>
                     ))}

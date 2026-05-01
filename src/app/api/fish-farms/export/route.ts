@@ -49,6 +49,8 @@ function buildWhere(searchParams: URLSearchParams) {
       { desa: { contains: searchParam } },
       { fishType: { contains: searchParam } },
       { containerType: { contains: searchParam } },
+      { farmerName: { contains: searchParam } },
+      { groupName: { contains: searchParam } },
     ];
   }
 
@@ -70,11 +72,13 @@ export async function GET(request: NextRequest) {
     // Sheet 1: Data Produksi - all fish farm data (re-importable format)
     const dataProduksiHeaders = [
       'year', 'kecamatan', 'desa', 'fishType', 'containerType', 'businessType',
+      'farmerName', 'groupName',
       'productionQty', 'rtpCount', 'farmerCount', 'groupCount',
       'targetQty', 'productionValue', 'latitude', 'longitude',
     ];
     const dataProduksiRows = records.map(r => [
       r.year, r.kecamatan, r.desa, r.fishType, r.containerType, r.businessType,
+      r.farmerName, r.groupName,
       r.productionQty, r.rtpCount, r.farmerCount, r.groupCount,
       r.targetQty, r.productionValue, r.latitude, r.longitude,
     ]);
@@ -88,6 +92,8 @@ export async function GET(request: NextRequest) {
       { wch: 18 }, // fishType
       { wch: 20 }, // containerType
       { wch: 15 }, // businessType
+      { wch: 20 }, // farmerName
+      { wch: 20 }, // groupName
       { wch: 15 }, // productionQty
       { wch: 10 }, // rtpCount
       { wch: 12 }, // farmerCount

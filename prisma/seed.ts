@@ -82,6 +82,23 @@ async function main() {
     const farmerCount = Math.max(1, Math.round(rtpCount * (0.7 + rand() * 0.3)));
     const groupCount = Math.max(1, Math.round(1 + rand() * 5));
 
+    // Farmer and group names
+    const farmerNames = [
+      "Ahmad Suryadi", "Budi Santoso", "Dahlan", "Eko Prasetyo", "Fajar Nugroho",
+      "Gunawan", "Hendra Wijaya", "Irfan Hakim", "Joko Susilo", "Kasmadi",
+      "Lukman Hakim", "Muhammad Rizki", "Nurdin", "Omar Faruk", "Purnomo",
+      "Rahmat Hidayat", "Surya Darma", "Taufik Rahman", "Umar Said", "Wahyu Pratama",
+      "Yusuf Ibrahim", "Zainal Abidin", "Agus Salim", "Basri", "Chairul Anwar",
+    ];
+    const groupNames = [
+      "Mina Sejahtera", "Mina Makmur", "Mina Jaya", "Mina Bersama", "Mina Mandiri",
+      "Pokdakan Makmur", "Pokdakan Sejahtera", "Pokdakan Jaya", "Pokdakan Bersatu",
+      "Kelompok Tani Mina", "Kelompok Budidaya Lestari", "Kelompok Mina Bahari",
+      "Kelompok Mina Sentosa", "Kelompok Mina Harapan", "Kelompok Mina Utama",
+    ];
+    const farmerName = farmerNames[Math.floor(rand() * farmerNames.length)];
+    const groupName = groupNames[Math.floor(rand() * groupNames.length)];
+
     await prisma.fishFarm.create({
       data: {
         year: entry.year,
@@ -90,6 +107,8 @@ async function main() {
         fishType: entry.fishType,
         containerType: entry.containerType,
         businessType: entry.businessType,
+        farmerName,
+        groupName,
         productionQty,
         rtpCount,
         farmerCount,

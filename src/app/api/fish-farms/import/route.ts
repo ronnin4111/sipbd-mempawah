@@ -9,6 +9,8 @@ interface ImportFishFarm {
   fishType: string;
   containerType: string;
   businessType: string;
+  farmerName?: string;
+  groupName?: string;
   productionQty: number;
   rtpCount: number;
   farmerCount: number;
@@ -76,6 +78,8 @@ export async function POST(request: NextRequest) {
             fishType: String(record.fishType),
             containerType: String(record.containerType),
             businessType: String(record.businessType),
+            farmerName: String(record.farmerName || ''),
+            groupName: String(record.groupName || ''),
             productionQty: Number(record.productionQty) || 0,
             rtpCount: Number(record.rtpCount) || 0,
             farmerCount: Number(record.farmerCount) || 0,

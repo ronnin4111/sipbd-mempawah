@@ -20,13 +20,13 @@ import {
 } from '@/components/ui/command';
 import { useFilterStore } from '@/store/filter-store';
 import {
-  YEARS,
   KECAMATAN_LIST,
   ALL_DESA,
   FISH_TYPES,
   CONTAINER_TYPES,
   BUSINESS_TYPES,
 } from '@/lib/constants';
+import { useAvailableYears } from '@/hooks/use-fish-farms';
 import { useMemo } from 'react';
 
 interface MultiSelectFilterProps {
@@ -93,6 +93,16 @@ export function FilterBar() {
     resetFilters,
   } = useFilterStore();
 
+  // Fetch available years from database dynamically
+  const { data: yearsData } = useAvailableYears();
+  const yearOptions = useMemo(() => {
+    if (yearsData?.years && yearsData.years.length > 0) {
+      return yearsData.years.map(String);
+    }
+    // Fallback to a reasonable range if API hasn't loaded yet
+    return ['2020', '2021', '2022', '2023', '2024'];
+  }, [yearsData]);
+
   const filteredDesaOptions = useMemo(() => {
     if (kecamatan.length === 0) {
       return ALL_DESA.map((d) => d.desa);
@@ -101,8 +111,6 @@ export function FilterBar() {
       .filter((d) => kecamatan.includes(d.kecamatan))
       .map((d) => d.desa);
   }, [kecamatan]);
-
-  const yearOptions = YEARS.map(String);
 
   const toggleValue = (current: string[], setter: (v: string[]) => void, value: string) => {
     if (current.includes(value)) {
