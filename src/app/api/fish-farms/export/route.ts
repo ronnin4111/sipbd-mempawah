@@ -84,7 +84,6 @@ export async function GET(request: NextRequest) {
     ]);
     const ws1 = XLSX.utils.aoa_to_sheet([dataProduksiHeaders, ...dataProduksiRows]);
 
-    // Set column widths
     ws1['!cols'] = [
       { wch: 8 },  // year
       { wch: 20 }, // kecamatan
@@ -106,108 +105,145 @@ export async function GET(request: NextRequest) {
 
     XLSX.utils.book_append_sheet(wb, ws1, 'Data Produksi');
 
-    // Sheet 2: Produksi Per Kecamatan
-    const kecDetail: Record<string, { production: number; value: number; rtp: number; farmer: number; group: number }> = {};
+    // Sheet 2: Produksi Per Kecamatan - separated by business type
+    const kecDetail: Record<string, {
+      pembesaranProduction: number; pembenihanProduction: number;
+      value: number; rtp: number; farmer: number; group: number;
+    }> = {};
+    const groupNamesByKecamatan: Record<string, Set<string>> = {};
+
     records.forEach(r => {
       if (!kecDetail[r.kecamatan]) {
-        kecDetail[r.kecamatan] = { production: 0, value: 0, rtp: 0, farmer: 0, group: 0 };
+        kecDetail[r.kecamatan] = {
+          pembesaranProduction: 0, pembenihanProduction: 0,
+          value: 0, rtp: 0, farmer: 0, group: 0,
+        };
+        groupNamesByKecamatan[r.kecamatan] = new Set();
       }
-      kecDetail[r.kecamatan].production += r.productionQty;
+      if (r.businessType === 'Pembesaran') {
+        kecDetail[r.kecamatan].pembesaranProduction += r.productionQty;
+      } else {
+        kecDetail[r.kecamatan].pembenihanProduction += r.productionQty;
+      }
       kecDetail[r.kecamatan].value += r.productionValue;
       kecDetail[r.kecamatan].rtp += r.rtpCount;
       kecDetail[r.kecamatan].farmer += r.farmerCount;
-      kecDetail[r.kecamatan].group += r.groupCount;
+      // Track unique group names
+      if (r.groupName && r.groupName.trim()) {
+        groupNamesByKecamatan[r.kecamatan].add(r.groupName.trim().toLowerCase());
+      }
     });
 
-    const kecHeaders = ['Kecamatan', 'Produksi (Kg)', 'Nilai Produksi (Rp)', 'RTP', 'Pembudidaya', 'Kelompok'];
+    // Set group counts from unique names
+    Object.keys(kecDetail).forEach(kec => {
+      kecDetail[kec].group = groupNamesByKecamatan[kec]?.size || 0;
+    });
+
+    const kecHeaders = ['Kecamatan', 'Pembesaran (Kg)', 'Pembenihan (Ekor)', 'Nilai Produksi (Rp)', 'RTP', 'Pembudidaya', 'Kelompok'];
     const kecRows = Object.entries(kecDetail).map(([kec, d]) => [
       kec,
-      Math.round(d.production * 100) / 100,
+      Math.round(d.pembesaranProduction * 100) / 100,
+      Math.round(d.pembenihanProduction * 100) / 100,
       Math.round(d.value * 100) / 100,
       d.rtp,
       d.farmer,
       d.group,
     ]);
     const ws2 = XLSX.utils.aoa_to_sheet([kecHeaders, ...kecRows]);
-    ws2['!cols'] = [{ wch: 20 }, { wch: 15 }, { wch: 20 }, { wch: 10 }, { wch: 15 }, { wch: 12 }];
+    ws2['!cols'] = [{ wch: 20 }, { wch: 18 }, { wch: 18 }, { wch: 20 }, { wch: 10 }, { wch: 15 }, { wch: 12 }];
     XLSX.utils.book_append_sheet(wb, ws2, 'Produksi Per Kecamatan');
 
-    // Sheet 3: Target vs Realisasi
-    const targetRealisasi: Record<string, { target: number; realisasi: number }> = {};
+    // Sheet 3: Target vs Realisasi - separated by business type
+    const targetPembesaran: Record<string, { target: number; realisasi: number }> = {};
+    const targetPembenihan: Record<string, { target: number; realisasi: number }> = {};
     records.forEach(r => {
-      if (!targetRealisasi[r.fishType]) {
-        targetRealisasi[r.fishType] = { target: 0, realisasi: 0 };
+      if (r.businessType === 'Pembesaran') {
+        if (!targetPembesaran[r.fishType]) targetPembesaran[r.fishType] = { target: 0, realisasi: 0 };
+        targetPembesaran[r.fishType].target += r.targetQty;
+        targetPembesaran[r.fishType].realisasi += r.productionQty;
+      } else {
+        if (!targetPembenihan[r.fishType]) targetPembenihan[r.fishType] = { target: 0, realisasi: 0 };
+        targetPembenihan[r.fishType].target += r.targetQty;
+        targetPembenihan[r.fishType].realisasi += r.productionQty;
       }
-      targetRealisasi[r.fishType].target += r.targetQty;
-      targetRealisasi[r.fishType].realisasi += r.productionQty;
     });
 
-    const targetHeaders = ['Jenis Ikan', 'Target (Kg)', 'Realisasi (Kg)', 'Persentase (%)'];
-    const targetRows = Object.entries(targetRealisasi).map(([fish, d]) => [
-      fish,
+    const targetHeaders = ['Jenis Ikan', 'Jenis Usaha', 'Target', 'Realisasi', 'Satuan', 'Persentase (%)'];
+    const targetRowsPembesaran = Object.entries(targetPembesaran).map(([fish, d]) => [
+      fish, 'Pembesaran',
       Math.round(d.target * 100) / 100,
       Math.round(d.realisasi * 100) / 100,
+      'Kg',
       d.target > 0 ? Math.round((d.realisasi / d.target) * 10000) / 100 : 0,
     ]);
-    const ws3 = XLSX.utils.aoa_to_sheet([targetHeaders, ...targetRows]);
-    ws3['!cols'] = [{ wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 15 }];
+    const targetRowsPembenihan = Object.entries(targetPembenihan).map(([fish, d]) => [
+      fish, 'Pembenihan',
+      Math.round(d.target * 100) / 100,
+      Math.round(d.realisasi * 100) / 100,
+      'Ekor',
+      d.target > 0 ? Math.round((d.realisasi / d.target) * 10000) / 100 : 0,
+    ]);
+    const ws3 = XLSX.utils.aoa_to_sheet([targetHeaders, ...targetRowsPembesaran, ...targetRowsPembenihan]);
+    ws3['!cols'] = [{ wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 10 }, { wch: 15 }];
     XLSX.utils.book_append_sheet(wb, ws3, 'Target vs Realisasi');
 
-    // Sheet 4: Trend 5 Tahun
-    const trend: Record<number, { pembesaran: number; pembenihan: number; total: number }> = {};
+    // Sheet 4: Trend 5 Tahun - separated by business type (no combined total)
+    const trend: Record<number, { pembesaran: number; pembenihan: number }> = {};
     records.forEach(r => {
       if (!trend[r.year]) {
-        trend[r.year] = { pembesaran: 0, pembenihan: 0, total: 0 };
+        trend[r.year] = { pembesaran: 0, pembenihan: 0 };
       }
       if (r.businessType === 'Pembesaran') {
         trend[r.year].pembesaran += r.productionQty;
       } else {
         trend[r.year].pembenihan += r.productionQty;
       }
-      trend[r.year].total += r.productionQty;
     });
 
-    const trendHeaders = ['Tahun', 'Pembesaran (Kg)', 'Pembenihan (Kg)', 'Total (Kg)'];
+    const trendHeaders = ['Tahun', 'Pembesaran (Kg)', 'Pembenihan (Ekor)'];
     const trendRows = Object.entries(trend)
       .sort(([a], [b]) => Number(a) - Number(b))
       .map(([year, d]) => [
         Number(year),
         Math.round(d.pembesaran * 100) / 100,
         Math.round(d.pembenihan * 100) / 100,
-        Math.round(d.total * 100) / 100,
       ]);
     const ws4 = XLSX.utils.aoa_to_sheet([trendHeaders, ...trendRows]);
-    ws4['!cols'] = [{ wch: 10 }, { wch: 18 }, { wch: 18 }, { wch: 15 }];
+    ws4['!cols'] = [{ wch: 10 }, { wch: 18 }, { wch: 18 }];
     XLSX.utils.book_append_sheet(wb, ws4, 'Trend 5 Tahun');
 
     // Sheet 5: RTP & Pembudidaya
-    const businessSummary: Record<string, { rtp: number; farmer: number; group: number; production: number }> = {};
+    const businessSummary: Record<string, { rtp: number; farmer: number; production: number }> = {};
+    const groupNamesByBusinessType: Record<string, Set<string>> = {};
     records.forEach(r => {
       if (!businessSummary[r.businessType]) {
-        businessSummary[r.businessType] = { rtp: 0, farmer: 0, group: 0, production: 0 };
+        businessSummary[r.businessType] = { rtp: 0, farmer: 0, production: 0 };
+        groupNamesByBusinessType[r.businessType] = new Set();
       }
       businessSummary[r.businessType].rtp += r.rtpCount;
       businessSummary[r.businessType].farmer += r.farmerCount;
-      businessSummary[r.businessType].group += r.groupCount;
       businessSummary[r.businessType].production += r.productionQty;
+      if (r.groupName && r.groupName.trim()) {
+        groupNamesByBusinessType[r.businessType].add(r.groupName.trim().toLowerCase());
+      }
     });
 
-    const businessHeaders = ['Jenis Usaha', 'RTP', 'Pembudidaya', 'Kelompok', 'Produksi (Kg)'];
+    const businessHeaders = ['Jenis Usaha', 'RTP', 'Pembudidaya', 'Kelompok', 'Produksi', 'Satuan'];
     const businessRows = Object.entries(businessSummary).map(([type, d]) => [
       type,
       d.rtp,
       d.farmer,
-      d.group,
+      groupNamesByBusinessType[type]?.size || 0,
       Math.round(d.production * 100) / 100,
+      type === 'Pembesaran' ? 'Kg' : 'Ekor',
     ]);
     const ws5 = XLSX.utils.aoa_to_sheet([businessHeaders, ...businessRows]);
-    ws5['!cols'] = [{ wch: 15 }, { wch: 10 }, { wch: 15 }, { wch: 12 }, { wch: 15 }];
+    ws5['!cols'] = [{ wch: 15 }, { wch: 10 }, { wch: 15 }, { wch: 12 }, { wch: 15 }, { wch: 10 }];
     XLSX.utils.book_append_sheet(wb, ws5, 'RTP & Pembudidaya');
 
     // Generate buffer
     const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
 
-    // Return as downloadable file
     const now = new Date();
     const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
 

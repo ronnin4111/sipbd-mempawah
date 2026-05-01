@@ -61,17 +61,9 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const where = buildWhere(searchParams);
 
-    // Fetch all matching records for aggregation
-    // Using raw data for complex aggregations since Prisma groupBy has limitations
     const records = await db.fishFarm.findMany({ where });
 
-    // Total aggregations
-    const totalProduction = records.reduce((sum, r) => sum + r.productionQty, 0);
-    const totalRtp = records.reduce((sum, r) => sum + r.rtpCount, 0);
-    const totalFarmer = records.reduce((sum, r) => sum + r.farmerCount, 0);
-    const totalGroup = records.reduce((sum, r) => sum + r.groupCount, 0);
-
-    // Production by business type
+    // === Production by business type (NOT combined - different units!) ===
     const pembesaranProduction = records
       .filter(r => r.businessType === 'Pembesaran')
       .reduce((sum, r) => sum + r.productionQty, 0);
@@ -79,60 +71,123 @@ export async function GET(request: NextRequest) {
       .filter(r => r.businessType === 'Pembenihan')
       .reduce((sum, r) => sum + r.productionQty, 0);
 
-    // Production by fish type
-    const productionByFishType: Record<string, number> = {};
+    // === Totals (RTP, Farmer - same units, can be combined) ===
+    const totalRtp = records.reduce((sum, r) => sum + r.rtpCount, 0);
+    const totalFarmer = records.reduce((sum, r) => sum + r.farmerCount, 0);
+
+    // === Total Group: count UNIQUE group names (case-insensitive) ===
+    const groupNamesGlobal = new Set<string>();
+    const groupNamesByBusinessType: Record<string, Set<string>> = {};
+    const groupNamesByKecamatan: Record<string, Set<string>> = {};
+
     records.forEach(r => {
-      productionByFishType[r.fishType] = (productionByFishType[r.fishType] || 0) + r.productionQty;
+      if (r.groupName && r.groupName.trim()) {
+        const normalized = r.groupName.trim().toLowerCase();
+        groupNamesGlobal.add(normalized);
+
+        if (!groupNamesByBusinessType[r.businessType]) {
+          groupNamesByBusinessType[r.businessType] = new Set();
+        }
+        groupNamesByBusinessType[r.businessType].add(normalized);
+
+        if (!groupNamesByKecamatan[r.kecamatan]) {
+          groupNamesByKecamatan[r.kecamatan] = new Set();
+        }
+        groupNamesByKecamatan[r.kecamatan].add(normalized);
+      }
     });
 
-    // Production by container type
-    const productionByContainer: Record<string, number> = {};
-    records.forEach(r => {
-      productionByContainer[r.containerType] = (productionByContainer[r.containerType] || 0) + r.productionQty;
+    const totalGroup = groupNamesGlobal.size;
+    const groupByBusinessType: Record<string, number> = {};
+    Object.entries(groupNamesByBusinessType).forEach(([type, set]) => {
+      groupByBusinessType[type] = set.size;
     });
 
-    // Production by kecamatan
-    const productionByKecamatan: Record<string, number> = {};
+    // === Production by fish type - separated by business type ===
+    const productionByFishType: Record<string, { pembesaran: number; pembenihan: number }> = {};
     records.forEach(r => {
-      productionByKecamatan[r.kecamatan] = (productionByKecamatan[r.kecamatan] || 0) + r.productionQty;
+      if (!productionByFishType[r.fishType]) {
+        productionByFishType[r.fishType] = { pembesaran: 0, pembenihan: 0 };
+      }
+      if (r.businessType === 'Pembesaran') {
+        productionByFishType[r.fishType].pembesaran += r.productionQty;
+      } else {
+        productionByFishType[r.fishType].pembenihan += r.productionQty;
+      }
     });
 
-    // Production by year
-    const productionByYear: Record<string, number> = {};
+    // === Production by container type - separated by business type ===
+    const productionByContainer: Record<string, { pembesaran: number; pembenihan: number }> = {};
+    records.forEach(r => {
+      if (!productionByContainer[r.containerType]) {
+        productionByContainer[r.containerType] = { pembesaran: 0, pembenihan: 0 };
+      }
+      if (r.businessType === 'Pembesaran') {
+        productionByContainer[r.containerType].pembesaran += r.productionQty;
+      } else {
+        productionByContainer[r.containerType].pembenihan += r.productionQty;
+      }
+    });
+
+    // === Production by kecamatan - separated by business type ===
+    const productionByKecamatan: Record<string, { pembesaran: number; pembenihan: number }> = {};
+    records.forEach(r => {
+      if (!productionByKecamatan[r.kecamatan]) {
+        productionByKecamatan[r.kecamatan] = { pembesaran: 0, pembenihan: 0 };
+      }
+      if (r.businessType === 'Pembesaran') {
+        productionByKecamatan[r.kecamatan].pembesaran += r.productionQty;
+      } else {
+        productionByKecamatan[r.kecamatan].pembenihan += r.productionQty;
+      }
+    });
+
+    // === Production by year ===
+    const productionByYear: Record<string, { pembesaran: number; pembenihan: number }> = {};
     records.forEach(r => {
       const yearKey = String(r.year);
-      productionByYear[yearKey] = (productionByYear[yearKey] || 0) + r.productionQty;
+      if (!productionByYear[yearKey]) {
+        productionByYear[yearKey] = { pembesaran: 0, pembenihan: 0 };
+      }
+      if (r.businessType === 'Pembesaran') {
+        productionByYear[yearKey].pembesaran += r.productionQty;
+      } else {
+        productionByYear[yearKey].pembenihan += r.productionQty;
+      }
     });
 
-    // RTP by business type
+    // === RTP by business type ===
     const rtpByBusinessType: Record<string, number> = {};
     records.forEach(r => {
       rtpByBusinessType[r.businessType] = (rtpByBusinessType[r.businessType] || 0) + r.rtpCount;
     });
 
-    // Farmer by business type
+    // === Farmer by business type ===
     const farmerByBusinessType: Record<string, number> = {};
     records.forEach(r => {
       farmerByBusinessType[r.businessType] = (farmerByBusinessType[r.businessType] || 0) + r.farmerCount;
     });
 
-    // Group by business type
-    const groupByBusinessType: Record<string, number> = {};
+    // === Target vs Realisasi - separated by business type ===
+    const targetVsRealisasiPembesaran: Record<string, { target: number; realisasi: number }> = {};
+    const targetVsRealisasiPembenihan: Record<string, { target: number; realisasi: number }> = {};
     records.forEach(r => {
-      groupByBusinessType[r.businessType] = (groupByBusinessType[r.businessType] || 0) + r.groupCount;
-    });
-
-    // Target vs Realisasi by fish type
-    const targetVsRealisasi: Record<string, { target: number; realisasi: number }> = {};
-    records.forEach(r => {
-      if (!targetVsRealisasi[r.fishType]) {
-        targetVsRealisasi[r.fishType] = { target: 0, realisasi: 0 };
+      if (r.businessType === 'Pembesaran') {
+        if (!targetVsRealisasiPembesaran[r.fishType]) {
+          targetVsRealisasiPembesaran[r.fishType] = { target: 0, realisasi: 0 };
+        }
+        targetVsRealisasiPembesaran[r.fishType].target += r.targetQty;
+        targetVsRealisasiPembesaran[r.fishType].realisasi += r.productionQty;
+      } else {
+        if (!targetVsRealisasiPembenihan[r.fishType]) {
+          targetVsRealisasiPembenihan[r.fishType] = { target: 0, realisasi: 0 };
+        }
+        targetVsRealisasiPembenihan[r.fishType].target += r.targetQty;
+        targetVsRealisasiPembenihan[r.fishType].realisasi += r.productionQty;
       }
-      targetVsRealisasi[r.fishType].target += r.targetQty;
-      targetVsRealisasi[r.fishType].realisasi += r.productionQty;
     });
 
-    // Trend 5 Year
+    // === Trend 5 Year ===
     const trend5Year: Record<string, { pembesaran: number; pembenihan: number }> = {};
     records.forEach(r => {
       const yearKey = String(r.year);
@@ -141,58 +196,92 @@ export async function GET(request: NextRequest) {
       }
       if (r.businessType === 'Pembesaran') {
         trend5Year[yearKey].pembesaran += r.productionQty;
-      } else if (r.businessType === 'Pembenihan') {
+      } else {
         trend5Year[yearKey].pembenihan += r.productionQty;
       }
     });
 
-    // Production by kecamatan detail
-    const productionByKecamatanDetail: Record<string, { production: number; value: number; rtp: number; farmer: number; group: number }> = {};
+    // === Production by kecamatan detail - separated by business type ===
+    const productionByKecamatanDetail: Record<string, {
+      pembesaranProduction: number;
+      pembenihanProduction: number;
+      value: number;
+      rtp: number;
+      farmer: number;
+      group: number;
+    }> = {};
     records.forEach(r => {
       if (!productionByKecamatanDetail[r.kecamatan]) {
-        productionByKecamatanDetail[r.kecamatan] = { production: 0, value: 0, rtp: 0, farmer: 0, group: 0 };
+        productionByKecamatanDetail[r.kecamatan] = {
+          pembesaranProduction: 0, pembenihanProduction: 0,
+          value: 0, rtp: 0, farmer: 0, group: 0,
+        };
       }
-      productionByKecamatanDetail[r.kecamatan].production += r.productionQty;
+      if (r.businessType === 'Pembesaran') {
+        productionByKecamatanDetail[r.kecamatan].pembesaranProduction += r.productionQty;
+      } else {
+        productionByKecamatanDetail[r.kecamatan].pembenihanProduction += r.productionQty;
+      }
       productionByKecamatanDetail[r.kecamatan].value += r.productionValue;
       productionByKecamatanDetail[r.kecamatan].rtp += r.rtpCount;
       productionByKecamatanDetail[r.kecamatan].farmer += r.farmerCount;
-      productionByKecamatanDetail[r.kecamatan].group += r.groupCount;
+      // Group: use unique group names per kecamatan
     });
 
-    // Round all float values to 2 decimal places for cleaner output
+    // Set group counts using unique group names
+    Object.keys(productionByKecamatanDetail).forEach(kec => {
+      productionByKecamatanDetail[kec].group = groupNamesByKecamatan[kec]?.size || 0;
+    });
+
+    // Round all float values to 2 decimal places
     const round2 = (n: number) => Math.round(n * 100) / 100;
 
     return NextResponse.json({
-      totalProduction: round2(totalProduction),
+      pembesaranProduction: round2(pembesaranProduction),
+      pembenihanProduction: round2(pembenihanProduction),
       totalRtp,
       totalFarmer,
       totalGroup,
-      pembesaranProduction: round2(pembesaranProduction),
-      pembenihanProduction: round2(pembenihanProduction),
-      productionByFishType: Object.fromEntries(
-        Object.entries(productionByFishType).map(([k, v]) => [k, round2(v)])
-      ),
-      productionByContainer: Object.fromEntries(
-        Object.entries(productionByContainer).map(([k, v]) => [k, round2(v)])
-      ),
-      productionByKecamatan: Object.fromEntries(
-        Object.entries(productionByKecamatan).map(([k, v]) => [k, round2(v)])
-      ),
-      productionByYear: Object.fromEntries(
-        Object.entries(productionByYear).map(([k, v]) => [k, round2(v)])
-      ),
       rtpByBusinessType,
       farmerByBusinessType,
       groupByBusinessType,
-      targetVsRealisasi: Object.fromEntries(
-        Object.entries(targetVsRealisasi).map(([k, v]) => [k, { target: round2(v.target), realisasi: round2(v.realisasi) }])
+      productionByFishType: Object.fromEntries(
+        Object.entries(productionByFishType).map(([k, v]) => [k, {
+          pembesaran: round2(v.pembesaran),
+          pembenihan: round2(v.pembenihan),
+        }])
+      ),
+      productionByContainer: Object.fromEntries(
+        Object.entries(productionByContainer).map(([k, v]) => [k, {
+          pembesaran: round2(v.pembesaran),
+          pembenihan: round2(v.pembenihan),
+        }])
+      ),
+      productionByKecamatan: Object.fromEntries(
+        Object.entries(productionByKecamatan).map(([k, v]) => [k, {
+          pembesaran: round2(v.pembesaran),
+          pembenihan: round2(v.pembenihan),
+        }])
+      ),
+      productionByYear: Object.fromEntries(
+        Object.entries(productionByYear).map(([k, v]) => [k, {
+          pembesaran: round2(v.pembesaran),
+          pembenihan: round2(v.pembenihan),
+        }])
+      ),
+      targetVsRealisasiPembesaran: Object.fromEntries(
+        Object.entries(targetVsRealisasiPembesaran).map(([k, v]) => [k, { target: round2(v.target), realisasi: round2(v.realisasi) }])
+      ),
+      targetVsRealisasiPembenihan: Object.fromEntries(
+        Object.entries(targetVsRealisasiPembenihan).map(([k, v]) => [k, { target: round2(v.target), realisasi: round2(v.realisasi) }])
       ),
       trend5Year: Object.fromEntries(
         Object.entries(trend5Year).map(([k, v]) => [k, { pembesaran: round2(v.pembesaran), pembenihan: round2(v.pembenihan) }])
       ),
       productionByKecamatanDetail: Object.fromEntries(
         Object.entries(productionByKecamatanDetail).map(([k, v]) => [k, {
-          production: round2(v.production),
+          pembesaranProduction: round2(v.pembesaranProduction),
+          pembenihanProduction: round2(v.pembenihanProduction),
           value: round2(v.value),
           rtp: v.rtp,
           farmer: v.farmer,

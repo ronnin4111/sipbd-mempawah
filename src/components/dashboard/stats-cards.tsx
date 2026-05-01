@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Fish, Users, UserCheck, Building2, TrendingUp, TrendingDown } from 'lucide-react';
+import { Fish, Users, UserCheck, Building2 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { useFishFarmStats } from '@/hooks/use-fish-farms';
 import { useEffect, useState } from 'react';
@@ -40,7 +40,7 @@ interface StatCardProps {
   value: number;
   icon: React.ReactNode;
   subtitle?: string;
-  breakdown?: { label: string; value: number }[];
+  breakdown?: { label: string; value: number; unit?: string }[];
   colorClass: string;
   index: number;
 }
@@ -61,10 +61,8 @@ function StatCard({ title, value, icon, subtitle, breakdown, colorClass, index }
                 <span className="text-xl sm:text-2xl font-bold text-foreground">
                   <AnimatedNumber value={value} />
                 </span>
+                <span className="text-xs text-muted-foreground">{subtitle}</span>
               </div>
-              {subtitle && (
-                <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>
-              )}
             </div>
             <div className={`shrink-0 flex items-center justify-center h-10 w-10 sm:h-11 sm:w-11 rounded-xl ${colorClass}`}>
               {icon}
@@ -76,6 +74,7 @@ function StatCard({ title, value, icon, subtitle, breakdown, colorClass, index }
                 <div key={b.label} className="flex items-center gap-1.5 text-xs">
                   <span className="text-muted-foreground">{b.label}:</span>
                   <span className="font-semibold text-foreground">{formatNumber(b.value)}</span>
+                  {b.unit && <span className="text-muted-foreground text-[10px]">{b.unit}</span>}
                 </div>
               ))}
             </div>
@@ -110,38 +109,40 @@ export function StatsCards() {
 
   const cards: StatCardProps[] = [
     {
-      title: 'Total Produksi Budidaya',
-      value: stats.totalProduction,
-      subtitle: 'kg',
+      title: 'Produksi Pembesaran',
+      value: stats.pembesaranProduction,
+      subtitle: 'Kg',
       icon: <Fish className="h-5 w-5 text-white" />,
-      breakdown: [
-        { label: 'Pembesaran', value: stats.pembesaranProduction },
-        { label: 'Pembenihan', value: stats.pembenihanProduction },
-      ],
+      breakdown: Object.entries(stats.productionByFishType)
+        .filter(([, v]) => v.pembesaran > 0)
+        .map(([k, v]) => ({ label: k, value: v.pembesaran, unit: 'Kg' }))
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 3),
       colorClass: 'bg-teal-600',
       index: 0,
     },
     {
-      title: 'Total RTP',
-      value: stats.totalRtp,
-      subtitle: 'unit',
-      icon: <Building2 className="h-5 w-5 text-white" />,
-      breakdown: Object.entries(stats.rtpByBusinessType).map(([k, v]) => ({
-        label: k,
-        value: v,
-      })),
+      title: 'Produksi Pembenihan',
+      value: stats.pembenihanProduction,
+      subtitle: 'Ekor',
+      icon: <Fish className="h-5 w-5 text-white" />,
+      breakdown: Object.entries(stats.productionByFishType)
+        .filter(([, v]) => v.pembenihan > 0)
+        .map(([k, v]) => ({ label: k, value: v.pembenihan, unit: 'Ekor' }))
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 3),
       colorClass: 'bg-emerald-600',
       index: 1,
     },
     {
-      title: 'Total Pembudidaya',
-      value: stats.totalFarmer,
-      subtitle: 'orang',
-      icon: <Users className="h-5 w-5 text-white" />,
-      breakdown: Object.entries(stats.farmerByBusinessType).map(([k, v]) => ({
-        label: k,
-        value: v,
-      })),
+      title: 'Total RTP & Pembudidaya',
+      value: stats.totalRtp,
+      subtitle: 'RTP',
+      icon: <Building2 className="h-5 w-5 text-white" />,
+      breakdown: [
+        ...Object.entries(stats.rtpByBusinessType).map(([k, v]) => ({ label: `RTP ${k}`, value: v })),
+        ...Object.entries(stats.farmerByBusinessType).map(([k, v]) => ({ label: `${k}`, value: v })),
+      ],
       colorClass: 'bg-teal-700',
       index: 2,
     },

@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useFilterStore } from '@/store/filter-store';
 
 function buildFilterParams(
@@ -53,22 +53,29 @@ export interface FishFarmResponse {
 }
 
 export interface StatsResponse {
-  totalProduction: number;
+  pembesaranProduction: number;
+  pembenihanProduction: number;
   totalRtp: number;
   totalFarmer: number;
   totalGroup: number;
-  pembesaranProduction: number;
-  pembenihanProduction: number;
-  productionByFishType: Record<string, number>;
-  productionByContainer: Record<string, number>;
-  productionByKecamatan: Record<string, number>;
-  productionByYear: Record<string, number>;
   rtpByBusinessType: Record<string, number>;
   farmerByBusinessType: Record<string, number>;
   groupByBusinessType: Record<string, number>;
-  targetVsRealisasi: Record<string, { target: number; realisasi: number }>;
+  productionByFishType: Record<string, { pembesaran: number; pembenihan: number }>;
+  productionByContainer: Record<string, { pembesaran: number; pembenihan: number }>;
+  productionByKecamatan: Record<string, { pembesaran: number; pembenihan: number }>;
+  productionByYear: Record<string, { pembesaran: number; pembenihan: number }>;
+  targetVsRealisasiPembesaran: Record<string, { target: number; realisasi: number }>;
+  targetVsRealisasiPembenihan: Record<string, { target: number; realisasi: number }>;
   trend5Year: Record<string, { pembesaran: number; pembenihan: number }>;
-  productionByKecamatanDetail: Record<string, { production: number; value: number; rtp: number; farmer: number; group: number }>;
+  productionByKecamatanDetail: Record<string, {
+    pembesaranProduction: number;
+    pembenihanProduction: number;
+    value: number;
+    rtp: number;
+    farmer: number;
+    group: number;
+  }>;
 }
 
 export function useFishFarms(page: number = 1, pageSize: number = 20) {
@@ -121,7 +128,7 @@ export function useAvailableYears() {
       if (!res.ok) throw new Error('Failed to fetch years');
       return res.json();
     },
-    staleTime: 1000 * 60 * 5, // cache for 5 minutes
+    staleTime: 1000 * 60 * 5,
   });
 }
 
@@ -142,6 +149,79 @@ export function useAllFishFarms() {
       const res = await fetch(`/api/fish-farms?${params.toString()}`);
       if (!res.ok) throw new Error('Failed to fetch fish farms');
       return res.json();
+    },
+  });
+}
+
+// === CRUD Mutations ===
+
+export function useCreateFishFarm() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ password, data }: { password: string; data: Partial<FishFarm> }) => {
+      const res = await fetch('/api/fish-farms/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, data }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Gagal menambah data');
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['fish-farms'] });
+      queryClient.invalidateQueries({ queryKey: ['fish-farms-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['fish-farms-all'] });
+      queryClient.invalidateQueries({ queryKey: ['fish-farms-years'] });
+    },
+  });
+}
+
+export function useUpdateFishFarm() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ password, id, data }: { password: string; id: string; data: Partial<FishFarm> }) => {
+      const res = await fetch(`/api/fish-farms/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, data }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Gagal mengubah data');
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['fish-farms'] });
+      queryClient.invalidateQueries({ queryKey: ['fish-farms-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['fish-farms-all'] });
+    },
+  });
+}
+
+export function useDeleteFishFarm() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ password, id }: { password: string; id: string }) => {
+      const res = await fetch(`/api/fish-farms/${id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Gagal menghapus data');
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['fish-farms'] });
+      queryClient.invalidateQueries({ queryKey: ['fish-farms-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['fish-farms-all'] });
+      queryClient.invalidateQueries({ queryKey: ['fish-farms-years'] });
     },
   });
 }

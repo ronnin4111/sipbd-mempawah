@@ -72,33 +72,71 @@ export async function GET(request: NextRequest) {
       orderBy: [{ year: 'desc' }, { kecamatan: 'asc' }, { desa: 'asc' }],
     });
 
-    // Compute stats
-    const totalProduction = records.reduce((s, r) => s + r.productionQty, 0);
+    // Compute stats - separated by business type
+    const pembesaranProduction = records
+      .filter(r => r.businessType === 'Pembesaran')
+      .reduce((s, r) => s + r.productionQty, 0);
+    const pembenihanProduction = records
+      .filter(r => r.businessType === 'Pembenihan')
+      .reduce((s, r) => s + r.productionQty, 0);
     const totalRtp = records.reduce((s, r) => s + r.rtpCount, 0);
     const totalFarmer = records.reduce((s, r) => s + r.farmerCount, 0);
-    const totalGroup = records.reduce((s, r) => s + r.groupCount, 0);
     const totalValue = records.reduce((s, r) => s + r.productionValue, 0);
 
-    // By kecamatan
-    const kecDetail: Record<string, { production: number; value: number; rtp: number; farmer: number; group: number }> = {};
+    // Unique group names (case-insensitive)
+    const groupNamesGlobal = new Set<string>();
+    const groupNamesByBusinessType: Record<string, Set<string>> = {};
     records.forEach(r => {
-      if (!kecDetail[r.kecamatan]) kecDetail[r.kecamatan] = { production: 0, value: 0, rtp: 0, farmer: 0, group: 0 };
-      kecDetail[r.kecamatan].production += r.productionQty;
+      if (r.groupName && r.groupName.trim()) {
+        const normalized = r.groupName.trim().toLowerCase();
+        groupNamesGlobal.add(normalized);
+        if (!groupNamesByBusinessType[r.businessType]) {
+          groupNamesByBusinessType[r.businessType] = new Set();
+        }
+        groupNamesByBusinessType[r.businessType].add(normalized);
+      }
+    });
+    const totalGroup = groupNamesGlobal.size;
+
+    // By kecamatan - separated by business type
+    const kecDetail: Record<string, {
+      pembesaranProduction: number; pembenihanProduction: number;
+      value: number; rtp: number; farmer: number; group: Set<string>;
+    }> = {};
+    records.forEach(r => {
+      if (!kecDetail[r.kecamatan]) kecDetail[r.kecamatan] = {
+        pembesaranProduction: 0, pembenihanProduction: 0,
+        value: 0, rtp: 0, farmer: 0, group: new Set(),
+      };
+      if (r.businessType === 'Pembesaran') {
+        kecDetail[r.kecamatan].pembesaranProduction += r.productionQty;
+      } else {
+        kecDetail[r.kecamatan].pembenihanProduction += r.productionQty;
+      }
       kecDetail[r.kecamatan].value += r.productionValue;
       kecDetail[r.kecamatan].rtp += r.rtpCount;
       kecDetail[r.kecamatan].farmer += r.farmerCount;
-      kecDetail[r.kecamatan].group += r.groupCount;
+      if (r.groupName && r.groupName.trim()) {
+        kecDetail[r.kecamatan].group.add(r.groupName.trim().toLowerCase());
+      }
     });
 
-    // Target vs Realisasi
-    const targetRealisasi: Record<string, { target: number; realisasi: number }> = {};
+    // Target vs Realisasi - separated by business type
+    const targetPembesaran: Record<string, { target: number; realisasi: number }> = {};
+    const targetPembenihan: Record<string, { target: number; realisasi: number }> = {};
     records.forEach(r => {
-      if (!targetRealisasi[r.fishType]) targetRealisasi[r.fishType] = { target: 0, realisasi: 0 };
-      targetRealisasi[r.fishType].target += r.targetQty;
-      targetRealisasi[r.fishType].realisasi += r.productionQty;
+      if (r.businessType === 'Pembesaran') {
+        if (!targetPembesaran[r.fishType]) targetPembesaran[r.fishType] = { target: 0, realisasi: 0 };
+        targetPembesaran[r.fishType].target += r.targetQty;
+        targetPembesaran[r.fishType].realisasi += r.productionQty;
+      } else {
+        if (!targetPembenihan[r.fishType]) targetPembenihan[r.fishType] = { target: 0, realisasi: 0 };
+        targetPembenihan[r.fishType].target += r.targetQty;
+        targetPembenihan[r.fishType].realisasi += r.productionQty;
+      }
     });
 
-    // Create PDF (A4, landscape for better table fit)
+    // Create PDF
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 15;
@@ -119,7 +157,6 @@ export async function GET(request: NextRequest) {
     const dateStr = now.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
     doc.text(`Tanggal: ${dateStr}`, margin, 30);
 
-    // Filter summary
     const filterParts: string[] = [];
     const yearParam = searchParams.get('year');
     const kecamatanParam = searchParams.get('kecamatan');
@@ -129,7 +166,7 @@ export async function GET(request: NextRequest) {
     doc.text(filterText, margin, 35);
     doc.text(`Total Data: ${records.length} record`, margin, 40);
 
-    // Table 1: Iktisar (Summary)
+    // Table 1: Iktisar (Summary) - separated by business type
     doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
     doc.text('Iktisar', margin, 48);
@@ -138,7 +175,8 @@ export async function GET(request: NextRequest) {
       startY: 50,
       head: [['Indikator', 'Nilai']],
       body: [
-        ['Total Produksi (Kg)', formatNumber(totalProduction)],
+        ['Produksi Pembesaran (Kg)', formatNumber(pembesaranProduction)],
+        ['Produksi Pembenihan (Ekor)', formatNumber(pembenihanProduction)],
         ['Total Nilai Produksi (Rp)', formatNumber(totalValue)],
         ['Total RTP', formatNumber(totalRtp)],
         ['Total Pembudidaya', formatNumber(totalFarmer)],
@@ -152,7 +190,7 @@ export async function GET(request: NextRequest) {
       columnStyles: { 0: { fontStyle: 'bold' }, 1: { halign: 'right' } },
     });
 
-    // Table 2: Produksi Per Kecamatan
+    // Table 2: Produksi Per Kecamatan - separated by business type
     const currentY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
     doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
@@ -160,15 +198,16 @@ export async function GET(request: NextRequest) {
 
     autoTable(doc, {
       startY: currentY + 2,
-      head: [['No', 'Kecamatan', 'Produksi (Kg)', 'Nilai (Rp)', 'RTP', 'Pembudidaya', 'Kelompok']],
+      head: [['No', 'Kecamatan', 'Pembesaran (Kg)', 'Pembenihan (Ekor)', 'Nilai (Rp)', 'RTP', 'Pembudidaya', 'Kelompok']],
       body: Object.entries(kecDetail).map(([kec, d], i) => [
         i + 1,
         kec,
-        formatNumber(d.production),
+        formatNumber(d.pembesaranProduction),
+        formatNumber(d.pembenihanProduction),
         formatNumber(d.value),
         formatNumber(d.rtp),
         formatNumber(d.farmer),
-        formatNumber(d.group),
+        formatNumber(d.group.size),
       ]),
       theme: 'grid',
       headStyles: { fillColor: [22, 101, 52], textColor: 255, fontStyle: 'bold', fontSize: 7 },
@@ -183,10 +222,11 @@ export async function GET(request: NextRequest) {
         4: { halign: 'right' },
         5: { halign: 'right' },
         6: { halign: 'right' },
+        7: { halign: 'right' },
       },
     });
 
-    // Table 3: Target vs Realisasi (new page)
+    // Table 3: Target vs Realisasi - separated by business type (new page)
     doc.addPage();
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
@@ -196,25 +236,32 @@ export async function GET(request: NextRequest) {
 
     autoTable(doc, {
       startY: 30,
-      head: [['No', 'Jenis Ikan', 'Target (Kg)', 'Realisasi (Kg)', 'Persentase (%)']],
-      body: Object.entries(targetRealisasi).map(([fish, d], i) => [
-        i + 1,
-        fish,
-        formatNumber(d.target),
-        formatNumber(d.realisasi),
-        d.target > 0 ? `${((d.realisasi / d.target) * 100).toFixed(2)}%` : '0%',
-      ]),
+      head: [['No', 'Jenis Ikan', 'Jenis Usaha', 'Target', 'Realisasi', 'Satuan', 'Persentase (%)']],
+      body: [
+        ...Object.entries(targetPembesaran).map(([fish, d], i) => [
+          i + 1, fish, 'Pembesaran',
+          formatNumber(d.target), formatNumber(d.realisasi), 'Kg',
+          d.target > 0 ? `${((d.realisasi / d.target) * 100).toFixed(2)}%` : '0%',
+        ]),
+        ...Object.entries(targetPembenihan).map(([fish, d], i) => [
+          Object.keys(targetPembesaran).length + i + 1, fish, 'Pembenihan',
+          formatNumber(d.target), formatNumber(d.realisasi), 'Ekor',
+          d.target > 0 ? `${((d.realisasi / d.target) * 100).toFixed(2)}%` : '0%',
+        ]),
+      ],
       theme: 'grid',
       headStyles: { fillColor: [22, 101, 52], textColor: 255, fontStyle: 'bold', fontSize: 8 },
       styles: { fontSize: 8, cellPadding: 2 },
       margin: { left: margin, right: margin },
-      tableWidth: usableWidth * 0.7,
+      tableWidth: usableWidth * 0.85,
       columnStyles: {
         0: { halign: 'center' },
         1: {},
-        2: { halign: 'right' },
+        2: {},
         3: { halign: 'right' },
         4: { halign: 'right' },
+        5: { halign: 'center' },
+        6: { halign: 'right' },
       },
     });
 

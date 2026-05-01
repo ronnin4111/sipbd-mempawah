@@ -14,6 +14,9 @@ const CHART_COLORS = [
   '#2dd4bf', '#10b981', '#a7f3d0',
 ];
 
+const PEMBESARAN_COLOR = '#0d9488';
+const PEMBENIHAN_COLOR = '#059669';
+
 const formatNumber = (num: number) => new Intl.NumberFormat('id-ID').format(num);
 
 function ChartCard({ title, children, index }: { title: string; children: React.ReactNode; index: number }) {
@@ -43,9 +46,8 @@ function TrendChart() {
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([year, val]) => ({
       year,
-      Pembesaran: val.pembesaran,
-      Pembenihan: val.pembenihan,
-      Total: val.pembesaran + val.pembenihan,
+      'Pembesaran (Kg)': val.pembesaran,
+      'Pembenihan (Ekor)': val.pembenihan,
     }));
 
   return (
@@ -57,13 +59,15 @@ function TrendChart() {
             <XAxis dataKey="year" tick={{ fontSize: 12 }} />
             <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
             <Tooltip
-              formatter={(value: number) => formatNumber(value) + ' kg'}
+              formatter={(value: number, name: string) => {
+                const unit = name.includes('Pembesaran') ? ' Kg' : ' Ekor';
+                return formatNumber(value) + unit;
+              }}
               contentStyle={{ fontSize: 12, borderRadius: 8 }}
             />
             <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Line type="monotone" dataKey="Pembesaran" stroke="#0d9488" strokeWidth={2.5} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-            <Line type="monotone" dataKey="Pembenihan" stroke="#059669" strokeWidth={2.5} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-            <Line type="monotone" dataKey="Total" stroke="#14b8a6" strokeWidth={2} strokeDasharray="5 5" dot={{ r: 3 }} />
+            <Line type="monotone" dataKey="Pembesaran (Kg)" stroke={PEMBESARAN_COLOR} strokeWidth={2.5} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+            <Line type="monotone" dataKey="Pembenihan (Ekor)" stroke={PEMBENIHAN_COLOR} strokeWidth={2.5} dot={{ r: 4 }} activeDot={{ r: 6 }} />
           </LineChart>
         </ResponsiveContainer>
       </div>
@@ -75,41 +79,80 @@ function FishTypePieChart() {
   const { data: stats } = useFishFarmStats();
   if (!stats) return null;
 
-  const data = Object.entries(stats.productionByFishType).map(([name, value]) => ({
-    name,
-    value,
-  }));
+  // Show two pies: Pembesaran (Kg) and Pembenihan (Ekor)
+  const pembesaranData = Object.entries(stats.productionByFishType)
+    .filter(([, v]) => v.pembesaran > 0)
+    .map(([name, v]) => ({ name, value: v.pembesaran }));
 
-  const total = data.reduce((s, d) => s + d.value, 0);
+  const pembenihanData = Object.entries(stats.productionByFishType)
+    .filter(([, v]) => v.pembenihan > 0)
+    .map(([name, v]) => ({ name, value: v.pembenihan }));
 
   return (
     <ChartCard title="Produksi per Jenis Ikan" index={1}>
-      <div className="h-64 sm:h-72 flex items-center justify-center">
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie
-              data={data}
-              cx="50%"
-              cy="50%"
-              innerRadius={50}
-              outerRadius={90}
-              paddingAngle={2}
-              dataKey="value"
-              label={({ name, percent }: { name: string; percent: number }) =>
-                `${name} (${(percent * 100).toFixed(0)}%)`
-              }
-              labelLine={{ strokeWidth: 1 }}
-            >
-              {data.map((_, index) => (
-                <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-              ))}
-            </Pie>
-            <Tooltip
-              formatter={(value: number) => formatNumber(value) + ' kg'}
-              contentStyle={{ fontSize: 12, borderRadius: 8 }}
-            />
-          </PieChart>
-        </ResponsiveContainer>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {/* Pembesaran Pie */}
+        <div>
+          <p className="text-xs text-center font-medium text-muted-foreground mb-1">Pembesaran (Kg)</p>
+          <div className="h-48 sm:h-56">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={pembesaranData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={30}
+                  outerRadius={65}
+                  paddingAngle={2}
+                  dataKey="value"
+                  label={({ name, percent }: { name: string; percent: number }) =>
+                    `${name} (${(percent * 100).toFixed(0)}%)`
+                  }
+                  labelLine={{ strokeWidth: 1 }}
+                >
+                  {pembesaranData.map((_, index) => (
+                    <Cell key={`cell-p-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  formatter={(value: number) => formatNumber(value) + ' Kg'}
+                  contentStyle={{ fontSize: 11, borderRadius: 8 }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+        {/* Pembenihan Pie */}
+        <div>
+          <p className="text-xs text-center font-medium text-muted-foreground mb-1">Pembenihan (Ekor)</p>
+          <div className="h-48 sm:h-56">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={pembenihanData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={30}
+                  outerRadius={65}
+                  paddingAngle={2}
+                  dataKey="value"
+                  label={({ name, percent }: { name: string; percent: number }) =>
+                    `${name} (${(percent * 100).toFixed(0)}%)`
+                  }
+                  labelLine={{ strokeWidth: 1 }}
+                >
+                  {pembenihanData.map((_, index) => (
+                    <Cell key={`cell-b-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  formatter={(value: number) => formatNumber(value) + ' Ekor'}
+                  contentStyle={{ fontSize: 11, borderRadius: 8 }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
       </div>
     </ChartCard>
   );
@@ -120,8 +163,12 @@ function KecamatanBarChart() {
   if (!stats) return null;
 
   const data = Object.entries(stats.productionByKecamatan)
-    .map(([name, value]) => ({ name, value }))
-    .sort((a, b) => b.value - a.value);
+    .map(([name, val]) => ({
+      name,
+      'Pembesaran (Kg)': val.pembesaran,
+      'Pembenihan (Ekor)': val.pembenihan,
+    }))
+    .sort((a, b) => (b['Pembesaran (Kg)'] + b['Pembenihan (Ekor)']) - (a['Pembesaran (Kg)'] + a['Pembenihan (Ekor)']));
 
   return (
     <ChartCard title="Produksi per Kecamatan" index={2}>
@@ -132,14 +179,15 @@ function KecamatanBarChart() {
             <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-40} textAnchor="end" interval={0} height={60} />
             <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
             <Tooltip
-              formatter={(value: number) => formatNumber(value) + ' kg'}
+              formatter={(value: number, name: string) => {
+                const unit = name.includes('Pembesaran') ? ' Kg' : ' Ekor';
+                return formatNumber(value) + unit;
+              }}
               contentStyle={{ fontSize: 12, borderRadius: 8 }}
             />
-            <Bar dataKey="value" name="Produksi (kg)" radius={[4, 4, 0, 0]}>
-              {data.map((_, index) => (
-                <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-              ))}
-            </Bar>
+            <Legend wrapperStyle={{ fontSize: 11 }} />
+            <Bar dataKey="Pembesaran (Kg)" fill={PEMBESARAN_COLOR} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="Pembenihan (Ekor)" fill={PEMBENIHAN_COLOR} radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -152,8 +200,12 @@ function ContainerBarChart() {
   if (!stats) return null;
 
   const data = Object.entries(stats.productionByContainer)
-    .map(([name, value]) => ({ name, value }))
-    .sort((a, b) => b.value - a.value);
+    .map(([name, val]) => ({
+      name,
+      'Pembesaran (Kg)': val.pembesaran,
+      'Pembenihan (Ekor)': val.pembenihan,
+    }))
+    .sort((a, b) => (b['Pembesaran (Kg)'] + b['Pembenihan (Ekor)']) - (a['Pembesaran (Kg)'] + a['Pembenihan (Ekor)']));
 
   return (
     <ChartCard title="Produksi per Wadah Budidaya" index={3}>
@@ -164,14 +216,15 @@ function ContainerBarChart() {
             <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-40} textAnchor="end" interval={0} height={60} />
             <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
             <Tooltip
-              formatter={(value: number) => formatNumber(value) + ' kg'}
+              formatter={(value: number, name: string) => {
+                const unit = name.includes('Pembesaran') ? ' Kg' : ' Ekor';
+                return formatNumber(value) + unit;
+              }}
               contentStyle={{ fontSize: 12, borderRadius: 8 }}
             />
-            <Bar dataKey="value" name="Produksi (kg)" fill="#059669" radius={[4, 4, 0, 0]}>
-              {data.map((_, index) => (
-                <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-              ))}
-            </Bar>
+            <Legend wrapperStyle={{ fontSize: 11 }} />
+            <Bar dataKey="Pembesaran (Kg)" fill={PEMBESARAN_COLOR} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="Pembenihan (Ekor)" fill={PEMBENIHAN_COLOR} radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>

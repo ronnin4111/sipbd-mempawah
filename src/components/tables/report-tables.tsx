@@ -41,7 +41,6 @@ function Trend5YearTable() {
       year,
       pembesaran: val.pembesaran,
       pembenihan: val.pembenihan,
-      total: val.pembesaran + val.pembenihan,
     }));
 
   return (
@@ -63,9 +62,8 @@ function Trend5YearTable() {
               <TableHeader>
                 <TableRow className="bg-muted/50 hover:bg-muted/50">
                   <TableHead className="text-xs font-semibold">Tahun</TableHead>
-                  <TableHead className="text-xs font-semibold text-right">Pembesaran (kg)</TableHead>
-                  <TableHead className="text-xs font-semibold text-right">Pembenihan (kg)</TableHead>
-                  <TableHead className="text-xs font-semibold text-right">Total (kg)</TableHead>
+                  <TableHead className="text-xs font-semibold text-right">Pembesaran (Kg)</TableHead>
+                  <TableHead className="text-xs font-semibold text-right">Pembenihan (Ekor)</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -74,7 +72,6 @@ function Trend5YearTable() {
                     <TableCell className="text-xs font-medium">{row.year}</TableCell>
                     <TableCell className="text-xs text-right">{formatNumber(row.pembesaran)}</TableCell>
                     <TableCell className="text-xs text-right">{formatNumber(row.pembenihan)}</TableCell>
-                    <TableCell className="text-xs text-right font-semibold">{formatNumber(row.total)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -104,12 +101,26 @@ function TargetVsRealisasiTable() {
 
   if (!stats) return null;
 
-  const data = Object.entries(stats.targetVsRealisasi).map(([fishType, val]) => ({
+  // Combine pembesaran and pembenihan target data with proper unit labels
+  const pembesaranData = Object.entries(stats.targetVsRealisasiPembesaran).map(([fishType, val]) => ({
     fishType,
+    jenisUsaha: 'Pembesaran',
     target: val.target,
     realisasi: val.realisasi,
+    unit: 'Kg',
     percentage: val.target > 0 ? ((val.realisasi / val.target) * 100) : 0,
   }));
+
+  const pembenihanData = Object.entries(stats.targetVsRealisasiPembenihan).map(([fishType, val]) => ({
+    fishType,
+    jenisUsaha: 'Pembenihan',
+    target: val.target,
+    realisasi: val.realisasi,
+    unit: 'Ekor',
+    percentage: val.target > 0 ? ((val.realisasi / val.target) * 100) : 0,
+  }));
+
+  const data = [...pembesaranData, ...pembenihanData];
 
   return (
     <motion.div
@@ -130,17 +141,27 @@ function TargetVsRealisasiTable() {
               <TableHeader>
                 <TableRow className="bg-muted/50 hover:bg-muted/50">
                   <TableHead className="text-xs font-semibold">Jenis Ikan</TableHead>
-                  <TableHead className="text-xs font-semibold text-right">Target (kg)</TableHead>
-                  <TableHead className="text-xs font-semibold text-right">Realisasi (kg)</TableHead>
+                  <TableHead className="text-xs font-semibold">Jenis Usaha</TableHead>
+                  <TableHead className="text-xs font-semibold text-right">Target</TableHead>
+                  <TableHead className="text-xs font-semibold text-right">Realisasi</TableHead>
+                  <TableHead className="text-xs font-semibold text-right">Satuan</TableHead>
                   <TableHead className="text-xs font-semibold text-right">Persentase</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.map((row) => (
-                  <TableRow key={row.fishType}>
+                {data.map((row, i) => (
+                  <TableRow key={`${row.fishType}-${row.jenisUsaha}-${i}`}>
                     <TableCell className="text-xs font-medium">{row.fishType}</TableCell>
+                    <TableCell className="text-xs">
+                      <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium text-white ${
+                        row.jenisUsaha === 'Pembesaran' ? 'bg-teal-600' : 'bg-emerald-600'
+                      }`}>
+                        {row.jenisUsaha}
+                      </span>
+                    </TableCell>
                     <TableCell className="text-xs text-right">{formatNumber(row.target)}</TableCell>
                     <TableCell className="text-xs text-right">{formatNumber(row.realisasi)}</TableCell>
+                    <TableCell className="text-xs text-center">{row.unit}</TableCell>
                     <TableCell className="text-xs text-right">
                       <span
                         className={`font-semibold ${
@@ -188,7 +209,7 @@ function KecamatanDetailTable() {
       kecamatan,
       ...val,
     }))
-    .sort((a, b) => b.production - a.production);
+    .sort((a, b) => (b.pembesaranProduction + b.pembenihanProduction) - (a.pembesaranProduction + a.pembenihanProduction));
 
   return (
     <motion.div
@@ -209,7 +230,8 @@ function KecamatanDetailTable() {
               <TableHeader>
                 <TableRow className="bg-muted/50 hover:bg-muted/50 sticky top-0">
                   <TableHead className="text-xs font-semibold">Kecamatan</TableHead>
-                  <TableHead className="text-xs font-semibold text-right">Produksi (kg)</TableHead>
+                  <TableHead className="text-xs font-semibold text-right">Pembesaran (Kg)</TableHead>
+                  <TableHead className="text-xs font-semibold text-right">Pembenihan (Ekor)</TableHead>
                   <TableHead className="text-xs font-semibold text-right">Nilai (Rp)</TableHead>
                   <TableHead className="text-xs font-semibold text-right">RTP</TableHead>
                   <TableHead className="text-xs font-semibold text-right">Pembudidaya</TableHead>
@@ -220,7 +242,8 @@ function KecamatanDetailTable() {
                 {data.map((row) => (
                   <TableRow key={row.kecamatan}>
                     <TableCell className="text-xs font-medium whitespace-nowrap">{row.kecamatan}</TableCell>
-                    <TableCell className="text-xs text-right">{formatNumber(row.production)}</TableCell>
+                    <TableCell className="text-xs text-right">{formatNumber(row.pembesaranProduction)}</TableCell>
+                    <TableCell className="text-xs text-right">{formatNumber(row.pembenihanProduction)}</TableCell>
                     <TableCell className="text-xs text-right">{formatCurrency(row.value)}</TableCell>
                     <TableCell className="text-xs text-right">{formatNumber(row.rtp)}</TableCell>
                     <TableCell className="text-xs text-right">{formatNumber(row.farmer)}</TableCell>
