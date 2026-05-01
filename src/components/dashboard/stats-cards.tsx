@@ -51,37 +51,39 @@ function StatCard({ title, value, icon, subtitle, breakdown, colorClass, index }
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: index * 0.1 }}
+      className="stat-card animate-in"
+      style={{ animationDelay: `${index * 0.05}s` }}
     >
-      <Card className="relative overflow-hidden hover:shadow-lg transition-shadow duration-300">
-        <CardContent className="p-4 sm:p-5">
-          <div className="flex items-start justify-between">
-            <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm text-muted-foreground font-medium truncate">{title}</p>
-              <div className="mt-1.5 flex items-baseline gap-2">
-                <span className="text-xl sm:text-2xl font-bold text-foreground">
-                  <AnimatedNumber value={value} />
-                </span>
-                <span className="text-xs text-muted-foreground">{subtitle}</span>
-              </div>
-            </div>
-            <div className={`shrink-0 flex items-center justify-center h-10 w-10 sm:h-11 sm:w-11 rounded-xl ${colorClass}`}>
-              {icon}
+      <div className="p-4 sm:p-5">
+        <div className="flex items-start justify-between">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs sm:text-sm font-medium truncate" style={{ color: 'var(--muted-foreground)' }}>{title}</p>
+            <div className="mt-1.5 flex items-baseline gap-2">
+              <span className="text-xl sm:text-2xl font-bold" style={{ color: 'var(--foreground)' }}>
+                <AnimatedNumber value={value} />
+              </span>
+              <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>{subtitle}</span>
             </div>
           </div>
-          {breakdown && breakdown.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {breakdown.map((b) => (
-                <div key={b.label} className="flex items-center gap-1.5 text-xs">
-                  <span className="text-muted-foreground">{b.label}:</span>
-                  <span className="font-semibold text-foreground">{formatNumber(b.value)}</span>
-                  {b.unit && <span className="text-muted-foreground text-[10px]">{b.unit}</span>}
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-        <div className={`absolute bottom-0 left-0 right-0 h-1 ${colorClass}`} />
-      </Card>
+          <div
+            className="shrink-0 flex items-center justify-center h-10 w-10 sm:h-11 sm:w-11 rounded-xl shadow-lg"
+            style={{ background: colorClass, boxShadow: `0 4px 12px ${colorClass}40` }}
+          >
+            {icon}
+          </div>
+        </div>
+        {breakdown && breakdown.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {breakdown.map((b) => (
+              <div key={b.label} className="flex items-center gap-1.5 text-xs">
+                <span style={{ color: 'var(--muted-foreground)' }}>{b.label}:</span>
+                <span className="font-semibold" style={{ color: 'var(--foreground)' }}>{formatNumber(b.value)}</span>
+                {b.unit && <span className="text-[10px]" style={{ color: 'var(--muted-foreground)' }}>{b.unit}</span>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </motion.div>
   );
 }
@@ -118,7 +120,7 @@ export function StatsCards() {
         .map(([k, v]) => ({ label: k, value: v.pembesaran, unit: 'Kg' }))
         .sort((a, b) => b.value - a.value)
         .slice(0, 3),
-      colorClass: 'bg-teal-600',
+      colorClass: '#0891B2',
       index: 0,
     },
     {
@@ -131,7 +133,7 @@ export function StatsCards() {
         .map(([k, v]) => ({ label: k, value: v.pembenihan, unit: 'Ekor' }))
         .sort((a, b) => b.value - a.value)
         .slice(0, 3),
-      colorClass: 'bg-emerald-600',
+      colorClass: '#14B8A6',
       index: 1,
     },
     {
@@ -143,7 +145,7 @@ export function StatsCards() {
         ...Object.entries(stats.rtpByBusinessType).map(([k, v]) => ({ label: `RTP ${k}`, value: v })),
         ...Object.entries(stats.farmerByBusinessType).map(([k, v]) => ({ label: `${k}`, value: v })),
       ],
-      colorClass: 'bg-teal-700',
+      colorClass: '#0369A1',
       index: 2,
     },
     {
@@ -155,7 +157,7 @@ export function StatsCards() {
         label: k,
         value: v,
       })),
-      colorClass: 'bg-emerald-700',
+      colorClass: '#0D9488',
       index: 3,
     },
   ];

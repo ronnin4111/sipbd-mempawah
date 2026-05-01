@@ -1,8 +1,8 @@
 'use client';
 
-import { Menu, Moon, Sun } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Menu, Moon, Sun, Fish } from 'lucide-react';
 import { useTheme } from 'next-themes';
-import { Button } from '@/components/ui/button';
 import { useFilterStore } from '@/store/filter-store';
 
 interface HeaderProps {
@@ -11,55 +11,120 @@ interface HeaderProps {
 
 export function Header({ onMenuClick }: HeaderProps) {
   const { theme, setTheme } = useTheme();
+  const [scrolled, setScrolled] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    const handler = () => setScrolled(window.scrollY > 20);
+    window.addEventListener('scroll', handler);
+    return () => window.removeEventListener('scroll', handler);
+  }, []);
+
+  const isDark = mounted ? theme === 'dark' : true;
+
+  const headerBg = scrolled
+    ? isDark
+      ? 'rgba(7,14,26,0.97)'
+      : 'rgba(240,246,255,0.97)'
+    : 'transparent';
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
-      <div className="flex h-14 items-center px-3 sm:px-4 gap-2 sm:gap-3">
-        {/* Left: Hamburger */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="shrink-0 h-9 w-9"
+    <header
+      className="sticky top-0 z-40 transition-all duration-300"
+      style={{
+        background: headerBg,
+        backdropFilter: scrolled ? 'blur(16px)' : 'none',
+        boxShadow: scrolled
+          ? isDark
+            ? '0 2px 24px rgba(0,0,0,0.25)'
+            : '0 2px 24px rgba(0,0,0,0.08)'
+          : 'none',
+      }}
+    >
+      <div className="flex items-center justify-between px-4 py-3 max-w-screen-2xl mx-auto">
+        {/* Hamburger */}
+        <button
           onClick={onMenuClick}
+          className="w-10 h-10 flex items-center justify-center rounded-xl transition-all"
+          style={{
+            background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(8,145,178,0.08)',
+            border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(8,145,178,0.15)'}`,
+          }}
           aria-label="Buka menu navigasi"
         >
-          <Menu className="h-5 w-5" />
-        </Button>
-
-        {/* Center: Logo + Title */}
-        <div className="flex items-center gap-2.5 min-w-0 flex-1">
-          <div className="shrink-0 flex items-center justify-center h-9 w-9 rounded-lg bg-gradient-to-br from-teal-500 to-emerald-600 text-white shadow-sm">
-            <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current">
-              <path d="M12 2C6.48 2 2 6 2 10.5c0 2.5 1.5 4.8 3.8 6.2L4 22l4.5-3.2c1.1.3 2.3.5 3.5.5 5.52 0 10-4 10-8.5S17.52 2 12 2zm-1 14h-2v-2h2v2zm0-4h-2V6h2v6z"/>
-            </svg>
+          <div className="flex flex-col gap-1.5 w-5">
+            <span className="block h-0.5 rounded-full transition-all duration-300"
+              style={{ background: isDark ? '#7DD3FC' : '#0891B2' }} />
+            <span className="block h-0.5 rounded-full transition-all duration-300"
+              style={{ background: isDark ? '#7DD3FC' : '#0891B2' }} />
+            <span className="block h-0.5 rounded-full transition-all duration-300"
+              style={{ background: isDark ? '#7DD3FC' : '#0891B2' }} />
           </div>
-          <div className="min-w-0 hidden sm:block">
-            <h1 className="text-sm font-bold text-foreground leading-tight truncate">
+        </button>
+
+        {/* Logo + Title */}
+        <div className="flex items-center gap-3 flex-1 justify-center">
+          <div className="relative">
+            <div
+              className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg"
+              style={{
+                background: 'linear-gradient(135deg, #0891B2, #14B8A6)',
+                boxShadow: '0 4px 16px rgba(8,145,178,0.35)',
+              }}
+            >
+              <Fish size={20} color="white" />
+            </div>
+            <div
+              className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full border-2 animate-pulse"
+              style={{
+                background: '#2DD4BF',
+                borderColor: isDark ? '#070E1A' : '#F0F6FF',
+              }}
+            />
+          </div>
+          <div className="hidden sm:block">
+            <div
+              className="font-bold text-sm leading-tight"
+              style={{ fontFamily: 'Syne, sans-serif', color: 'var(--foreground)' }}
+            >
               SIPBUDIK
-            </h1>
-            <p className="text-[10px] text-muted-foreground leading-tight truncate">
-              Sistem Informasi Perikanan Budidaya &middot; Dinas Perikanan Kab. Mempawah
-            </p>
+            </div>
+            <div className="text-[10px] font-medium tracking-widest uppercase" style={{ color: '#0891B2' }}>
+              Dinas Perikanan Kab. Mempawah
+            </div>
           </div>
-          <div className="min-w-0 sm:hidden">
-            <h1 className="text-sm font-bold text-foreground leading-tight">SIPBUDIK</h1>
+          <div className="sm:hidden">
+            <div className="font-bold text-xs" style={{ fontFamily: 'Syne, sans-serif', color: 'var(--foreground)' }}>
+              SIPBUDIK
+            </div>
+            <div className="text-[9px] tracking-wider uppercase" style={{ color: '#0891B2' }}>Mempawah</div>
           </div>
         </div>
 
-        {/* Right: Theme toggle */}
-        <div className="flex items-center gap-1 shrink-0">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-9 w-9 relative"
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            aria-label="Toggle tema"
-          >
-            <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-            <Moon className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-          </Button>
-        </div>
+        {/* Dark/Light toggle */}
+        <button
+          onClick={() => setTheme(isDark ? 'light' : 'dark')}
+          className="w-10 h-10 flex items-center justify-center rounded-xl transition-all"
+          title={isDark ? 'Mode Terang' : 'Mode Gelap'}
+          style={{
+            background: isDark ? 'rgba(234,179,8,0.12)' : 'rgba(8,145,178,0.12)',
+            border: `1px solid ${isDark ? 'rgba(234,179,8,0.25)' : 'rgba(8,145,178,0.25)'}`,
+          }}
+        >
+          {isDark
+            ? <Sun size={16} style={{ color: '#EAB308' }} />
+            : <Moon size={16} style={{ color: '#0891B2' }} />
+          }
+        </button>
       </div>
+      <div
+        className="h-px"
+        style={{ background: 'linear-gradient(90deg, transparent, rgba(8,145,178,0.3), transparent)' }}
+      />
     </header>
   );
 }

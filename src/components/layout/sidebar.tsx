@@ -7,20 +7,14 @@ import {
   TrendingUp,
   FileSpreadsheet,
   Fish,
+  ChevronRight,
+  X,
 } from 'lucide-react';
 import { useFilterStore } from '@/store/filter-store';
-import { cn } from '@/lib/utils';
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
+import { useTheme } from 'next-themes';
 
 const menuItems = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, description: 'Ringkasan & statistik' },
+  { id: 'dashboard', label: 'Ringkasan Produksi', icon: LayoutDashboard, description: 'Ringkasan & statistik' },
   { id: 'data-produksi', label: 'Data Produksi', icon: Database, description: 'Tabel data lengkap' },
   { id: 'peta-lokasi', label: 'Peta Lokasi', icon: Map, description: 'Sebaran lokasi budidaya' },
   { id: 'tren-laporan', label: 'Tren & Laporan', icon: TrendingUp, description: 'Analisis tren produksi' },
@@ -35,6 +29,8 @@ interface SidebarProps {
 export function Sidebar({ open, onClose }: SidebarProps) {
   const activeSection = useFilterStore((s) => s.activeSection);
   const setActiveSection = useFilterStore((s) => s.setActiveSection);
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
 
   const handleMenuClick = (section: string) => {
     setActiveSection(section);
@@ -42,69 +38,123 @@ export function Sidebar({ open, onClose }: SidebarProps) {
   };
 
   return (
-    <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
-      <SheetContent side="left" className="w-72 p-0 flex flex-col">
-        <SheetHeader className="p-4 pb-3">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center h-11 w-11 rounded-xl bg-gradient-to-br from-teal-500 to-emerald-600 text-white shrink-0 shadow-md">
-              <Fish className="h-6 w-6" />
+    <>
+      {/* Overlay */}
+      {open && (
+        <div
+          className="fixed inset-0 z-40 transition-opacity"
+          style={{ background: 'rgba(7,14,26,0.65)', backdropFilter: 'blur(4px)' }}
+          onClick={onClose}
+        />
+      )}
+
+      {/* Sidebar */}
+      <aside
+        className="fixed top-0 left-0 h-full z-50 overflow-y-auto transition-transform duration-300"
+        style={{
+          width: 290,
+          background: isDark
+            ? 'linear-gradient(160deg, #0D1B2E 0%, #091525 100%)'
+            : 'linear-gradient(160deg, #FFFFFF 0%, #EAF2FF 100%)',
+          borderRight: `1px solid ${isDark ? 'rgba(8,145,178,0.2)' : 'rgba(8,145,178,0.15)'}`,
+          boxShadow: open ? '8px 0 40px rgba(0,0,0,0.4)' : 'none',
+          transform: open ? 'translateX(0)' : 'translateX(-100%)',
+        }}
+      >
+        {/* Sidebar header */}
+        <div
+          className="p-5"
+          style={{ borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}` }}
+        >
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2.5">
+              <div
+                className="w-9 h-9 rounded-xl flex items-center justify-center"
+                style={{ background: 'linear-gradient(135deg, #0891B2, #14B8A6)' }}
+              >
+                <Fish size={17} color="white" />
+              </div>
+              <div>
+                <div className="text-sm font-bold" style={{ fontFamily: 'Syne, sans-serif', color: 'var(--foreground)' }}>
+                  SIPBUDIK
+                </div>
+                <div className="text-[10px]" style={{ color: '#0891B2' }}>Perikanan Budidaya</div>
+              </div>
             </div>
-            <div className="min-w-0">
-              <SheetTitle className="text-base font-bold text-left">SIPBUDIK</SheetTitle>
-              <p className="text-[10px] text-muted-foreground truncate">Dinas Perikanan Kab. Mempawah</p>
-            </div>
+            <button
+              onClick={onClose}
+              className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors"
+              style={{ background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }}
+            >
+              <X size={14} style={{ color: 'var(--muted-foreground)' }} />
+            </button>
           </div>
-        </SheetHeader>
+          <p className="text-xs leading-relaxed" style={{ color: 'var(--muted-foreground)' }}>
+            Sistem Informasi Perikanan Budidaya<br />
+            <span style={{ color: '#0891B2' }}>Dinas Perikanan Kab. Mempawah</span>
+          </p>
+        </div>
 
-        <Separator />
+        {/* Nav */}
+        <nav className="p-3">
+          <div
+            className="text-[10px] font-semibold uppercase tracking-widest px-3 mb-2"
+            style={{ color: 'var(--muted-foreground)', opacity: 0.6 }}
+          >
+            Navigasi
+          </div>
+          {menuItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeSection === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => handleMenuClick(item.id)}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left mb-0.5 group transition-all"
+                style={{
+                  background: isActive
+                    ? 'linear-gradient(135deg, #0891B2, #14B8A6)'
+                    : 'transparent',
+                  color: isActive ? 'white' : 'var(--muted-foreground)',
+                  boxShadow: isActive ? '0 4px 16px rgba(8,145,178,0.3)' : 'none',
+                }}
+                onMouseEnter={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = 'rgba(8,145,178,0.1)';
+                    e.currentTarget.style.color = '#38BDF8';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = 'transparent';
+                    e.currentTarget.style.color = 'var(--muted-foreground)';
+                  }
+                }}
+              >
+                <Icon size={15} className="shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <span className="text-sm font-medium block truncate">{item.label}</span>
+                  <span className="block text-[10px] truncate" style={{ opacity: 0.6 }}>
+                    {item.description}
+                  </span>
+                </div>
+                <ChevronRight size={12} style={{ opacity: 0.4 }} />
+              </button>
+            );
+          })}
+        </nav>
 
-        <ScrollArea className="flex-1 px-2 py-3">
-          <nav className="flex flex-col gap-1">
-            {menuItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = activeSection === item.id;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => handleMenuClick(item.id)}
-                  className={cn(
-                    'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 w-full text-left group',
-                    isActive
-                      ? 'bg-gradient-to-r from-teal-600 to-emerald-600 text-white shadow-md'
-                      : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-                  )}
-                >
-                  <Icon className={cn(
-                    'h-5 w-5 shrink-0 transition-transform duration-200',
-                    isActive ? 'text-white' : 'group-hover:scale-110'
-                  )} />
-                  <div className="min-w-0">
-                    <span className="block truncate">{item.label}</span>
-                    <span className={cn(
-                      'block text-[10px] truncate',
-                      isActive ? 'text-white/70' : 'text-muted-foreground/60'
-                    )}>
-                      {item.description}
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
-          </nav>
-        </ScrollArea>
-
-        <Separator />
-
-        <div className="p-4">
-          <div className="rounded-lg bg-gradient-to-br from-teal-50 to-emerald-50 dark:from-teal-950/30 dark:to-emerald-950/30 p-3">
-            <p className="text-[10px] text-muted-foreground text-center leading-relaxed">
-              Sistem Informasi Perikanan Budidaya<br />
-              Kabupaten Mempawah<br />
-              <span className="text-teal-600 dark:text-teal-400">&copy; {new Date().getFullYear()}</span>
-            </p>
+        {/* Footer */}
+        <div
+          className="absolute bottom-0 left-0 right-0 p-4"
+          style={{ borderTop: `1px solid ${isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}` }}
+        >
+          <div className="text-[10px] text-center" style={{ color: 'var(--muted-foreground)', opacity: 0.5 }}>
+            &copy; {new Date().getFullYear()} Dinas Perikanan Kab. Mempawah<br />
+            <span style={{ color: '#0891B2' }}>Kalimantan Barat</span>
           </div>
         </div>
-      </SheetContent>
-    </Sheet>
+      </aside>
+    </>
   );
 }

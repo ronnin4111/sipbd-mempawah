@@ -10,12 +10,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useFishFarmStats } from '@/hooks/use-fish-farms';
 
 const CHART_COLORS = [
-  '#0d9488', '#059669', '#14b8a6', '#34d399', '#6ee7b7',
-  '#2dd4bf', '#10b981', '#a7f3d0',
+  '#0891B2', '#14B8A6', '#38BDF8', '#2DD4BF', '#7DD3FC',
+  '#0EA5E9', '#0D9488', '#5EEAD4',
 ];
 
-const PEMBESARAN_COLOR = '#0d9488';
-const PEMBENIHAN_COLOR = '#059669';
+const PEMBESARAN_COLOR = '#0891B2';
+const PEMBENIHAN_COLOR = '#14B8A6';
 
 const formatNumber = (num: number) => new Intl.NumberFormat('id-ID').format(num);
 
@@ -25,15 +25,15 @@ function ChartCard({ title, children, index }: { title: string; children: React.
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: 0.2 + index * 0.1 }}
+      className="glass-card animate-in"
+      style={{ animationDelay: `${0.2 + index * 0.05}s` }}
     >
-      <Card className="hover:shadow-lg transition-shadow duration-300">
-        <CardHeader className="pb-2 px-4 sm:px-6 pt-4 sm:pt-6">
-          <CardTitle className="text-sm sm:text-base font-semibold">{title}</CardTitle>
-        </CardHeader>
-        <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
-          {children}
-        </CardContent>
-      </Card>
+      <div className="pb-2 px-4 sm:px-6 pt-4 sm:pt-6">
+        <h3 className="section-title">{title}</h3>
+      </div>
+      <div className="px-4 sm:px-6 pb-4 sm:pb-6">
+        {children}
+      </div>
     </motion.div>
   );
 }

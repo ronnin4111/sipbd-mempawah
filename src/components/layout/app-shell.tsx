@@ -14,13 +14,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <main className="flex-1 w-full max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-4 sm:py-6">
         {children}
       </main>
-      <footer className="mt-auto border-t bg-gradient-to-r from-teal-50 to-emerald-50 dark:from-teal-950/20 dark:to-emerald-950/20">
+      <footer
+        className="mt-auto"
+        style={{
+          borderTop: '1px solid var(--border)',
+          background: 'linear-gradient(90deg, rgba(8,145,178,0.05), rgba(20,184,166,0.05), rgba(8,145,178,0.05))',
+        }}
+      >
         <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-4">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-2">
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
               &copy; {new Date().getFullYear()} Dinas Perikanan Kabupaten Mempawah
             </p>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs" style={{ color: '#0891B2' }}>
               Sistem Informasi Perikanan Budidaya (SIPBUDIK)
             </p>
           </div>

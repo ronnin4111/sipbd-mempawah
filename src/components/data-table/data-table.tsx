@@ -346,11 +346,7 @@ export function DataTable({ page, pageSize, onPageChange, onPageSizeChange }: Da
         size: 100,
         cell: ({ row }) => (
           <Badge
-            className={`text-[10px] whitespace-nowrap ${
-              row.getValue('businessType') === 'Pembesaran'
-                ? 'bg-teal-600 text-white'
-                : 'bg-emerald-600 text-white'
-            }`}
+            className={`text-[10px] whitespace-nowrap badge-${row.getValue('businessType') === 'Pembesaran' ? 'pembesaran' : 'pembenihan'}`}
           >
             {row.getValue('businessType')}
           </Badge>

@@ -49,7 +49,7 @@ function Trend5YearTable() {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: 0 }}
     >
-      <Card className="hover:shadow-lg transition-shadow">
+      <Card className="glass-card hover:shadow-lg transition-shadow">
         <CardHeader className="pb-2 px-4 sm:px-6 pt-4 sm:pt-6">
           <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2">
             <TrendingUp className="h-5 w-5 text-teal-600" />
@@ -128,7 +128,7 @@ function TargetVsRealisasiTable() {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: 0.1 }}
     >
-      <Card className="hover:shadow-lg transition-shadow">
+      <Card className="glass-card hover:shadow-lg transition-shadow">
         <CardHeader className="pb-2 px-4 sm:px-6 pt-4 sm:pt-6">
           <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2">
             <Target className="h-5 w-5 text-emerald-600" />
@@ -217,7 +217,7 @@ function KecamatanDetailTable() {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: 0.2 }}
     >
-      <Card className="hover:shadow-lg transition-shadow">
+      <Card className="glass-card hover:shadow-lg transition-shadow">
         <CardHeader className="pb-2 px-4 sm:px-6 pt-4 sm:pt-6">
           <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2">
             <MapPin className="h-5 w-5 text-teal-600" />
