@@ -24,7 +24,7 @@ interface ImportFishFarm {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { password, data } = body as { password: string; data: ImportFishFarm[] };
+    const { password, data, replaceAll } = body as { password: string; data: ImportFishFarm[]; replaceAll?: boolean };
 
     // Verify password
     if (password !== IMPORT_PASSWORD) {
@@ -43,11 +43,16 @@ export async function POST(request: NextRequest) {
     }
 
     let count = 0;
+    let deletedCount = 0;
 
-    // Process each record using transaction for data integrity
     await db.$transaction(async (tx) => {
-      // Group records by unique key (year+kecamatan+desa+fishType+containerType+businessType)
-      // Delete existing matching records first, then insert new ones
+      // If replaceAll mode, delete ALL existing data first
+      if (replaceAll) {
+        const deleteResult = await tx.fishFarm.deleteMany({});
+        deletedCount = deleteResult.count;
+      }
+
+      // Insert new records
       for (const record of data) {
         // Validate required fields
         if (
@@ -57,17 +62,19 @@ export async function POST(request: NextRequest) {
           continue; // Skip invalid records
         }
 
-        // Delete existing record with same composite key
-        await tx.fishFarm.deleteMany({
-          where: {
-            year: Number(record.year),
-            kecamatan: record.kecamatan,
-            desa: record.desa,
-            fishType: record.fishType,
-            containerType: record.containerType,
-            businessType: record.businessType,
-          },
-        });
+        // If not replaceAll mode, delete existing record with same composite key
+        if (!replaceAll) {
+          await tx.fishFarm.deleteMany({
+            where: {
+              year: Number(record.year),
+              kecamatan: record.kecamatan,
+              desa: record.desa,
+              fishType: record.fishType,
+              containerType: record.containerType,
+              businessType: record.businessType,
+            },
+          });
+        }
 
         // Insert new record
         await tx.fishFarm.create({
@@ -95,7 +102,7 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    return NextResponse.json({ success: true, count });
+    return NextResponse.json({ success: true, count, deletedCount });
   } catch (error) {
     console.error('Error importing fish farms:', error);
     return NextResponse.json(

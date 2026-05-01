@@ -1,10 +1,12 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import * as XLSX from 'xlsx';
-import { Upload, FileSpreadsheet, Lock, CheckCircle2, Eye } from 'lucide-react';
+import { Upload, FileSpreadsheet, Lock, CheckCircle2, Eye, Trash2, AlertTriangle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
   DialogContent,
@@ -12,6 +14,17 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 
 interface ImportDialogProps {
@@ -46,14 +59,17 @@ const REQUIRED_HEADERS = [
 ];
 
 export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
+  const queryClient = useQueryClient();
   const [password, setPassword] = useState('');
   const [isVerified, setIsVerified] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [previewData, setPreviewData] = useState<PreviewRow[]>([]);
   const [importing, setImporting] = useState(false);
-  const [importResult, setImportResult] = useState<{ success: boolean; count: number } | null>(null);
+  const [importResult, setImportResult] = useState<{ success: boolean; count: number; deletedCount: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [replaceAll, setReplaceAll] = useState(true);
+  const [deleting, setDeleting] = useState(false);
 
   const resetState = useCallback(() => {
     setPassword('');
@@ -61,7 +77,16 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
     setFile(null);
     setPreviewData([]);
     setImportResult(null);
+    setReplaceAll(true);
   }, []);
+
+  // Invalidate all React Query caches so fresh data is fetched
+  const refreshAllData = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['fish-farms'] });
+    queryClient.invalidateQueries({ queryKey: ['fish-farms-stats'] });
+    queryClient.invalidateQueries({ queryKey: ['fish-farms-all'] });
+    queryClient.invalidateQueries({ queryKey: ['fish-farms-years'] });
+  }, [queryClient]);
 
   const handleVerifyPassword = async () => {
     if (!password.trim()) {
@@ -179,12 +204,18 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
       const res = await fetch('/api/fish-farms/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password, data: previewData }),
+        body: JSON.stringify({ password, data: previewData, replaceAll }),
       });
       const result = await res.json();
       if (res.ok) {
-        setImportResult({ success: true, count: result.count });
-        toast.success(`Berhasil mengimpor ${result.count} data`);
+        setImportResult({ success: true, count: result.count, deletedCount: result.deletedCount || 0 });
+        if (replaceAll && result.deletedCount > 0) {
+          toast.success(`Berhasil! ${result.deletedCount} data lama dihapus, ${result.count} data baru diimpor`);
+        } else {
+          toast.success(`Berhasil mengimpor ${result.count} data`);
+        }
+        // CRITICAL: Invalidate all caches so new data appears immediately
+        refreshAllData();
       } else {
         toast.error(result.error || 'Gagal mengimpor data');
       }
@@ -192,6 +223,33 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
       toast.error('Gagal mengimpor data');
     } finally {
       setImporting(false);
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    if (!isVerified) {
+      toast.error('Verifikasi password terlebih dahulu');
+      return;
+    }
+    setDeleting(true);
+    try {
+      const res = await fetch('/api/fish-farms/delete-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+      const result = await res.json();
+      if (res.ok) {
+        toast.success(`Berhasil menghapus ${result.deletedCount} data`);
+        // Invalidate all caches
+        refreshAllData();
+      } else {
+        toast.error(result.error || 'Gagal menghapus data');
+      }
+    } catch {
+      toast.error('Gagal menghapus data');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -212,7 +270,7 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
             Import Data Excel
           </DialogTitle>
           <DialogDescription>
-            Import data perikanan budidaya dari file Excel. Data yang sudah ada dengan composite key yang sama akan ditimpa.
+            Import data perikanan budidaya dari file Excel. Memerlukan password untuk keamanan.
           </DialogDescription>
         </DialogHeader>
 
@@ -248,6 +306,55 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
               </p>
             )}
           </div>
+
+          {/* Delete All Data Section */}
+          {isVerified && (
+            <div className="border border-red-200 dark:border-red-900 rounded-lg p-3 bg-red-50/50 dark:bg-red-950/20">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Trash2 className="h-4 w-4 text-red-500" />
+                  <span className="text-sm font-medium text-red-700 dark:text-red-400">Hapus Semua Data</span>
+                </div>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="h-7 text-xs gap-1"
+                      disabled={deleting}
+                    >
+                      {deleting ? 'Menghapus...' : 'Hapus Semua'}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle className="flex items-center gap-2">
+                        <AlertTriangle className="h-5 w-5 text-red-500" />
+                        Hapus Semua Data?
+                      </AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Tindakan ini akan menghapus <strong>SEMUA data perikanan</strong> dari database.
+                        Data yang sudah dihapus tidak dapat dikembalikan.
+                        Pastikan Anda sudah mem-backup data dengan melakukan Export terlebih dahulu.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Batal</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={handleDeleteAll}
+                        className="bg-red-600 hover:bg-red-700"
+                      >
+                        Ya, Hapus Semua Data
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
+              <p className="text-xs text-red-600/70 dark:text-red-400/70 mt-1">
+                Menghapus semua data tidak dapat dibatalkan. Export data terlebih dahulu jika diperlukan.
+              </p>
+            </div>
+          )}
 
           {/* Step 2: File upload */}
           <div className="space-y-2">
@@ -286,6 +393,26 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
               </label>
             </div>
           </div>
+
+          {/* Import Mode */}
+          {previewData.length > 0 && (
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 border">
+              <Checkbox
+                id="replace-all"
+                checked={replaceAll}
+                onCheckedChange={(checked) => setReplaceAll(!!checked)}
+                className="h-4 w-4"
+              />
+              <label htmlFor="replace-all" className="text-sm cursor-pointer">
+                <span className="font-medium">Ganti semua data</span>
+                <span className="text-xs text-muted-foreground block mt-0.5">
+                  {replaceAll
+                    ? 'Semua data lama akan dihapus dan diganti dengan data baru'
+                    : 'Hanya data dengan key yang sama yang akan ditimpa (data lama lainnya tetap ada)'}
+                </span>
+              </label>
+            </div>
+          )}
 
           {/* Step 3: Preview */}
           {previewData.length > 0 && (
@@ -336,11 +463,32 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
 
           {/* Import result */}
           {importResult && (
-            <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg p-3 flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
-              <CheckCircle2 className="h-4 w-4 shrink-0" />
-              <span className="text-sm font-medium">
-                Berhasil mengimpor {importResult.count} data
-              </span>
+            <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg p-3 space-y-1">
+              <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                <span className="text-sm font-medium">
+                  Berhasil mengimpor {importResult.count} data
+                </span>
+              </div>
+              {importResult.deletedCount > 0 && (
+                <p className="text-xs text-emerald-600/70 dark:text-emerald-400/70 ml-6">
+                  {importResult.deletedCount} data lama dihapus
+                </p>
+              )}
+              <div className="ml-6 mt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs gap-1"
+                  onClick={() => {
+                    refreshAllData();
+                    toast.success('Data diperbarui');
+                  }}
+                >
+                  <RefreshCw className="h-3 w-3" />
+                  Refresh Data
+                </Button>
+              </div>
             </div>
           )}
 
@@ -351,7 +499,12 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
               disabled={importing}
               className="w-full bg-teal-600 hover:bg-teal-700"
             >
-              {importing ? 'Mengimpor...' : `Import ${previewData.length} Data`}
+              {importing
+                ? 'Mengimpor...'
+                : replaceAll
+                ? `Hapus Semua & Import ${previewData.length} Data`
+                : `Import ${previewData.length} Data (Gabung)`
+              }
             </Button>
           )}
         </div>
