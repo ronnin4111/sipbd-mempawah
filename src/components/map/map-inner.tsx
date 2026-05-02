@@ -165,8 +165,8 @@ export default function MapInner() {
           });
           const fishTypes = [...new Set(val.items.map((i) => i.fishType))].join(', ');
           const popupContent = `
-            <div style="font-size:12px;min-width:200px;">
-              <strong style="font-size:14px;color:#0d9488;">${kec}</strong><br/>
+            <div style="font-size:12px;min-width:200px;color:#E2EDF5;">
+              <strong style="font-size:14px;color:#2DD4BF;">${kec}</strong><br/>
               <span>Jenis Ikan: <strong>${fishTypes}</strong></span><br/>
               <span>Total Produksi: <strong>${formatNumber(totalProd)} kg</strong></span><br/>
               <span>Jumlah Entry: <strong>${val.items.length}</strong></span>
@@ -223,15 +223,15 @@ export default function MapInner() {
         `).join('');
 
         const popupContent = `
-          <div style="font-size:12px;min-width:240px;max-width:320px;">
-            <strong style="font-size:14px;color:#0d9488;">${loc.kecamatan} - ${loc.desa}</strong><br/>
+          <div style="font-size:12px;min-width:240px;max-width:320px;color:#E2EDF5;">
+            <strong style="font-size:14px;color:#2DD4BF;">${loc.kecamatan} - ${loc.desa}</strong><br/>
             <span>Jenis Ikan: <strong>${fishTypes}</strong></span><br/>
             <span>Total Produksi: <strong>${formatNumber(totalProd)} kg</strong></span><br/>
             <span>Jumlah Entry: <strong>${loc.items.length}</strong></span>
             ${loc.items.length > 0 ? `
               <table style="margin-top:6px;border-collapse:collapse;font-size:10px;width:100%;">
                 <thead>
-                  <tr style="background:#f0fdfa;border-bottom:1px solid #ccc;">
+                  <tr style="background:rgba(8,145,178,0.2);border-bottom:1px solid rgba(8,145,178,0.3);">
                     <th style="padding:2px 4px;text-align:left;">Ikan</th>
                     <th style="padding:2px 4px;text-align:left;">Usaha</th>
                     <th style="padding:2px 4px;text-align:right;">Produksi</th>
@@ -240,7 +240,7 @@ export default function MapInner() {
                 </thead>
                 <tbody>${itemsList}</tbody>
               </table>
-              ${loc.items.length > 10 ? `<div style="font-size:10px;color:#666;margin-top:2px;">...dan ${loc.items.length - 10} lainnya</div>` : ''}
+              ${loc.items.length > 10 ? `<div style="font-size:10px;color:#6B8FAE;margin-top:2px;">...dan ${loc.items.length - 10} lainnya</div>` : ''}
             ` : ''}
           </div>
         `;

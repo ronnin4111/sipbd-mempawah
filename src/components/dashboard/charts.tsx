@@ -19,6 +19,21 @@ const PEMBENIHAN_COLOR = '#14B8A6';
 
 const formatNumber = (num: number) => new Intl.NumberFormat('id-ID').format(num);
 
+// Theme-aware tooltip style
+const tooltipStyle = {
+  fontSize: 12,
+  borderRadius: 8,
+  background: 'rgba(13,27,46,0.95)',
+  border: '1px solid rgba(8,145,178,0.3)',
+  color: '#E2EDF5',
+  boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+};
+
+const tooltipStyleSmall = {
+  ...tooltipStyle,
+  fontSize: 11,
+};
+
 function ChartCard({ title, children, index }: { title: string; children: React.ReactNode; index: number }) {
   return (
     <motion.div
@@ -63,7 +78,7 @@ function TrendChart() {
                 const unit = name.includes('Pembesaran') ? ' Kg' : ' Ekor';
                 return formatNumber(value) + unit;
               }}
-              contentStyle={{ fontSize: 12, borderRadius: 8 }}
+              contentStyle={tooltipStyle}
             />
             <Legend wrapperStyle={{ fontSize: 12 }} />
             <Line type="monotone" dataKey="Pembesaran (Kg)" stroke={PEMBESARAN_COLOR} strokeWidth={2.5} dot={{ r: 4 }} activeDot={{ r: 6 }} />
@@ -116,7 +131,7 @@ function FishTypePieChart() {
                 </Pie>
                 <Tooltip
                   formatter={(value: number) => formatNumber(value) + ' Kg'}
-                  contentStyle={{ fontSize: 11, borderRadius: 8 }}
+                  contentStyle={tooltipStyleSmall}
                 />
               </PieChart>
             </ResponsiveContainer>
@@ -147,7 +162,7 @@ function FishTypePieChart() {
                 </Pie>
                 <Tooltip
                   formatter={(value: number) => formatNumber(value) + ' Ekor'}
-                  contentStyle={{ fontSize: 11, borderRadius: 8 }}
+                  contentStyle={tooltipStyleSmall}
                 />
               </PieChart>
             </ResponsiveContainer>
@@ -183,7 +198,7 @@ function KecamatanBarChart() {
                 const unit = name.includes('Pembesaran') ? ' Kg' : ' Ekor';
                 return formatNumber(value) + unit;
               }}
-              contentStyle={{ fontSize: 12, borderRadius: 8 }}
+              contentStyle={tooltipStyle}
             />
             <Legend wrapperStyle={{ fontSize: 11 }} />
             <Bar dataKey="Pembesaran (Kg)" fill={PEMBESARAN_COLOR} radius={[4, 4, 0, 0]} />
@@ -220,7 +235,7 @@ function ContainerBarChart() {
                 const unit = name.includes('Pembesaran') ? ' Kg' : ' Ekor';
                 return formatNumber(value) + unit;
               }}
-              contentStyle={{ fontSize: 12, borderRadius: 8 }}
+              contentStyle={tooltipStyle}
             />
             <Legend wrapperStyle={{ fontSize: 11 }} />
             <Bar dataKey="Pembesaran (Kg)" fill={PEMBESARAN_COLOR} radius={[4, 4, 0, 0]} />
