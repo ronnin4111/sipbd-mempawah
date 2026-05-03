@@ -164,7 +164,7 @@ function getProduksiData(
       'Pembesaran (Kg)': val.pembesaran,
       'Pembenihan (Ekor)': val.pembenihan,
     }))
-    .sort((a, b) => (b['Pembesaran (Kg)'] + b['Pembenihan (Ektor)']) - (a['Pembesaran (Kg)'] + a['Pembenihan (Ektor)']));
+    .sort((a, b) => (b['Pembesaran (Kg)'] + b['Pembenihan (Ekor)']) - (a['Pembesaran (Kg)'] + a['Pembenihan (Ekor)']));
 }
 
 // === 1. TREND CHART ===
@@ -283,8 +283,8 @@ function ProduksiChart() {
     .map(d => ({ name: d.name, value: d['Pembesaran (Kg)'] as number }));
 
   const pembenihanPieData = data
-    .filter(d => (d['Pembenihan (Ektor)'] as number) > 0)
-    .map(d => ({ name: d.name, value: d['Pembenihan (Ektor)'] as number }));
+    .filter(d => (d['Pembenihan (Ekor)'] as number) > 0)
+    .map(d => ({ name: d.name, value: d['Pembenihan (Ekor)'] as number }));
 
   const renderChart = () => {
     if (chartType === 'pie') {
@@ -321,7 +321,7 @@ function ProduksiChart() {
             </div>
           </div>
           <div>
-            <p className="text-xs text-center font-medium text-muted-foreground mb-1">Pembenihan (Ektor)</p>
+            <p className="text-xs text-center font-medium text-muted-foreground mb-1">Pembenihan (Ekor)</p>
             <div className="h-64 sm:h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -343,7 +343,7 @@ function ProduksiChart() {
                     ))}
                   </Pie>
                   <Tooltip
-                    formatter={(value: number) => formatNumber(value) + ' Ektor'}
+                    formatter={(value: number) => formatNumber(value) + ' Ekor'}
                     contentStyle={tooltipStyleSmall}
                   />
                 </PieChart>
@@ -364,14 +364,14 @@ function ProduksiChart() {
               <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
               <Tooltip
                 formatter={(value: number, name: string) => {
-                  const unit = name.includes('Pembesaran') ? ' Kg' : ' Ektor';
+                  const unit = name.includes('Pembesaran') ? ' Kg' : ' Ekor';
                   return formatNumber(value) + unit;
                 }}
                 contentStyle={tooltipStyle}
               />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <Line type="monotone" dataKey="Pembesaran (Kg)" stroke={PEMBESARAN_COLOR} strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
-              <Line type="monotone" dataKey="Pembenihan (Ektor)" stroke={PEMBENIHAN_COLOR} strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+              <Line type="monotone" dataKey="Pembenihan (Ekor)" stroke={PEMBENIHAN_COLOR} strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -388,14 +388,14 @@ function ProduksiChart() {
             <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
             <Tooltip
               formatter={(value: number, name: string) => {
-                const unit = name.includes('Pembesaran') ? ' Kg' : ' Ektor';
+                const unit = name.includes('Pembesaran') ? ' Kg' : ' Ekor';
                 return formatNumber(value) + unit;
               }}
               contentStyle={tooltipStyle}
             />
             <Legend wrapperStyle={{ fontSize: 11 }} />
             <Bar dataKey="Pembesaran (Kg)" fill={PEMBESARAN_COLOR} radius={[4, 4, 0, 0]} label={renderBarLabel} />
-            <Bar dataKey="Pembenihan (Ektor)" fill={PEMBENIHAN_COLOR} radius={[4, 4, 0, 0]} label={renderBarLabel} />
+            <Bar dataKey="Pembenihan (Ekor)" fill={PEMBENIHAN_COLOR} radius={[4, 4, 0, 0]} label={renderBarLabel} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -503,8 +503,8 @@ export function PdfDashboardCharts() {
     .filter(d => (d['Pembesaran (Kg)'] as number) > 0)
     .map(d => ({ name: d.name, value: d['Pembesaran (Kg)'] as number }));
   const pembenihanPieData = produksiData
-    .filter(d => (d['Pembenihan (Ektor)'] as number) > 0)
-    .map(d => ({ name: d.name, value: d['Pembenihan (Ektor)'] as number }));
+    .filter(d => (d['Pembenihan (Ekor)'] as number) > 0)
+    .map(d => ({ name: d.name, value: d['Pembenihan (Ekor)'] as number }));
 
   const pdfTextStyle = { fill: '#1A2332', fontSize: 11 };
   const pdfGridStyle = { stroke: '#E0E0E0', strokeDasharray: '3 3' };
@@ -531,7 +531,7 @@ export function PdfDashboardCharts() {
             </div>
           </div>
           <div style={{ flex: 1 }}>
-            <p style={{ textAlign: 'center', fontSize: 11, fontWeight: 600, color: '#555', marginBottom: 4 }}>Pembenihan (Ektor)</p>
+            <p style={{ textAlign: 'center', fontSize: 11, fontWeight: 600, color: '#555', marginBottom: 4 }}>Pembenihan (Ekor)</p>
             <div style={{ height: 280 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -562,7 +562,7 @@ export function PdfDashboardCharts() {
               <Tooltip contentStyle={{ background: '#fff', border: '1px solid #ccc', borderRadius: 4, fontSize: 12 }} />
               <Legend wrapperStyle={{ fontSize: 11, color: '#333' }} />
               <Line type="monotone" dataKey="Pembesaran (Kg)" stroke="#06B6D4" strokeWidth={2} dot={{ r: 3 }} />
-              <Line type="monotone" dataKey="Pembenihan (Ektor)" stroke="#14B8A6" strokeWidth={2} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="Pembenihan (Ekor)" stroke="#14B8A6" strokeWidth={2} dot={{ r: 3 }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -580,7 +580,7 @@ export function PdfDashboardCharts() {
             <Tooltip contentStyle={{ background: '#fff', border: '1px solid #ccc', borderRadius: 4, fontSize: 12 }} />
             <Legend wrapperStyle={{ fontSize: 11, color: '#333' }} />
             <Bar dataKey="Pembesaran (Kg)" fill="#06B6D4" radius={[4, 4, 0, 0]} label={renderBarLabelPdf} />
-            <Bar dataKey="Pembenihan (Ektor)" fill="#14B8A6" radius={[4, 4, 0, 0]} label={renderBarLabelPdf} />
+            <Bar dataKey="Pembenihan (Ekor)" fill="#14B8A6" radius={[4, 4, 0, 0]} label={renderBarLabelPdf} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -626,7 +626,7 @@ export function PdfDashboardCharts() {
               <Tooltip contentStyle={{ background: '#fff', border: '1px solid #ccc', borderRadius: 4, fontSize: 12 }} />
               <Legend wrapperStyle={{ fontSize: 11, color: '#333' }} />
               <Bar dataKey="Pembesaran (Kg)" fill="#06B6D4" radius={[4, 4, 0, 0]} label={renderBarLabelPdf} />
-              <Bar dataKey="Pembenihan (Ektor)" fill="#14B8A6" radius={[4, 4, 0, 0]} label={renderBarLabelPdf} />
+              <Bar dataKey="Pembenihan (Ekor)" fill="#14B8A6" radius={[4, 4, 0, 0]} label={renderBarLabelPdf} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -643,7 +643,7 @@ export function PdfDashboardCharts() {
               <Tooltip contentStyle={{ background: '#fff', border: '1px solid #ccc', borderRadius: 4, fontSize: 12 }} />
               <Legend wrapperStyle={{ fontSize: 11, color: '#333' }} />
               <Bar dataKey="Pembesaran (Kg)" fill="#06B6D4" radius={[4, 4, 0, 0]} label={renderBarLabelPdf} />
-              <Bar dataKey="Pembenihan (Ektor)" fill="#14B8A6" radius={[4, 4, 0, 0]} label={renderBarLabelPdf} />
+              <Bar dataKey="Pembenihan (Ekor)" fill="#14B8A6" radius={[4, 4, 0, 0]} label={renderBarLabelPdf} />
             </BarChart>
           </ResponsiveContainer>
         </div>

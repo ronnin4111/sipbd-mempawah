@@ -280,7 +280,7 @@ export function PdfExportDialog({ open, onOpenChange }: PdfExportDialogProps) {
 
               autoTable(doc, {
                 startY: currentY,
-                head: [[`Tahun: ${yearRange}`, 'Pembesaran (Kg)', 'Pembenihan (Ektor)', 'Tren']],
+                head: [[`Tahun: ${yearRange}`, 'Pembesaran (Kg)', 'Pembenihan (Ekor)', 'Tren']],
                 body: trendDataWithPct,
                 theme: 'grid',
                 headStyles: { fillColor: [22, 101, 52], textColor: 255, fontStyle: 'bold', fontSize: 8 },
@@ -342,7 +342,7 @@ export function PdfExportDialog({ open, onOpenChange }: PdfExportDialogProps) {
 
               autoTable(doc, {
                 startY: currentY,
-                head: [['Jenis Ikan', 'Pembesaran (Kg)', 'Pembenihan (Ektor)', 'Nilai (Rp)', 'RTP', 'Pembudidaya', 'Kelompok']],
+                head: [['Jenis Ikan', 'Pembesaran (Kg)', 'Pembenihan (Ekor)', 'Nilai (Rp)', 'RTP', 'Pembudidaya', 'Kelompok']],
                 body: [
                   ...fishTypeData,
                   ['TOTAL', fmtNum(totals.pembesaranProduction), fmtNum(totals.pembenihanProduction),
@@ -382,7 +382,7 @@ export function PdfExportDialog({ open, onOpenChange }: PdfExportDialogProps) {
               const pembenihanData: any[][] = Object.entries(statsData.targetVsRealisasiPembenihan)
                 .map(([fish, d]: any, i: number) => [
                   pembesaranData.length + i + 1, fish, 'Pembenihan',
-                  fmtNum(d.target), fmtNum(d.realisasi), 'Ektor',
+                  fmtNum(d.target), fmtNum(d.realisasi), 'Ekor',
                   d.target > 0 ? `${((d.realisasi / d.target) * 100).toFixed(1)}%` : '0%',
                 ]);
 
@@ -437,7 +437,7 @@ export function PdfExportDialog({ open, onOpenChange }: PdfExportDialogProps) {
 
               autoTable(doc, {
                 startY: currentY,
-                head: [['No', 'Kecamatan', 'Pembesaran (Kg)', 'Pembenihan (Ektor)', 'Nilai (Rp)', 'RTP', 'Pembudidaya', 'Kelompok']],
+                head: [['No', 'Kecamatan', 'Pembesaran (Kg)', 'Pembenihan (Ekor)', 'Nilai (Rp)', 'RTP', 'Pembudidaya', 'Kelompok']],
                 body: kecData,
                 theme: 'grid',
                 headStyles: { fillColor: [22, 101, 52], textColor: 255, fontStyle: 'bold', fontSize: 7 },
