@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { TrendingUp, Target, MapPin } from 'lucide-react';
+import { TrendingUp, Target, MapPin, Fish } from 'lucide-react';
 
 const formatNumber = (num: number) => new Intl.NumberFormat('id-ID').format(num);
 const formatCurrency = (num: number) =>
@@ -259,10 +259,107 @@ function KecamatanDetailTable() {
   );
 }
 
+function FishTypeDetailTable() {
+  const { data: stats, isLoading } = useFishFarmStats();
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="p-6">
+          <div className="animate-pulse space-y-3">
+            <div className="h-6 bg-muted rounded w-48" />
+            <div className="h-60 bg-muted rounded" />
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!stats) return null;
+
+  const data = Object.entries(stats.productionByFishTypeDetail)
+    .map(([fishType, val]) => ({
+      fishType,
+      ...val,
+    }))
+    .sort((a, b) => (b.pembesaranProduction + b.pembenihanProduction) - (a.pembesaranProduction + a.pembenihanProduction));
+
+  // Calculate totals
+  const totals = data.reduce(
+    (acc, row) => ({
+      pembesaranProduction: acc.pembesaranProduction + row.pembesaranProduction,
+      pembenihanProduction: acc.pembenihanProduction + row.pembenihanProduction,
+      value: acc.value + row.value,
+      rtp: acc.rtp + row.rtp,
+      farmer: acc.farmer + row.farmer,
+      group: acc.group + row.group,
+    }),
+    { pembesaranProduction: 0, pembenihanProduction: 0, value: 0, rtp: 0, farmer: 0, group: 0 }
+  );
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, delay: 0.15 }}
+    >
+      <Card className="glass-card hover:shadow-lg transition-shadow">
+        <CardHeader className="pb-2 px-4 sm:px-6 pt-4 sm:pt-6">
+          <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2">
+            <Fish className="h-5 w-5 text-cyan-600" />
+            Laporan Produksi per Jenis Ikan
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
+          <div className="overflow-x-auto rounded-lg border max-h-[500px] overflow-y-auto custom-scrollbar">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/50 hover:bg-muted/50 sticky top-0 z-10">
+                  <TableHead className="text-xs font-semibold">Jenis Ikan</TableHead>
+                  <TableHead className="text-xs font-semibold text-right">Pembesaran (Kg)</TableHead>
+                  <TableHead className="text-xs font-semibold text-right">Pembenihan (Ekor)</TableHead>
+                  <TableHead className="text-xs font-semibold text-right">Nilai (Rp)</TableHead>
+                  <TableHead className="text-xs font-semibold text-right">RTP</TableHead>
+                  <TableHead className="text-xs font-semibold text-right">Pembudidaya</TableHead>
+                  <TableHead className="text-xs font-semibold text-right">Kelompok</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.map((row) => (
+                  <TableRow key={row.fishType}>
+                    <TableCell className="text-xs font-medium whitespace-nowrap">{row.fishType}</TableCell>
+                    <TableCell className="text-xs text-right">{formatNumber(row.pembesaranProduction)}</TableCell>
+                    <TableCell className="text-xs text-right">{formatNumber(row.pembenihanProduction)}</TableCell>
+                    <TableCell className="text-xs text-right">{formatCurrency(row.value)}</TableCell>
+                    <TableCell className="text-xs text-right">{formatNumber(row.rtp)}</TableCell>
+                    <TableCell className="text-xs text-right">{formatNumber(row.farmer)}</TableCell>
+                    <TableCell className="text-xs text-right">{formatNumber(row.group)}</TableCell>
+                  </TableRow>
+                ))}
+                {/* Total Row */}
+                <TableRow className="bg-muted/30 font-semibold sticky bottom-0">
+                  <TableCell className="text-xs font-bold">TOTAL</TableCell>
+                  <TableCell className="text-xs text-right font-bold">{formatNumber(totals.pembesaranProduction)}</TableCell>
+                  <TableCell className="text-xs text-right font-bold">{formatNumber(totals.pembenihanProduction)}</TableCell>
+                  <TableCell className="text-xs text-right font-bold">{formatCurrency(totals.value)}</TableCell>
+                  <TableCell className="text-xs text-right font-bold">{formatNumber(totals.rtp)}</TableCell>
+                  <TableCell className="text-xs text-right font-bold">{formatNumber(totals.farmer)}</TableCell>
+                  <TableCell className="text-xs text-right font-bold">{formatNumber(totals.group)}</TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+}
+
 export function ReportTables() {
   return (
     <div className="space-y-6">
       <Trend5YearTable />
+      <FishTypeDetailTable />
       <TargetVsRealisasiTable />
       <KecamatanDetailTable />
     </div>

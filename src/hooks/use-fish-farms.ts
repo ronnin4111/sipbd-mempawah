@@ -76,6 +76,17 @@ export interface StatsResponse {
     farmer: number;
     group: number;
   }>;
+  productionByFishTypeDetail: Record<string, {
+    pembesaranProduction: number;
+    pembenihanProduction: number;
+    value: number;
+    rtp: number;
+    farmer: number;
+    group: number;
+  }>;
+  trendByFishType: Record<string, Record<string, { pembesaran: number; pembenihan: number }>>;
+  trendByKecamatan: Record<string, Record<string, { pembesaran: number; pembenihan: number }>>;
+  trendByContainer: Record<string, Record<string, { pembesaran: number; pembenihan: number }>>;
 }
 
 export function useFishFarms(page: number = 1, pageSize: number = 20) {

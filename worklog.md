@@ -52,3 +52,23 @@ Stage Summary:
 - Custom font: DM Sans for body, Syne for display headings
 - All components updated to use new theme classes
 - Dark/light toggle working correctly
+
+---
+Task ID: 2
+Agent: Main
+Task: Enhance trend chart with view-by options + Add fish type report table
+
+Work Log:
+- Added trendByFishType, trendByKecamatan, trendByContainer data to stats API
+- Added productionByFishTypeDetail data to stats API (with value, rtp, farmer, group)
+- Updated StatsResponse interface in hooks/use-fish-farms.ts
+- Enhanced TrendChart component with 4 view selector buttons: Jenis Usaha, Jenis Ikan, Kecamatan, Wadah Budidaya
+- Created FishTypeDetailTable component with columns: Jenis Ikan, Pembesaran (Kg), Pembenihan (Ekor), Nilai (Rp), RTP, Pembudidaya, Kelompok + TOTAL row
+- Added FishTypeDetailTable to ReportTables (placed after Trend5YearTable)
+
+Stage Summary:
+- Modified: src/app/api/fish-farms/stats/route.ts (new trend + detail data)
+- Modified: src/hooks/use-fish-farms.ts (new StatsResponse fields)
+- Modified: src/components/dashboard/charts.tsx (TrendChart with view selector)
+- Modified: src/components/tables/report-tables.tsx (added FishTypeDetailTable)
+- All files pass lint, API returns 200 with correct data

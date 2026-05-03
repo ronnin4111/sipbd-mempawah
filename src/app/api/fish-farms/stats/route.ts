@@ -201,6 +201,51 @@ export async function GET(request: NextRequest) {
       }
     });
 
+    // === Trend by Fish Type per Year ===
+    const trendByFishType: Record<string, Record<string, { pembesaran: number; pembenihan: number }>> = {};
+    records.forEach(r => {
+      if (!trendByFishType[r.fishType]) trendByFishType[r.fishType] = {};
+      const yearKey = String(r.year);
+      if (!trendByFishType[r.fishType][yearKey]) {
+        trendByFishType[r.fishType][yearKey] = { pembesaran: 0, pembenihan: 0 };
+      }
+      if (r.businessType === 'Pembesaran') {
+        trendByFishType[r.fishType][yearKey].pembesaran += r.productionQty;
+      } else {
+        trendByFishType[r.fishType][yearKey].pembenihan += r.productionQty;
+      }
+    });
+
+    // === Trend by Kecamatan per Year ===
+    const trendByKecamatan: Record<string, Record<string, { pembesaran: number; pembenihan: number }>> = {};
+    records.forEach(r => {
+      if (!trendByKecamatan[r.kecamatan]) trendByKecamatan[r.kecamatan] = {};
+      const yearKey = String(r.year);
+      if (!trendByKecamatan[r.kecamatan][yearKey]) {
+        trendByKecamatan[r.kecamatan][yearKey] = { pembesaran: 0, pembenihan: 0 };
+      }
+      if (r.businessType === 'Pembesaran') {
+        trendByKecamatan[r.kecamatan][yearKey].pembesaran += r.productionQty;
+      } else {
+        trendByKecamatan[r.kecamatan][yearKey].pembenihan += r.productionQty;
+      }
+    });
+
+    // === Trend by Container Type per Year ===
+    const trendByContainer: Record<string, Record<string, { pembesaran: number; pembenihan: number }>> = {};
+    records.forEach(r => {
+      if (!trendByContainer[r.containerType]) trendByContainer[r.containerType] = {};
+      const yearKey = String(r.year);
+      if (!trendByContainer[r.containerType][yearKey]) {
+        trendByContainer[r.containerType][yearKey] = { pembesaran: 0, pembenihan: 0 };
+      }
+      if (r.businessType === 'Pembesaran') {
+        trendByContainer[r.containerType][yearKey].pembesaran += r.productionQty;
+      } else {
+        trendByContainer[r.containerType][yearKey].pembenihan += r.productionQty;
+      }
+    });
+
     // === Production by kecamatan detail - separated by business type ===
     const productionByKecamatanDetail: Record<string, {
       pembesaranProduction: number;
@@ -225,12 +270,45 @@ export async function GET(request: NextRequest) {
       productionByKecamatanDetail[r.kecamatan].value += r.productionValue;
       productionByKecamatanDetail[r.kecamatan].rtp += r.rtpCount;
       productionByKecamatanDetail[r.kecamatan].farmer += r.farmerCount;
-      // Group: use unique group names per kecamatan
     });
 
     // Set group counts using unique group names
     Object.keys(productionByKecamatanDetail).forEach(kec => {
       productionByKecamatanDetail[kec].group = groupNamesByKecamatan[kec]?.size || 0;
+    });
+
+    // === Production by Fish Type detail (with value, rtp, farmer, group) ===
+    const productionByFishTypeDetail: Record<string, {
+      pembesaranProduction: number;
+      pembenihanProduction: number;
+      value: number;
+      rtp: number;
+      farmer: number;
+      group: number;
+    }> = {};
+    const groupNamesByFishType: Record<string, Set<string>> = {};
+    records.forEach(r => {
+      if (!productionByFishTypeDetail[r.fishType]) {
+        productionByFishTypeDetail[r.fishType] = {
+          pembesaranProduction: 0, pembenihanProduction: 0,
+          value: 0, rtp: 0, farmer: 0, group: 0,
+        };
+      }
+      if (r.businessType === 'Pembesaran') {
+        productionByFishTypeDetail[r.fishType].pembesaranProduction += r.productionQty;
+      } else {
+        productionByFishTypeDetail[r.fishType].pembenihanProduction += r.productionQty;
+      }
+      productionByFishTypeDetail[r.fishType].value += r.productionValue;
+      productionByFishTypeDetail[r.fishType].rtp += r.rtpCount;
+      productionByFishTypeDetail[r.fishType].farmer += r.farmerCount;
+      if (r.groupName && r.groupName.trim()) {
+        if (!groupNamesByFishType[r.fishType]) groupNamesByFishType[r.fishType] = new Set();
+        groupNamesByFishType[r.fishType].add(r.groupName.trim().toLowerCase());
+      }
+    });
+    Object.keys(productionByFishTypeDetail).forEach(ft => {
+      productionByFishTypeDetail[ft].group = groupNamesByFishType[ft]?.size || 0;
     });
 
     // Round all float values to 2 decimal places
@@ -287,6 +365,31 @@ export async function GET(request: NextRequest) {
           farmer: v.farmer,
           group: v.group,
         }])
+      ),
+      productionByFishTypeDetail: Object.fromEntries(
+        Object.entries(productionByFishTypeDetail).map(([k, v]) => [k, {
+          pembesaranProduction: round2(v.pembesaranProduction),
+          pembenihanProduction: round2(v.pembenihanProduction),
+          value: round2(v.value),
+          rtp: v.rtp,
+          farmer: v.farmer,
+          group: v.group,
+        }])
+      ),
+      trendByFishType: Object.fromEntries(
+        Object.entries(trendByFishType).map(([fishType, years]) => [fishType, Object.fromEntries(
+          Object.entries(years).map(([y, v]) => [y, { pembesaran: round2(v.pembesaran), pembenihan: round2(v.pembenihan) }])
+        )])
+      ),
+      trendByKecamatan: Object.fromEntries(
+        Object.entries(trendByKecamatan).map(([kec, years]) => [kec, Object.fromEntries(
+          Object.entries(years).map(([y, v]) => [y, { pembesaran: round2(v.pembesaran), pembenihan: round2(v.pembenihan) }])
+        )])
+      ),
+      trendByContainer: Object.fromEntries(
+        Object.entries(trendByContainer).map(([cont, years]) => [cont, Object.fromEntries(
+          Object.entries(years).map(([y, v]) => [y, { pembesaran: round2(v.pembesaran), pembenihan: round2(v.pembenihan) }])
+        )])
       ),
     });
   } catch (error) {

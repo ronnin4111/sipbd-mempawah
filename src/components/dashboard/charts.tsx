@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -11,7 +12,8 @@ import { useFishFarmStats } from '@/hooks/use-fish-farms';
 
 const CHART_COLORS = [
   '#0891B2', '#14B8A6', '#38BDF8', '#2DD4BF', '#7DD3FC',
-  '#0EA5E9', '#0D9488', '#5EEAD4',
+  '#0EA5E9', '#0D9488', '#5EEAD4', '#06B6D4', '#22D3EE',
+  '#67E8F9', '#A5F3FC', '#99F6E4', '#2DD4BF', '#5EEAD4',
 ];
 
 const PEMBESARAN_COLOR = '#0891B2';
@@ -34,6 +36,15 @@ const tooltipStyleSmall = {
   fontSize: 11,
 };
 
+type TrendViewBy = 'jenis-usaha' | 'jenis-ikan' | 'kecamatan' | 'wadah';
+
+const TREND_VIEWS: { id: TrendViewBy; label: string }[] = [
+  { id: 'jenis-usaha', label: 'Jenis Usaha' },
+  { id: 'jenis-ikan', label: 'Jenis Ikan' },
+  { id: 'kecamatan', label: 'Kecamatan' },
+  { id: 'wadah', label: 'Wadah Budidaya' },
+];
+
 function ChartCard({ title, children, index }: { title: string; children: React.ReactNode; index: number }) {
   return (
     <motion.div
@@ -55,18 +66,87 @@ function ChartCard({ title, children, index }: { title: string; children: React.
 
 function TrendChart() {
   const { data: stats } = useFishFarmStats();
+  const [viewBy, setViewBy] = useState<TrendViewBy>('jenis-usaha');
   if (!stats) return null;
 
-  const data = Object.entries(stats.trend5Year)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([year, val]) => ({
-      year,
-      'Pembesaran (Kg)': val.pembesaran,
-      'Pembenihan (Ekor)': val.pembenihan,
+  // Build chart data based on view selection
+  let data: Record<string, unknown>[] = [];
+  let lines: { key: string; color: string; name: string }[] = [];
+
+  if (viewBy === 'jenis-usaha') {
+    // Original: Pembesaran vs Pembenihan by year
+    data = Object.entries(stats.trend5Year)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([year, val]) => ({
+        year,
+        'Pembesaran (Kg)': val.pembesaran,
+        'Pembenihan (Ekor)': val.pembenihan,
+      }));
+    lines = [
+      { key: 'Pembesaran (Kg)', color: PEMBESARAN_COLOR, name: 'Pembesaran (Kg)' },
+      { key: 'Pembenihan (Ekor)', color: PEMBENIHAN_COLOR, name: 'Pembenihan (Ekor)' },
+    ];
+  } else {
+    // Multi-line: each category item as a separate line
+    let trendData: Record<string, Record<string, { pembesaran: number; pembenihan: number }>>;
+
+    if (viewBy === 'jenis-ikan') {
+      trendData = stats.trendByFishType;
+    } else if (viewBy === 'kecamatan') {
+      trendData = stats.trendByKecamatan;
+    } else {
+      trendData = stats.trendByContainer;
+    }
+
+    // Get all years from the data
+    const allYears = new Set<string>();
+    Object.values(trendData).forEach(yearMap => {
+      Object.keys(yearMap).forEach(y => allYears.add(y));
+    });
+    const sortedYears = Array.from(allYears).sort();
+
+    // For multi-category views, combine pembesaran+pembenihan as total
+    // since mixing units on same chart is confusing
+    const categories = Object.keys(trendData).sort();
+    lines = categories.map((cat, i) => ({
+      key: cat,
+      color: CHART_COLORS[i % CHART_COLORS.length],
+      name: cat,
     }));
+
+    data = sortedYears.map(year => {
+      const row: Record<string, unknown> = { year };
+      categories.forEach(cat => {
+        const val = trendData[cat]?.[year];
+        // Show total (pembesaran in Kg + pembenihan in Ekor - show separately)
+        // Actually show pembesaran only to keep units consistent, or show total
+        // Best: show total production qty since mixing units is already the pattern
+        row[cat] = val ? val.pembesaran + val.pembenihan : 0;
+      });
+      return row;
+    });
+  }
 
   return (
     <ChartCard title="Tren Produksi 5 Tahun" index={0}>
+      {/* View Selector */}
+      <div className="flex flex-wrap gap-1.5 mb-4">
+        {TREND_VIEWS.map((view) => (
+          <button
+            key={view.id}
+            onClick={() => setViewBy(view.id)}
+            className="px-3 py-1.5 text-xs font-medium rounded-lg transition-all"
+            style={{
+              background: viewBy === view.id ? 'rgba(6,182,212,0.15)' : 'transparent',
+              border: `1px solid ${viewBy === view.id ? 'rgba(6,182,212,0.4)' : 'var(--border)'}`,
+              color: viewBy === view.id ? '#06B6D4' : 'var(--muted-foreground)',
+            }}
+          >
+            {view.label}
+          </button>
+        ))}
+      </div>
+
       <div className="h-64 sm:h-72">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
@@ -75,14 +155,27 @@ function TrendChart() {
             <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
             <Tooltip
               formatter={(value: number, name: string) => {
-                const unit = name.includes('Pembesaran') ? ' Kg' : ' Ekor';
-                return formatNumber(value) + unit;
+                if (viewBy === 'jenis-usaha') {
+                  const unit = name.includes('Pembesaran') ? ' Kg' : ' Ekor';
+                  return formatNumber(value) + unit;
+                }
+                return formatNumber(value);
               }}
               contentStyle={tooltipStyle}
             />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Line type="monotone" dataKey="Pembesaran (Kg)" stroke={PEMBESARAN_COLOR} strokeWidth={2.5} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-            <Line type="monotone" dataKey="Pembenihan (Ekor)" stroke={PEMBENIHAN_COLOR} strokeWidth={2.5} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+            <Legend wrapperStyle={{ fontSize: 11 }} />
+            {lines.map((line) => (
+              <Line
+                key={line.key}
+                type="monotone"
+                dataKey={line.key}
+                stroke={line.color}
+                strokeWidth={2}
+                dot={{ r: 3 }}
+                activeDot={{ r: 5 }}
+                name={line.name}
+              />
+            ))}
           </LineChart>
         </ResponsiveContainer>
       </div>
