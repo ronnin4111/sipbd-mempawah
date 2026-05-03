@@ -266,10 +266,11 @@ export function PdfExportDialog({ open, onOpenChange }: PdfExportDialogProps) {
                   const prevTotal = rawEntries[idx - 1].total;
                   if (prevTotal > 0) {
                     const pct = ((row.total - prevTotal) / prevTotal) * 100;
-                    const arrow = pct > 0.5 ? '\u25B2' : pct < -0.5 ? '\u25BC' : '\u25BA';
+                    // Use ASCII-safe symbols because jsPDF default fonts cannot render Unicode arrows
+                    const arrow = pct > 0.5 ? '[^]' : pct < -0.5 ? '[v]' : '[>]';
                     trendStr = `${arrow} ${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
                   } else if (row.total > 0) {
-                    trendStr = '\u25B2 +100%';
+                    trendStr = '[^] +100%';
                   }
                 }
                 trendDataWithPct.push([row.year, fmtNum(row.pembesaran), fmtNum(row.pembenihan), trendStr]);
@@ -291,7 +292,20 @@ export function PdfExportDialog({ open, onOpenChange }: PdfExportDialogProps) {
                   0: { halign: 'center', fontStyle: 'bold' },
                   1: { halign: 'right' },
                   2: { halign: 'right' },
-                  3: { halign: 'center' },
+                  3: { halign: 'center', fontStyle: 'bold' },
+                },
+                didParseCell: (data: any) => {
+                  // Color the Tren column cells based on trend direction
+                  if (data.column.index === 3 && data.row.section === 'body') {
+                    const val = String(data.cell.raw || '');
+                    if (val.startsWith('[^]')) {
+                      data.cell.styles.textColor = [22, 163, 74]; // green for up
+                    } else if (val.startsWith('[v]')) {
+                      data.cell.styles.textColor = [220, 38, 38]; // red for down
+                    } else if (val.startsWith('[>]')) {
+                      data.cell.styles.textColor = [217, 119, 6]; // amber for flat
+                    }
+                  }
                 },
               });
               break;
