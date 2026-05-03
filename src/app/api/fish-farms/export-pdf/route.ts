@@ -5,6 +5,14 @@ import autoTable from 'jspdf-autotable';
 
 export const maxDuration = 60;
 
+// Case-insensitive contains filter
+const ciContains = (value: string) => {
+  const isPostgres = process.env.DATABASE_URL?.includes('postgres');
+  return isPostgres
+    ? { contains: value, mode: 'insensitive' as const }
+    : { contains: value };
+};
+
 // Helper to build filter
 function buildWhere(searchParams: URLSearchParams) {
   const where: Record<string, unknown> = {};
@@ -48,12 +56,12 @@ function buildWhere(searchParams: URLSearchParams) {
   const searchParam = searchParams.get('search');
   if (searchParam) {
     where.OR = [
-      { kecamatan: { contains: searchParam } },
-      { desa: { contains: searchParam } },
-      { fishType: { contains: searchParam } },
-      { containerType: { contains: searchParam } },
-      { farmerName: { contains: searchParam } },
-      { groupName: { contains: searchParam } },
+      { kecamatan: ciContains(searchParam) },
+      { desa: ciContains(searchParam) },
+      { fishType: ciContains(searchParam) },
+      { containerType: ciContains(searchParam) },
+      { farmerName: ciContains(searchParam) },
+      { groupName: ciContains(searchParam) },
     ];
   }
 

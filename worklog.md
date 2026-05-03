@@ -1,100 +1,26 @@
 ---
 Task ID: 1
 Agent: Main
-Task: Implement 4 feature requests for SIPBUDIK
+Task: Implement 3 new features for SIPBUDIK - PDF export with checklist, bar chart value labels, and search filter fix
 
 Work Log:
-- Updated stats API to separate Pembesaran (Kg) and Pembenihan (Ekor) production totals
-- Fixed Total Kelompok to count unique group names (case-insensitive)
-- Added password-protected column visibility on Data Produksi page
-- Added inline edit/add/delete functionality on Data Produksi table with password protection
-- Created CRUD API routes: POST /api/fish-farms/create, PUT /api/fish-farms/[id], DELETE /api/fish-farms/[id]
-- Updated StatsResponse type in hooks to match new API response
-- Updated dashboard stats cards to show Pembesaran (Kg) and Pembenihan (Ekor) separately
-- Updated charts to show separated data (dual pie charts, grouped bar charts, separate trend lines)
-- Updated report tables to show proper units per business type
-- Updated export Excel route with proper unit separation
-- Updated export PDF route with proper unit separation
-- All pages returning 200 status code
+- Read and analyzed all relevant source files (charts, export-section, pdf-export route, filter-bar, data-table, stats API, hooks, report-tables)
+- Installed html2canvas and html2canvas-pro for chart capture in PDF
+- Fixed search filter badge count (was not counting search term, showing 0 when only search active)
+- Added search badge to active filter badges display
+- Fixed case-insensitive search in export-pdf route (added ciContains helper)
+- Added renderBarLabel function to charts.tsx for showing values on top of bar charts
+- Applied label prop to both KecamatanBarChart and ContainerBarChart Bar components
+- Increased chart height and top margin to accommodate labels
+- Added id attributes to chart DOM elements for html2canvas capture
+- Created PdfExportDialog component with 8 section checkboxes (5 tables + 3 charts)
+- Updated ExportSection to use new PDF dialog instead of direct download
+- Rewrote PDF generation client-side using jsPDF + html2canvas + jspdf-autotable
+- Fixed TypeScript errors with Recharts label prop type and dynamic JSON data typing
 
 Stage Summary:
-- Feature 1: Column visibility now requires password (dkp2024) - click "Kolom" button prompts for password
-- Feature 2: Pembesaran (Kg) and Pembenihan (Ekor) are now shown separately everywhere - dashboard cards, charts, tables, exports
-- Feature 3: Total Kelompok now counts unique group names case-insensitively (e.g., "rezeki" = "Rezeki" = "REZEKI")
-- Feature 4: Edit/Add/Delete available via "Admin" button on Data Produksi page - requires password to unlock
-
----
-Task ID: 2
-Agent: Main
-Task: Apply ocean/dark theme from uploaded files to SIPBUDIK project
-
-Work Log:
-- Analyzed uploaded theme files: globals.css, Header.js, layout.js, tailwind.config.js, postcss.config.js
-- Adapted the ocean dark theme to work with Tailwind CSS v4 and shadcn/ui component system
-- Updated globals.css with complete ocean theme: deep navy dark mode, arctic blue light mode, glass-card, stat-card, badge, section-title, wave-bg, glow-text, progress-bar, leaflet dark theme, animations
-- Updated layout.tsx with DM Sans font (next/font/google) and Syne font (Google Fonts CSS import)
-- Updated Header component with ocean design: gradient logo, animated indicator, hamburger icon, dark/light toggle with ocean styling, gradient bottom border
-- Updated Sidebar component with ocean design: gradient background, hover effects, active state gradient, overlay blur
-- Updated AppShell with ocean-themed footer
-- Updated Providers to default to dark theme
-- Updated dashboard stat cards to use stat-card class with gradient top border
-- Updated chart cards to use glass-card class with section-title
-- Updated chart colors to ocean palette (#0891B2, #14B8A6, #38BDF8, #2DD4BF)
-- Updated data table badges to use badge-pembesaran/badge-pembenihan classes
-- Updated report tables to use glass-card class
-- All CSS custom properties mapped to ocean colors for both dark and light modes
-- App running successfully with all routes returning 200
-
-Stage Summary:
-- Ocean dark theme fully applied with glass-morphism effects
-- Dark mode: Deep navy background (#070E1A), cyan/teal accents (#0891B2, #14B8A6)
-- Light mode: Arctic blue background (#F0F6FF), same accent colors
-- Custom font: DM Sans for body, Syne for display headings
-- All components updated to use new theme classes
-- Dark/light toggle working correctly
-
----
-Task ID: 2
-Agent: Main
-Task: Enhance trend chart with view-by options + Add fish type report table
-
-Work Log:
-- Added trendByFishType, trendByKecamatan, trendByContainer data to stats API
-- Added productionByFishTypeDetail data to stats API (with value, rtp, farmer, group)
-- Updated StatsResponse interface in hooks/use-fish-farms.ts
-- Enhanced TrendChart component with 4 view selector buttons: Jenis Usaha, Jenis Ikan, Kecamatan, Wadah Budidaya
-- Created FishTypeDetailTable component with columns: Jenis Ikan, Pembesaran (Kg), Pembenihan (Ekor), Nilai (Rp), RTP, Pembudidaya, Kelompok + TOTAL row
-- Added FishTypeDetailTable to ReportTables (placed after Trend5YearTable)
-
-Stage Summary:
-- Modified: src/app/api/fish-farms/stats/route.ts (new trend + detail data)
-- Modified: src/hooks/use-fish-farms.ts (new StatsResponse fields)
-- Modified: src/components/dashboard/charts.tsx (TrendChart with view selector)
-- Modified: src/components/tables/report-tables.tsx (added FishTypeDetailTable)
-- All files pass lint, API returns 200 with correct data
-
----
-Task ID: 3
-Agent: Main
-Task: Rename trend table + add Tren column with % trend + Add Vaname fish type
-
-Work Log:
-- Renamed "Tabel Tren Produksi 5 Tahun" to dynamic "Tabel Tren Produksi Tahun : {firstYear} - {lastYear}" based on filtered data
-- Added "Tren" column to the trend table showing year-over-year percentage change with color-coded icons
-  - Green ArrowUpRight icon for increase (naik)
-  - Red ArrowDownRight icon for decrease (turun)
-  - Amber Minus icon for flat/stable
-  - First year row shows "-" since no previous year to compare
-- Added ArrowUpRight, ArrowDownRight, Minus icons from lucide-react
-- Added useFilterStore import to access filter state
-- Added "Vaname" to FISH_TYPES array in constants.ts
-- Added "Vaname": 65000 to pricePerKg map in prisma/seed.ts
-- All pages automatically pick up Vaname since they import FISH_TYPES from constants
-
-Stage Summary:
-- Modified: src/components/tables/report-tables.tsx (dynamic title + Tren column with % + icons)
-- Modified: src/lib/constants.ts (added Vaname to FISH_TYPES)
-- Modified: prisma/seed.ts (added Vaname price)
-- Trend table now shows year range in title reflecting actual filtered data
-- Tren column displays: +X.X% with green up arrow, -X.X% with red down arrow, or flat with amber minus
-- Vaname now available in all fish type dropdowns (filter bar, data table form, etc.)
+- Feature 1 (PDF checklist): Complete - Users can now select which sections to include in PDF export via a dialog with checkboxes for 8 sections
+- Feature 2 (Bar chart labels): Complete - Bar charts now display values at the top of each bar for readability in PDF
+- Feature 3 (Search fix): Complete - Badge count now includes search term, search badge displayed in active filters, export-pdf route uses case-insensitive search
+- Key files modified: charts.tsx, filter-bar.tsx, export-section.tsx, export-pdf/route.ts
+- Key files created: pdf-export-dialog.tsx

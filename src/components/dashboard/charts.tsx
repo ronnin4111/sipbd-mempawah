@@ -125,6 +125,7 @@ function TrendChart() {
 
   return (
     <ChartCard title="Tren Produksi" index={0}>
+      <div id="chart-tren-produksi">
       {/* View Selector */}
       <div className="flex flex-wrap gap-1.5 mb-4">
         {TREND_VIEWS.map((view) => (
@@ -174,6 +175,7 @@ function TrendChart() {
             ))}
           </LineChart>
         </ResponsiveContainer>
+      </div>
       </div>
     </ChartCard>
   );
@@ -262,6 +264,29 @@ function FishTypePieChart() {
   );
 }
 
+// Custom label renderer for bar charts - shows value on top of bar
+const renderBarLabel = (props: Record<string, unknown>) => {
+  const x = props.x as number;
+  const y = props.y as number;
+  const width = props.width as number;
+  const value = props.value as number;
+  if (!value || value === 0) return <g />;
+  const formatted = value >= 1000 ? `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}k` : value.toFixed(0);
+  return (
+    <text
+      x={x + width / 2}
+      y={y - 4}
+      fill="var(--foreground)"
+      textAnchor="middle"
+      fontSize={9}
+      fontWeight={600}
+      opacity={0.8}
+    >
+      {formatted}
+    </text>
+  );
+};
+
 function KecamatanBarChart() {
   const { data: stats } = useFishFarmStats();
   if (!stats) return null;
@@ -276,9 +301,10 @@ function KecamatanBarChart() {
 
   return (
     <ChartCard title="Produksi per Kecamatan" index={2}>
-      <div className="h-64 sm:h-72">
+      <div id="chart-kecamatan">
+      <div className="h-64 sm:h-80">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 5, right: 10, left: 0, bottom: 30 }}>
+          <BarChart data={data} margin={{ top: 20, right: 10, left: 0, bottom: 30 }}>
             <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
             <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-40} textAnchor="end" interval={0} height={60} />
             <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
@@ -290,10 +316,11 @@ function KecamatanBarChart() {
               contentStyle={tooltipStyle}
             />
             <Legend wrapperStyle={{ fontSize: 11 }} />
-            <Bar dataKey="Pembesaran (Kg)" fill={PEMBESARAN_COLOR} radius={[4, 4, 0, 0]} />
-            <Bar dataKey="Pembenihan (Ektor)" fill={PEMBENIHAN_COLOR} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="Pembesaran (Kg)" fill={PEMBESARAN_COLOR} radius={[4, 4, 0, 0]} label={renderBarLabel} />
+            <Bar dataKey="Pembenihan (Ektor)" fill={PEMBENIHAN_COLOR} radius={[4, 4, 0, 0]} label={renderBarLabel} />
           </BarChart>
         </ResponsiveContainer>
+      </div>
       </div>
     </ChartCard>
   );
@@ -313,9 +340,10 @@ function ContainerBarChart() {
 
   return (
     <ChartCard title="Produksi per Wadah Budidaya" index={3}>
-      <div className="h-64 sm:h-72">
+      <div id="chart-wadah-budidaya">
+      <div className="h-64 sm:h-80">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 5, right: 10, left: 0, bottom: 30 }}>
+          <BarChart data={data} margin={{ top: 20, right: 10, left: 0, bottom: 30 }}>
             <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
             <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-40} textAnchor="end" interval={0} height={60} />
             <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
@@ -327,10 +355,11 @@ function ContainerBarChart() {
               contentStyle={tooltipStyle}
             />
             <Legend wrapperStyle={{ fontSize: 11 }} />
-            <Bar dataKey="Pembesaran (Kg)" fill={PEMBESARAN_COLOR} radius={[4, 4, 0, 0]} />
-            <Bar dataKey="Pembenihan (Ektor)" fill={PEMBENIHAN_COLOR} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="Pembesaran (Kg)" fill={PEMBESARAN_COLOR} radius={[4, 4, 0, 0]} label={renderBarLabel} />
+            <Bar dataKey="Pembenihan (Ektor)" fill={PEMBENIHAN_COLOR} radius={[4, 4, 0, 0]} label={renderBarLabel} />
           </BarChart>
         </ResponsiveContainer>
+      </div>
       </div>
     </ChartCard>
   );

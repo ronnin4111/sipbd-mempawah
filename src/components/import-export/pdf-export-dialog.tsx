@@ -1,0 +1,597 @@
+'use client';
+
+import { useState, useCallback } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Download, Loader2, FileText, CheckSquare } from 'lucide-react';
+import { toast } from 'sonner';
+import { useFilterStore } from '@/store/filter-store';
+import { useFishFarmStats } from '@/hooks/use-fish-farms';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import html2canvas from 'html2canvas';
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+const SECTION_OPTIONS = [
+  { id: 'tabel-tren', label: 'Tabel Tren Produksi', type: 'table' as const },
+  { id: 'tabel-jenis-ikan', label: 'Laporan Produksi per Jenis Ikan', type: 'table' as const },
+  { id: 'tabel-target', label: 'Tabel Target vs Realisasi', type: 'table' as const },
+  { id: 'tabel-kecamatan', label: 'Tabel Produksi per Kecamatan', type: 'table' as const },
+  { id: 'data-produksi', label: 'Data Produksi Perikanan', type: 'table' as const },
+  { id: 'chart-wadah', label: 'Grafik Produksi per Wadah Budidaya', type: 'chart' as const },
+  { id: 'chart-tren', label: 'Grafik Tren Produksi', type: 'chart' as const },
+  { id: 'chart-kecamatan', label: 'Grafik Produksi per Kecamatan', type: 'chart' as const },
+] as const;
+
+type SectionId = typeof SECTION_OPTIONS[number]['id'];
+
+function fmtNum(n: number): string {
+  return new Intl.NumberFormat('id-ID', { maximumFractionDigits: 2 }).format(n);
+}
+
+function fmtCur(n: number): string {
+  return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n);
+}
+
+interface PdfExportDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+export function PdfExportDialog({ open, onOpenChange }: PdfExportDialogProps) {
+  const [selectedSections, setSelectedSections] = useState<Set<SectionId>>(
+    new Set(SECTION_OPTIONS.map(s => s.id))
+  );
+  const [isExporting, setIsExporting] = useState(false);
+  const { data: stats } = useFishFarmStats();
+  const years = useFilterStore((s) => s.years);
+  const kecamatan = useFilterStore((s) => s.kecamatan);
+  const filterStore = useFilterStore;
+
+  const toggleSection = (id: SectionId) => {
+    setSelectedSections(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAll = () => setSelectedSections(new Set(SECTION_OPTIONS.map(s => s.id)));
+  const selectNone = () => setSelectedSections(new Set());
+
+  const generatePdf = useCallback(async () => {
+    if (selectedSections.size === 0) {
+      toast.error('Pilih minimal satu bagian untuk di-export');
+      return;
+    }
+
+    setIsExporting(true);
+
+    try {
+      // Fetch data for tables
+      const state = filterStore.getState();
+      const params = new URLSearchParams();
+      if (state.years.length > 0) params.set('year', state.years.join(','));
+      if (state.kecamatan.length > 0) params.set('kecamatan', state.kecamatan.join(','));
+      if (state.desa.length > 0) params.set('desa', state.desa.join(','));
+      if (state.fishType.length > 0) params.set('fishType', state.fishType.join(','));
+      if (state.containerType.length > 0) params.set('containerType', state.containerType.join(','));
+      if (state.businessType.length > 0) params.set('businessType', state.businessType.join(','));
+      if (state.search) params.set('search', state.search);
+      params.set('pageSize', '1000');
+
+      const [statsRes, dataRes] = await Promise.all([
+        fetch(`/api/fish-farms/stats?${params.toString()}`),
+        fetch(`/api/fish-farms?${params.toString()}`),
+      ]);
+
+      const statsData: any = await statsRes.json();
+      const dataData: any = await dataRes.json();
+      const records: any[] = dataData.data || [];
+
+      // Capture charts as images
+      const chartImages: Record<string, string> = {};
+      const chartIdMap: Record<string, string> = {
+        'chart-tren': 'chart-tren-produksi',
+        'chart-wadah': 'chart-wadah-budidaya',
+        'chart-kecamatan': 'chart-kecamatan',
+      };
+
+      for (const sectionId of selectedSections) {
+        const domId = chartIdMap[sectionId];
+        if (domId) {
+          const el = document.getElementById(domId);
+          if (el) {
+            try {
+              const canvas = await html2canvas(el, {
+                backgroundColor: '#0D1B2E',
+                scale: 2,
+                useCORS: true,
+                logging: false,
+              });
+              chartImages[sectionId] = canvas.toDataURL('image/png');
+            } catch (err) {
+              console.error(`Failed to capture chart ${sectionId}:`, err);
+            }
+          }
+        }
+      }
+
+      // Build PDF
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 15;
+      const usableWidth = pageWidth - 2 * margin;
+
+      const addHeader = () => {
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(22, 101, 52);
+        doc.text('DINAS PERIKANAN KABUPATEN MEMPAWAH', pageWidth / 2, 15, { align: 'center' });
+
+        doc.setFontSize(11);
+        doc.setTextColor(80, 80, 80);
+        doc.text('Laporan Sistem Informasi Perikanan Budidaya', pageWidth / 2, 22, { align: 'center' });
+
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(100, 100, 100);
+        const now = new Date();
+        const dateStr = now.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+        doc.text(`Tanggal: ${dateStr}`, margin, 30);
+
+        const filterParts: string[] = [];
+        if (state.years.length > 0) filterParts.push(`Tahun: ${state.years.join(', ')}`);
+        if (state.kecamatan.length > 0) filterParts.push(`Kecamatan: ${state.kecamatan.join(', ')}`);
+        if (state.fishType.length > 0) filterParts.push(`Jenis Ikan: ${state.fishType.join(', ')}`);
+        if (state.businessType.length > 0) filterParts.push(`Jenis Usaha: ${state.businessType.join(', ')}`);
+        const filterText = filterParts.length > 0 ? `Filter: ${filterParts.join(' | ')}` : 'Filter: Semua data';
+        doc.text(filterText, margin, 35);
+        doc.text(`Total Data: ${records.length} record`, margin, 40);
+      };
+
+      const addFooter = (pageNum: number, totalPages: number) => {
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(120, 120, 120);
+        doc.text(
+          `Halaman ${pageNum} dari ${totalPages} | SIPBUDIK Kab. Mempawah`,
+          pageWidth / 2,
+          pageHeight - 8,
+          { align: 'center' }
+        );
+      };
+
+      const getAutoTableY = () => {
+        return (doc as any).lastAutoTable?.finalY || 45;
+      };
+
+      const setAutoTableY = (y: number) => {
+        (doc as any).lastAutoTable = { finalY: y };
+      };
+
+      // Page 1 with header
+      addHeader();
+      let currentY = 45;
+      let isFirstSection = true;
+
+      const addSectionTitle = (title: string, y: number) => {
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(22, 101, 52);
+        doc.text(title, margin, y);
+        return y + 5;
+      };
+
+      const sections = SECTION_OPTIONS.filter(s => selectedSections.has(s.id));
+
+      for (let i = 0; i < sections.length; i++) {
+        const section = sections[i];
+
+        if (!isFirstSection) {
+          if (currentY > pageHeight - 60) {
+            doc.addPage();
+            addHeader();
+            currentY = 45;
+          } else {
+            currentY = getAutoTableY() + 12;
+          }
+        }
+
+        if (section.type === 'chart') {
+          const imgData = chartImages[section.id];
+          if (imgData) {
+            if (currentY > pageHeight - 100) {
+              doc.addPage();
+              addHeader();
+              currentY = 45;
+            }
+            currentY = addSectionTitle(section.label, currentY);
+            const maxImgHeight = 100;
+            doc.addImage(imgData, 'PNG', margin, currentY, usableWidth, maxImgHeight);
+            currentY += maxImgHeight + 10;
+            setAutoTableY(currentY);
+          }
+        } else {
+          switch (section.id) {
+            case 'tabel-tren': {
+              if (!statsData.trend5Year) break;
+
+              if (currentY > pageHeight - 60) {
+                doc.addPage();
+                addHeader();
+                currentY = 45;
+              }
+              currentY = addSectionTitle(section.label, currentY);
+
+              const trendDataWithPct: any[][] = [];
+              const rawEntries: any[] = Object.entries(statsData.trend5Year)
+                .sort(([a]: any, [b]: any) => a.localeCompare(b))
+                .map(([year, val]: any) => ({
+                  year,
+                  pembesaran: val.pembesaran as number,
+                  pembenihan: val.pembenihan as number,
+                  total: (val.pembesaran as number) + (val.pembenihan as number),
+                }));
+
+              rawEntries.forEach((row: any, idx: number) => {
+                let trendStr = '-';
+                if (idx > 0) {
+                  const prevTotal = rawEntries[idx - 1].total;
+                  if (prevTotal > 0) {
+                    const pct = ((row.total - prevTotal) / prevTotal) * 100;
+                    const arrow = pct > 0.5 ? '\u25B2' : pct < -0.5 ? '\u25BC' : '\u25BA';
+                    trendStr = `${arrow} ${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
+                  } else if (row.total > 0) {
+                    trendStr = '\u25B2 +100%';
+                  }
+                }
+                trendDataWithPct.push([row.year, fmtNum(row.pembesaran), fmtNum(row.pembenihan), trendStr]);
+              });
+
+              const yearRange = rawEntries.length >= 2
+                ? `${rawEntries[0].year} - ${rawEntries[rawEntries.length - 1].year}`
+                : rawEntries.length === 1 ? rawEntries[0].year : '-';
+
+              autoTable(doc, {
+                startY: currentY,
+                head: [[`Tahun: ${yearRange}`, 'Pembesaran (Kg)', 'Pembenihan (Ektor)', 'Tren']],
+                body: trendDataWithPct,
+                theme: 'grid',
+                headStyles: { fillColor: [22, 101, 52], textColor: 255, fontStyle: 'bold', fontSize: 8 },
+                styles: { fontSize: 8, cellPadding: 2 },
+                margin: { left: margin, right: margin },
+                columnStyles: {
+                  0: { halign: 'center', fontStyle: 'bold' },
+                  1: { halign: 'right' },
+                  2: { halign: 'right' },
+                  3: { halign: 'center' },
+                },
+              });
+              break;
+            }
+
+            case 'tabel-jenis-ikan': {
+              if (!statsData.productionByFishTypeDetail) break;
+
+              if (currentY > pageHeight - 60) {
+                doc.addPage();
+                addHeader();
+                currentY = 45;
+              }
+              currentY = addSectionTitle(section.label, currentY);
+
+              const fishTypeData: any[][] = Object.entries(statsData.productionByFishTypeDetail)
+                .map(([fishType, val]: any) => [
+                  fishType,
+                  fmtNum(val.pembesaranProduction),
+                  fmtNum(val.pembenihanProduction),
+                  fmtCur(val.value),
+                  fmtNum(val.rtp),
+                  fmtNum(val.farmer),
+                  fmtNum(val.group),
+                ]);
+
+              const fishTypeValues: any[] = Object.values(statsData.productionByFishTypeDetail);
+              const totals = fishTypeValues.reduce((acc: any, val: any) => ({
+                pembesaranProduction: acc.pembesaranProduction + val.pembesaranProduction,
+                pembenihanProduction: acc.pembenihanProduction + val.pembenihanProduction,
+                value: acc.value + val.value,
+                rtp: acc.rtp + val.rtp,
+                farmer: acc.farmer + val.farmer,
+                group: acc.group + val.group,
+              }), { pembesaranProduction: 0, pembenihanProduction: 0, value: 0, rtp: 0, farmer: 0, group: 0 });
+
+              autoTable(doc, {
+                startY: currentY,
+                head: [['Jenis Ikan', 'Pembesaran (Kg)', 'Pembenihan (Ektor)', 'Nilai (Rp)', 'RTP', 'Pembudidaya', 'Kelompok']],
+                body: [
+                  ...fishTypeData,
+                  ['TOTAL', fmtNum(totals.pembesaranProduction), fmtNum(totals.pembenihanProduction),
+                   fmtCur(totals.value), fmtNum(totals.rtp), fmtNum(totals.farmer), fmtNum(totals.group)],
+                ],
+                theme: 'grid',
+                headStyles: { fillColor: [22, 101, 52], textColor: 255, fontStyle: 'bold', fontSize: 7 },
+                styles: { fontSize: 7, cellPadding: 2 },
+                margin: { left: margin, right: margin },
+                columnStyles: {
+                  0: { fontStyle: 'bold' },
+                  1: { halign: 'right' },
+                  2: { halign: 'right' },
+                  3: { halign: 'right' },
+                  4: { halign: 'right' },
+                  5: { halign: 'right' },
+                  6: { halign: 'right' },
+                },
+                didParseCell: (data: any) => {
+                  if (data.row.section === 'body' && data.row.index === fishTypeData.length) {
+                    data.cell.styles.fontStyle = 'bold';
+                  }
+                },
+              });
+              break;
+            }
+
+            case 'tabel-target': {
+              if (!statsData.targetVsRealisasiPembesaran) break;
+
+              const pembesaranData: any[][] = Object.entries(statsData.targetVsRealisasiPembesaran)
+                .map(([fish, d]: any, i: number) => [
+                  i + 1, fish, 'Pembesaran',
+                  fmtNum(d.target), fmtNum(d.realisasi), 'Kg',
+                  d.target > 0 ? `${((d.realisasi / d.target) * 100).toFixed(1)}%` : '0%',
+                ]);
+              const pembenihanData: any[][] = Object.entries(statsData.targetVsRealisasiPembenihan)
+                .map(([fish, d]: any, i: number) => [
+                  pembesaranData.length + i + 1, fish, 'Pembenihan',
+                  fmtNum(d.target), fmtNum(d.realisasi), 'Ektor',
+                  d.target > 0 ? `${((d.realisasi / d.target) * 100).toFixed(1)}%` : '0%',
+                ]);
+
+              if (currentY > pageHeight - 60) {
+                doc.addPage();
+                addHeader();
+                currentY = 45;
+              }
+              currentY = addSectionTitle(section.label, currentY);
+
+              autoTable(doc, {
+                startY: currentY,
+                head: [['No', 'Jenis Ikan', 'Jenis Usaha', 'Target', 'Realisasi', 'Satuan', 'Persentase (%)']],
+                body: [...pembesaranData, ...pembenihanData],
+                theme: 'grid',
+                headStyles: { fillColor: [22, 101, 52], textColor: 255, fontStyle: 'bold', fontSize: 8 },
+                styles: { fontSize: 8, cellPadding: 2 },
+                margin: { left: margin, right: margin },
+                columnStyles: {
+                  0: { halign: 'center' },
+                  1: {},
+                  2: {},
+                  3: { halign: 'right' },
+                  4: { halign: 'right' },
+                  5: { halign: 'center' },
+                  6: { halign: 'right' },
+                },
+              });
+              break;
+            }
+
+            case 'tabel-kecamatan': {
+              if (!statsData.productionByKecamatanDetail) break;
+
+              if (currentY > pageHeight - 60) {
+                doc.addPage();
+                addHeader();
+                currentY = 45;
+              }
+              currentY = addSectionTitle(section.label, currentY);
+
+              const kecData: any[][] = Object.entries(statsData.productionByKecamatanDetail)
+                .map(([kec, val]: any, i: number) => [
+                  i + 1, kec,
+                  fmtNum(val.pembesaranProduction),
+                  fmtNum(val.pembenihanProduction),
+                  fmtCur(val.value),
+                  fmtNum(val.rtp),
+                  fmtNum(val.farmer),
+                  fmtNum(val.group),
+                ]);
+
+              autoTable(doc, {
+                startY: currentY,
+                head: [['No', 'Kecamatan', 'Pembesaran (Kg)', 'Pembenihan (Ektor)', 'Nilai (Rp)', 'RTP', 'Pembudidaya', 'Kelompok']],
+                body: kecData,
+                theme: 'grid',
+                headStyles: { fillColor: [22, 101, 52], textColor: 255, fontStyle: 'bold', fontSize: 7 },
+                styles: { fontSize: 7, cellPadding: 2 },
+                margin: { left: margin, right: margin },
+                columnStyles: {
+                  0: { halign: 'center' },
+                  1: {},
+                  2: { halign: 'right' },
+                  3: { halign: 'right' },
+                  4: { halign: 'right' },
+                  5: { halign: 'right' },
+                  6: { halign: 'right' },
+                  7: { halign: 'right' },
+                },
+              });
+              break;
+            }
+
+            case 'data-produksi': {
+              if (currentY > pageHeight - 60) {
+                doc.addPage();
+                addHeader();
+                currentY = 45;
+              }
+              currentY = addSectionTitle(section.label, currentY);
+
+              const rows: any[][] = records.map((r: any, i: number) => [
+                i + 1, r.year, r.kecamatan, r.desa, r.fishType, r.containerType,
+                r.businessType, fmtNum(r.productionQty), fmtCur(r.productionValue),
+                fmtNum(r.rtpCount), fmtNum(r.farmerCount),
+              ]);
+
+              autoTable(doc, {
+                startY: currentY,
+                head: [['No', 'Tahun', 'Kecamatan', 'Desa', 'Jenis Ikan', 'Wadah', 'Usaha', 'Produksi', 'Nilai (Rp)', 'RTP', 'Pembudidaya']],
+                body: rows,
+                theme: 'grid',
+                headStyles: { fillColor: [22, 101, 52], textColor: 255, fontStyle: 'bold', fontSize: 6 },
+                styles: { fontSize: 6, cellPadding: 1.5 },
+                margin: { left: margin, right: margin },
+                columnStyles: {
+                  0: { halign: 'center', cellWidth: 8 },
+                  1: { halign: 'center', cellWidth: 12 },
+                  5: { cellWidth: 22 },
+                  6: { cellWidth: 20 },
+                  7: { halign: 'right' },
+                  8: { halign: 'right' },
+                  9: { halign: 'right' },
+                  10: { halign: 'right' },
+                },
+              });
+              break;
+            }
+          }
+        }
+
+        isFirstSection = false;
+      }
+
+      // Add footer to all pages
+      const pageCount = doc.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        addFooter(i, pageCount);
+      }
+
+      // Generate and download
+      const buffer = Buffer.from(doc.output('arraybuffer'));
+      const now = new Date();
+      const dateFileStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+
+      const blob = new Blob([buffer], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `laporan-perikanan-${dateFileStr}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      toast.success(`PDF berhasil di-export (${selectedSections.size} bagian)`);
+      onOpenChange(false);
+    } catch (error) {
+      console.error('Error exporting PDF:', error);
+      toast.error('Gagal meng-export PDF. Silakan coba lagi.');
+    } finally {
+      setIsExporting(false);
+    }
+  }, [selectedSections, stats, years, kecamatan, filterStore, onOpenChange]);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <FileText className="h-5 w-5 text-teal-600" />
+            Export PDF - Pilih Bagian
+          </DialogTitle>
+          <DialogDescription>
+            Pilih bagian-bagian yang ingin dimasukkan ke dalam file PDF
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 mt-2">
+          {/* Select All / None */}
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1"
+              onClick={selectAll}
+            >
+              <CheckSquare className="h-3 w-3" />
+              Pilih Semua
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1"
+              onClick={selectNone}
+            >
+              Tidak Ada
+            </Button>
+            <span className="text-xs text-muted-foreground ml-auto">
+              {selectedSections.size} dari {SECTION_OPTIONS.length} dipilih
+            </span>
+          </div>
+
+          {/* Section Checklist */}
+          <div className="space-y-1.5 max-h-72 overflow-y-auto custom-scrollbar pr-1">
+            {SECTION_OPTIONS.map((section) => (
+              <label
+                key={section.id}
+                className="flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors hover:bg-accent/50"
+              >
+                <Checkbox
+                  checked={selectedSections.has(section.id)}
+                  onCheckedChange={() => toggleSection(section.id)}
+                  className="h-4 w-4"
+                />
+                <span className="text-sm flex-1">{section.label}</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                  section.type === 'chart'
+                    ? 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400'
+                    : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                }`}>
+                  {section.type === 'chart' ? 'Grafik' : 'Tabel'}
+                </span>
+              </label>
+            ))}
+          </div>
+
+          {/* Filter info */}
+          <div className="text-xs text-muted-foreground italic border-t pt-2">
+            * Export mengikuti filter yang aktif saat ini
+          </div>
+
+          {/* Actions */}
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onOpenChange(false)}
+              disabled={isExporting}
+            >
+              Batal
+            </Button>
+            <Button
+              size="sm"
+              className="bg-teal-600 hover:bg-teal-700 gap-2"
+              onClick={generatePdf}
+              disabled={isExporting || selectedSections.size === 0}
+            >
+              {isExporting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Membuat PDF...
+                </>
+              ) : (
+                <>
+                  <Download className="h-4 w-4" />
+                  Download PDF
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}

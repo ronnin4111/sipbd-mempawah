@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { useFilterStore } from '@/store/filter-store';
+import { useState } from 'react';
+import { PdfExportDialog } from './pdf-export-dialog';
 
 function buildFilterString() {
   const state = useFilterStore.getState();
@@ -22,6 +24,8 @@ function buildFilterString() {
 }
 
 export function ExportSection() {
+  const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
+
   const handleExportExcel = () => {
     const queryStr = buildFilterString();
     const a = document.createElement('a');
@@ -29,15 +33,6 @@ export function ExportSection() {
     a.download = 'data-perikanan-budidaya.xlsx';
     a.click();
     toast.success('Export Excel dimulai');
-  };
-
-  const handleExportPdf = () => {
-    const queryStr = buildFilterString();
-    const a = document.createElement('a');
-    a.href = `/api/fish-farms/export-pdf${queryStr}`;
-    a.download = 'laporan-perikanan-budidaya.pdf';
-    a.click();
-    toast.success('Export PDF dimulai');
   };
 
   return (
@@ -109,7 +104,7 @@ export function ExportSection() {
               <div>
                 <CardTitle className="text-sm font-semibold">Export PDF</CardTitle>
                 <CardDescription className="text-xs">
-                  Laporan resmi dalam format dokumen
+                  Laporan resmi - pilih bagian yang di-export
                 </CardDescription>
               </div>
             </div>
@@ -118,15 +113,15 @@ export function ExportSection() {
             <ul className="text-xs text-muted-foreground space-y-1.5">
               <li className="flex items-start gap-1.5">
                 <span className="text-teal-600 mt-0.5">&#x2022;</span>
-                Ikhtisar Produksi
+                Pilih tabel & grafik yang di-export
               </li>
               <li className="flex items-start gap-1.5">
                 <span className="text-teal-600 mt-0.5">&#x2022;</span>
-                Produksi per Kecamatan
+                Tabel: Tren, Jenis Ikan, Target, Kecamatan, Data
               </li>
               <li className="flex items-start gap-1.5">
                 <span className="text-teal-600 mt-0.5">&#x2022;</span>
-                Target vs Realisasi
+                Grafik: Tren, Wadah, Kecamatan
               </li>
               <li className="flex items-start gap-1.5">
                 <span className="text-teal-600 mt-0.5">&#x2022;</span>
@@ -141,15 +136,17 @@ export function ExportSection() {
               * Laporan mengikuti filter yang aktif
             </p>
             <Button
-              onClick={handleExportPdf}
+              onClick={() => setPdfDialogOpen(true)}
               className="w-full bg-teal-600 hover:bg-teal-700 gap-2"
             >
               <Download className="h-4 w-4" />
-              Download PDF
+              Pilih & Download PDF
             </Button>
           </CardContent>
         </Card>
       </div>
+
+      <PdfExportDialog open={pdfDialogOpen} onOpenChange={setPdfDialogOpen} />
     </motion.div>
   );
 }

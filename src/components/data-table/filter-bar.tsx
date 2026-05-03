@@ -151,7 +151,7 @@ export function FilterBar() {
               className="h-5 px-1.5 text-[10px]"
               style={{ background: 'rgba(6,182,212,0.15)', color: '#06B6D4', border: '1px solid rgba(6,182,212,0.3)' }}
             >
-              {years.length + kecamatan.length + desa.length + fishType.length + containerType.length + businessType.length}
+              {years.length + kecamatan.length + desa.length + fishType.length + containerType.length + businessType.length + (search.length > 0 ? 1 : 0)}
             </Badge>
           )}
         </div>
@@ -317,6 +317,14 @@ export function FilterBar() {
                   </button>
                 </Badge>
               ))}
+              {search && (
+                <Badge variant="secondary" className="text-[10px] h-5 gap-1 pr-1">
+                  Cari: {search}
+                  <button onClick={() => setSearch('')}>
+                    <X className="h-2.5 w-2.5" />
+                  </button>
+                </Badge>
+              )}
             </div>
           )}
         </div>
