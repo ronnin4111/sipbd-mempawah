@@ -10,7 +10,7 @@ import { useFilterStore } from '@/store/filter-store';
 import { useFishFarmStats } from '@/hooks/use-fish-farms';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import html2canvas from 'html2canvas';
+import html2canvas from 'html2canvas-pro';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -92,6 +92,9 @@ export function PdfExportDialog({ open, onOpenChange }: PdfExportDialogProps) {
       const dataData: any = await dataRes.json();
       const records: any[] = dataData.data || [];
 
+      // Wait for PDF charts to be fully rendered in the viewport
+      await new Promise(r => setTimeout(r, 800));
+
       // Capture charts as images from always-rendered PDF chart container
       const chartImages: Record<string, string> = {};
       const chartIdMap: Record<string, string> = {
@@ -105,16 +108,35 @@ export function PdfExportDialog({ open, onOpenChange }: PdfExportDialogProps) {
         if (domId) {
           const el = document.getElementById(domId);
           if (el) {
-            try {
-              const canvas = await html2canvas(el, {
-                backgroundColor: '#FFFFFF',
-                scale: 2,
-                useCORS: true,
-                logging: false,
-              });
-              chartImages[sectionId] = canvas.toDataURL('image/png');
-            } catch (err) {
-              console.error(`Failed to capture chart ${sectionId}:`, err);
+            // Retry logic: attempt capture up to 3 times
+            let captured = false;
+            for (let attempt = 1; attempt <= 3 && !captured; attempt++) {
+              try {
+                // Small delay before each capture to ensure SVG rendering is complete
+                if (attempt > 1) {
+                  await new Promise(r => setTimeout(r, 500));
+                }
+                const canvas = await html2canvas(el, {
+                  backgroundColor: '#FFFFFF',
+                  scale: 2,
+                  useCORS: true,
+                  allowTaint: true,
+                  logging: false,
+                  width: el.scrollWidth,
+                  height: el.scrollHeight,
+                });
+                const dataUrl = canvas.toDataURL('image/png');
+                // Verify the canvas actually has content (not blank)
+                if (canvas.width > 0 && canvas.height > 0) {
+                  chartImages[sectionId] = dataUrl;
+                  captured = true;
+                }
+              } catch (err) {
+                console.error(`Failed to capture chart ${sectionId} (attempt ${attempt}):`, err);
+              }
+            }
+            if (!captured) {
+              console.warn(`Could not capture chart ${sectionId} after 3 attempts`);
             }
           }
         }

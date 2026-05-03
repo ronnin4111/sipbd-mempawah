@@ -47,3 +47,74 @@ Stage Summary:
 - Bar chart labels now use fixed colors that render correctly in both screen and PDF
 - Screen labels: light text on dark background
 - PDF labels: dark text on white background
+
+---
+Task ID: 7
+Agent: Main Agent
+Task: Fix charts not readable in PDF exports
+
+Work Log:
+- Changed html2canvas import from 'html2canvas' to 'html2canvas-pro' (v2.0.2, better SVG support)
+- Added 800ms delay before chart capture loop to ensure PDF charts are fully rendered
+- Added allowTaint: true option to html2canvas call for cross-origin image support
+- Added width/height options (el.scrollWidth, el.scrollHeight) to html2canvas for accurate capture
+- Implemented retry logic (up to 3 attempts) for chart capture with 500ms delay between retries
+- Added canvas dimension validation (width > 0 && height > 0) to verify capture succeeded
+- Changed PdfDashboardCharts container from `position: absolute, left: -10000px` to `position: fixed, left: 0, top: 0, zIndex: -9999, pointerEvents: none`
+- The new positioning places charts in the viewport (needed for ResponsiveContainer to calculate dimensions) but behind all other content
+- Charts remain visible (no opacity:0 or visibility:hidden) since html2canvas requires elements to be visible for capture
+
+Stage Summary:
+- PDF chart capture now uses html2canvas-pro with better SVG rendering support
+- Charts are positioned in-viewport for proper ResponsiveContainer sizing
+- Retry mechanism with delays ensures reliable chart capture
+- Charts are behind all other UI content (z-index: -9999) so invisible to users
+
+---
+Task ID: 8
+Agent: Main Agent
+Task: Fix search filter showing wrong count (UX confusion between filter count and result count)
+
+Work Log:
+- Reordered filter header: result count now appears BEFORE filter count badge so users see "11 data ditemukan 1 filter aktif" instead of "1 filter • 11 data ditemukan"
+- Changed filter badge text from "N filter" to "N filter aktif" to clearly distinguish from result count
+- Made result count more prominent: changed from font-medium with muted-foreground color to font-semibold with cyan (#06B6D4) color
+- Removed the "• " prefix from result count since it now comes first (not subordinate to filter badge)
+
+Stage Summary:
+- Result count displayed first and in prominent cyan color with semibold weight
+- Filter count badge now says "filter aktif" (Indonesian) to avoid confusion with result count
+- Users will see e.g. "11 data ditemukan 1 filter aktif" — result count is visually dominant and comes first
+---
+Task ID: 7
+Agent: Main Agent
+Task: Fix charts not readable in PDF exports
+
+Work Log:
+- Changed import from `html2canvas` to `html2canvas-pro` (v2.0.2 with better SVG support) in pdf-export-dialog.tsx
+- Added 800ms pre-capture delay to ensure charts are fully rendered before capture
+- Added retry logic (3 attempts, 500ms between retries) for chart capture
+- Added `allowTaint: true`, `width: el.scrollWidth`, `height: el.scrollHeight` to html2canvas options
+- Added canvas dimension validation (`canvas.width > 0 && canvas.height > 0`)
+- Changed PdfDashboardCharts container from `position: absolute, left: -10000px` to `position: fixed, left: 0, top: 0, zIndex: -9999, pointerEvents: 'none'` — this ensures charts are in the viewport (ResponsiveContainer needs computable dimensions) but behind all other content
+
+Stage Summary:
+- Root cause: ResponsiveContainer in Recharts needs parent in viewport with computable dimensions. Off-screen position caused 0-dimension rendering → blank SVGs → unreadable charts in PDF
+- html2canvas-pro has much better SVG rendering support than html2canvas
+- Charts now render in viewport behind other content (z-index: -9999)
+
+---
+Task ID: 8
+Agent: Main Agent
+Task: Fix search filter showing wrong count (confusing UI)
+
+Work Log:
+- Reordered display: result count now appears BEFORE filter count badge
+- Changed result count style: `font-medium` → `font-semibold`, color from `var(--muted-foreground)` → `#06B6D4` (cyan), removed "• " prefix
+- Changed filter badge text from "N filter" to "N filter aktif" to clearly distinguish from result count
+- Before: `[1 filter] • 11 data ditemukan` → After: `11 data ditemukan [1 filter aktif]`
+
+Stage Summary:
+- The "1" the user saw was from the "1 filter" badge, not the result count
+- Result count is now visually dominant (cyan, semibold, first position)
+- Filter badge clearly says "filter aktif" so users won't confuse it with result count

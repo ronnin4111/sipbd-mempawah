@@ -152,18 +152,18 @@ export function FilterBar() {
         <div className="flex items-center gap-2">
           <Filter className="h-4 w-4" style={{ color: '#06B6D4' }} />
           <span className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>Filter Data</span>
+          {hasActiveFilters && totalResults > 0 && (
+            <span className="text-[10px] font-semibold" style={{ color: '#06B6D4' }}>
+              {new Intl.NumberFormat('id-ID').format(totalResults)} data ditemukan
+            </span>
+          )}
           {hasActiveFilters && (
             <Badge
               className="h-5 px-1.5 text-[10px]"
               style={{ background: 'rgba(6,182,212,0.15)', color: '#06B6D4', border: '1px solid rgba(6,182,212,0.3)' }}
             >
-              {filterCount} filter
+              {filterCount} filter aktif
             </Badge>
-          )}
-          {hasActiveFilters && totalResults > 0 && (
-            <span className="text-[10px] font-medium" style={{ color: 'var(--muted-foreground)' }}>
-              • {new Intl.NumberFormat('id-ID').format(totalResults)} data ditemukan
-            </span>
           )}
         </div>
         <div className="flex items-center gap-2">

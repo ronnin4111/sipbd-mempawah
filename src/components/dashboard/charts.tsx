@@ -458,7 +458,7 @@ export function PdfDashboardCharts() {
   const pdfGridStyle = { stroke: '#E0E0E0', strokeDasharray: '3 3' };
 
   return (
-    <div style={{ position: 'absolute', left: '-10000px', top: 0, width: 900 }}>
+    <div style={{ position: 'fixed', left: 0, top: 0, width: 900, zIndex: -9999, pointerEvents: 'none' }}>
       {/* Trend Chart for PDF */}
       <div id="pdf-chart-tren-produksi" style={{ background: '#FFFFFF', padding: 20, width: 900, marginBottom: 16 }}>
         <h3 style={{ color: '#1A2332', fontSize: 14, fontWeight: 'bold', marginBottom: 8, fontFamily: 'sans-serif' }}>Tren Produksi</h3>
