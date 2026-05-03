@@ -72,3 +72,29 @@ Stage Summary:
 - Modified: src/components/dashboard/charts.tsx (TrendChart with view selector)
 - Modified: src/components/tables/report-tables.tsx (added FishTypeDetailTable)
 - All files pass lint, API returns 200 with correct data
+
+---
+Task ID: 3
+Agent: Main
+Task: Rename trend table + add Tren column with % trend + Add Vaname fish type
+
+Work Log:
+- Renamed "Tabel Tren Produksi 5 Tahun" to dynamic "Tabel Tren Produksi Tahun : {firstYear} - {lastYear}" based on filtered data
+- Added "Tren" column to the trend table showing year-over-year percentage change with color-coded icons
+  - Green ArrowUpRight icon for increase (naik)
+  - Red ArrowDownRight icon for decrease (turun)
+  - Amber Minus icon for flat/stable
+  - First year row shows "-" since no previous year to compare
+- Added ArrowUpRight, ArrowDownRight, Minus icons from lucide-react
+- Added useFilterStore import to access filter state
+- Added "Vaname" to FISH_TYPES array in constants.ts
+- Added "Vaname": 65000 to pricePerKg map in prisma/seed.ts
+- All pages automatically pick up Vaname since they import FISH_TYPES from constants
+
+Stage Summary:
+- Modified: src/components/tables/report-tables.tsx (dynamic title + Tren column with % + icons)
+- Modified: src/lib/constants.ts (added Vaname to FISH_TYPES)
+- Modified: prisma/seed.ts (added Vaname price)
+- Trend table now shows year range in title reflecting actual filtered data
+- Tren column displays: +X.X% with green up arrow, -X.X% with red down arrow, or flat with amber minus
+- Vaname now available in all fish type dropdowns (filter bar, data table form, etc.)

@@ -72,7 +72,7 @@ async function main() {
     // Price per kg varies by fish type
     const pricePerKg: Record<string, number> = {
       "Mas": 28000, "Nila": 22000, "Lele": 18000, "Patin": 25000,
-      "Jelawat": 35000, "Bawal Air Tawar": 30000, "Gurame": 55000
+      "Jelawat": 35000, "Bawal Air Tawar": 30000, "Gurame": 55000, "Vaname": 65000
     };
     const price = pricePerKg[entry.fishType] || 25000;
     const productionValue = Math.round(productionQty * price);

@@ -92,7 +92,7 @@ export const ALL_DESA = Object.entries(KECAMATAN_DESA).flatMap(([kec, desas]) =>
   desas.map(d => ({ kecamatan: kec, desa: d.desa, status: d.status }))
 );
 
-export const FISH_TYPES = ["Mas", "Nila", "Lele", "Patin", "Jelawat", "Bawal Air Tawar", "Gurame"];
+export const FISH_TYPES = ["Mas", "Nila", "Lele", "Patin", "Jelawat", "Bawal Air Tawar", "Gurame", "Vaname"];
 
 export const CONTAINER_TYPES = ["KJA", "Kolam Air Tenang", "Tambak", "Bioflok", "KJT", "Bak Semen", "Bak Terpal"];
 

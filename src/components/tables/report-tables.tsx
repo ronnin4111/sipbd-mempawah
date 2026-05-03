@@ -11,7 +11,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { TrendingUp, Target, MapPin, Fish } from 'lucide-react';
+import { TrendingUp, Target, MapPin, Fish, ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react';
+import { useFilterStore } from '@/store/filter-store';
 
 const formatNumber = (num: number) => new Intl.NumberFormat('id-ID').format(num);
 const formatCurrency = (num: number) =>
@@ -19,6 +20,7 @@ const formatCurrency = (num: number) =>
 
 function Trend5YearTable() {
   const { data: stats, isLoading } = useFishFarmStats();
+  const years = useFilterStore((s) => s.years);
 
   if (isLoading) {
     return (
@@ -35,13 +37,42 @@ function Trend5YearTable() {
 
   if (!stats) return null;
 
-  const data = Object.entries(stats.trend5Year)
+  const rawEntries = Object.entries(stats.trend5Year)
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([year, val]) => ({
       year,
       pembesaran: val.pembesaran,
       pembenihan: val.pembenihan,
+      total: val.pembesaran + val.pembenihan,
     }));
+
+  // Build data with trend (compare with previous year)
+  const data = rawEntries.map((row, idx) => {
+    let trendPct: number | null = null;
+    let trendDirection: 'up' | 'down' | 'flat' | null = null;
+    if (idx > 0) {
+      const prevTotal = rawEntries[idx - 1].total;
+      if (prevTotal > 0) {
+        trendPct = ((row.total - prevTotal) / prevTotal) * 100;
+        if (trendPct > 0.5) trendDirection = 'up';
+        else if (trendPct < -0.5) trendDirection = 'down';
+        else trendDirection = 'flat';
+      } else if (row.total > 0) {
+        trendPct = 100;
+        trendDirection = 'up';
+      }
+    }
+    return { ...row, trendPct, trendDirection };
+  });
+
+  // Dynamic title based on filter
+  const yearRange = rawEntries.length >= 2
+    ? `${rawEntries[0].year} - ${rawEntries[rawEntries.length - 1].year}`
+    : rawEntries.length === 1
+    ? rawEntries[0].year
+    : '-';
+
+  const titleSuffix = years.length > 0 ? yearRange : yearRange;
 
   return (
     <motion.div
@@ -53,7 +84,7 @@ function Trend5YearTable() {
         <CardHeader className="pb-2 px-4 sm:px-6 pt-4 sm:pt-6">
           <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2">
             <TrendingUp className="h-5 w-5 text-teal-600" />
-            Tabel Tren Produksi 5 Tahun
+            Tabel Tren Produksi Tahun : {titleSuffix}
           </CardTitle>
         </CardHeader>
         <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
@@ -64,6 +95,7 @@ function Trend5YearTable() {
                   <TableHead className="text-xs font-semibold">Tahun</TableHead>
                   <TableHead className="text-xs font-semibold text-right">Pembesaran (Kg)</TableHead>
                   <TableHead className="text-xs font-semibold text-right">Pembenihan (Ekor)</TableHead>
+                  <TableHead className="text-xs font-semibold text-right">Tren</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -72,6 +104,22 @@ function Trend5YearTable() {
                     <TableCell className="text-xs font-medium">{row.year}</TableCell>
                     <TableCell className="text-xs text-right">{formatNumber(row.pembesaran)}</TableCell>
                     <TableCell className="text-xs text-right">{formatNumber(row.pembenihan)}</TableCell>
+                    <TableCell className="text-xs text-right">
+                      {row.trendPct !== null ? (
+                        <span className={`inline-flex items-center gap-1 font-semibold ${
+                          row.trendDirection === 'up' ? 'text-emerald-600' :
+                          row.trendDirection === 'down' ? 'text-red-500' :
+                          'text-amber-500'
+                        }`}>
+                          {row.trendDirection === 'up' && <ArrowUpRight className="h-3.5 w-3.5" />}
+                          {row.trendDirection === 'down' && <ArrowDownRight className="h-3.5 w-3.5" />}
+                          {row.trendDirection === 'flat' && <Minus className="h-3.5 w-3.5" />}
+                          {row.trendPct >= 0 ? '+' : ''}{row.trendPct.toFixed(1)}%
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
