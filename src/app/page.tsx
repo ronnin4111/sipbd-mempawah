@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { AppShell } from '@/components/layout/app-shell';
-import { DashboardCharts } from '@/components/dashboard/charts';
+import { DashboardCharts, PdfDashboardCharts } from '@/components/dashboard/charts';
 import { FilterBar } from '@/components/data-table/filter-bar';
 import { DataTable } from '@/components/data-table/data-table';
 import { MapView } from '@/components/map/map-view';
@@ -28,15 +28,39 @@ function DashboardSection() {
 function DataProduksiSection() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+  const years = useFilterStore((s) => s.years);
+  const kecamatan = useFilterStore((s) => s.kecamatan);
+  const desa = useFilterStore((s) => s.desa);
+  const fishType = useFilterStore((s) => s.fishType);
+  const containerType = useFilterStore((s) => s.containerType);
+  const businessType = useFilterStore((s) => s.businessType);
+  const search = useFilterStore((s) => s.search);
+
+  // Compute a filter key to detect changes - used as key on DataTable to reset pagination
+  const filterKey = useMemo(() =>
+    `${years.join(',')}|${kecamatan.join(',')}|${desa.join(',')}|${fishType.join(',')}|${containerType.join(',')}|${businessType.join(',')}|${search}`,
+    [years, kecamatan, desa, fishType, containerType, businessType, search]
+  );
+
+  const handlePageChange = (newPage: number) => {
+    setPage(newPage);
+  };
+
+  const handlePageSizeChange = (newSize: number) => {
+    setPageSize(newSize);
+    setPage(1);
+  };
 
   return (
     <div className="space-y-4">
       <FilterBar />
+      {/* Using key to remount DataTable when filters change, which resets page to 1 */}
       <DataTable
-        page={page}
+        key={filterKey}
+        page={1}
         pageSize={pageSize}
-        onPageChange={setPage}
-        onPageSizeChange={setPageSize}
+        onPageChange={handlePageChange}
+        onPageSizeChange={handlePageSizeChange}
       />
     </div>
   );
@@ -108,6 +132,8 @@ export default function Home() {
 
   return (
     <AppShell>
+      {/* Always-rendered PDF chart container (off-screen) for PDF export capture */}
+      <PdfDashboardCharts />
       <AnimatePresence mode="wait">
         <motion.div
           key={activeSection}

@@ -27,7 +27,7 @@ import {
   CONTAINER_TYPES,
   BUSINESS_TYPES,
 } from '@/lib/constants';
-import { useAvailableYears } from '@/hooks/use-fish-farms';
+import { useAvailableYears, useFishFarms } from '@/hooks/use-fish-farms';
 import { useMemo } from 'react';
 
 interface MultiSelectFilterProps {
@@ -133,6 +133,12 @@ export function FilterBar() {
   const hasActiveFilters = years.length > 0 || kecamatan.length > 0 || desa.length > 0 ||
     fishType.length > 0 || containerType.length > 0 || businessType.length > 0 || search.length > 0;
 
+  // Fetch total count for display
+  const { data: countData } = useFishFarms(1, 1);
+  const totalResults = countData?.total ?? 0;
+
+  const filterCount = years.length + kecamatan.length + desa.length + fishType.length + containerType.length + businessType.length + (search.length > 0 ? 1 : 0);
+
   return (
     <div className="glass-card overflow-hidden">
       {/* Filter Header - Toggle */}
@@ -151,8 +157,13 @@ export function FilterBar() {
               className="h-5 px-1.5 text-[10px]"
               style={{ background: 'rgba(6,182,212,0.15)', color: '#06B6D4', border: '1px solid rgba(6,182,212,0.3)' }}
             >
-              {years.length + kecamatan.length + desa.length + fishType.length + containerType.length + businessType.length + (search.length > 0 ? 1 : 0)}
+              {filterCount} filter
             </Badge>
+          )}
+          {hasActiveFilters && totalResults > 0 && (
+            <span className="text-[10px] font-medium" style={{ color: 'var(--muted-foreground)' }}>
+              • {new Intl.NumberFormat('id-ID').format(totalResults)} data ditemukan
+            </span>
           )}
         </div>
         <div className="flex items-center gap-2">

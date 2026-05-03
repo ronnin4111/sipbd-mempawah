@@ -265,6 +265,7 @@ function FishTypePieChart() {
 }
 
 // Custom label renderer for bar charts - shows value on top of bar
+// Uses fixed color (#E2EDF5) for both screen and PDF readability
 const renderBarLabel = (props: Record<string, unknown>) => {
   const x = props.x as number;
   const y = props.y as number;
@@ -276,11 +277,34 @@ const renderBarLabel = (props: Record<string, unknown>) => {
     <text
       x={x + width / 2}
       y={y - 4}
-      fill="var(--foreground)"
+      fill="#E2EDF5"
       textAnchor="middle"
       fontSize={9}
       fontWeight={600}
-      opacity={0.8}
+      opacity={0.9}
+    >
+      {formatted}
+    </text>
+  );
+};
+
+// PDF-friendly label renderer with dark text on white background
+const renderBarLabelPdf = (props: Record<string, unknown>) => {
+  const x = props.x as number;
+  const y = props.y as number;
+  const width = props.width as number;
+  const value = props.value as number;
+  if (!value || value === 0) return <g />;
+  const formatted = value >= 1000 ? `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}k` : value.toFixed(0);
+  return (
+    <text
+      x={x + width / 2}
+      y={y - 4}
+      fill="#1A2332"
+      textAnchor="middle"
+      fontSize={9}
+      fontWeight={600}
+      opacity={0.9}
     >
       {formatted}
     </text>
@@ -372,6 +396,123 @@ export function DashboardCharts() {
       <FishTypePieChart />
       <KecamatanBarChart />
       <ContainerBarChart />
+    </div>
+  );
+}
+
+// PDF-optimized charts with white background and dark text
+export function PdfDashboardCharts() {
+  const { data: stats } = useFishFarmStats();
+  const [viewBy, setViewBy] = useState<TrendViewBy>('jenis-usaha');
+
+  if (!stats) return null;
+
+  // Build trend chart data
+  let trendData: Record<string, unknown>[] = [];
+  let trendLines: { key: string; color: string; name: string }[] = [];
+
+  if (viewBy === 'jenis-usaha') {
+    trendData = Object.entries(stats.trend5Year)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([year, val]) => ({
+        year,
+        'Pembesaran (Kg)': val.pembesaran,
+        'Pembenihan (Ekor)': val.pembenihan,
+      }));
+    trendLines = [
+      { key: 'Pembesaran (Kg)', color: '#06B6D4', name: 'Pembesaran (Kg)' },
+      { key: 'Pembenihan (Ekor)', color: '#14B8A6', name: 'Pembenihan (Ekor)' },
+    ];
+  } else {
+    let trendDataSource: Record<string, Record<string, { pembesaran: number; pembenihan: number }>>;
+    if (viewBy === 'jenis-ikan') trendDataSource = stats.trendByFishType;
+    else if (viewBy === 'kecamatan') trendDataSource = stats.trendByKecamatan;
+    else trendDataSource = stats.trendByContainer;
+
+    const allYears = new Set<string>();
+    Object.values(trendDataSource).forEach(ym => Object.keys(ym).forEach(y => allYears.add(y)));
+    const sortedYears = Array.from(allYears).sort();
+    const categories = Object.keys(trendDataSource).sort();
+    trendLines = categories.map((cat, i) => ({ key: cat, color: CHART_COLORS[i % CHART_COLORS.length], name: cat }));
+    trendData = sortedYears.map(year => {
+      const row: Record<string, unknown> = { year };
+      categories.forEach(cat => {
+        const val = trendDataSource[cat]?.[year];
+        row[cat] = val ? val.pembesaran + val.pembenihan : 0;
+      });
+      return row;
+    });
+  }
+
+  // Build kecamatan bar data
+  const kecBarData = Object.entries(stats.productionByKecamatan)
+    .map(([name, val]) => ({ name, 'Pembesaran (Kg)': val.pembesaran, 'Pembenihan (Ektor)': val.pembenihan }))
+    .sort((a, b) => (b['Pembesaran (Kg)'] + b['Pembenihan (Ektor)']) - (a['Pembesaran (Kg)'] + a['Pembenihan (Ektor)']));
+
+  // Build container bar data
+  const contBarData = Object.entries(stats.productionByContainer)
+    .map(([name, val]) => ({ name, 'Pembesaran (Kg)': val.pembesaran, 'Pembenihan (Ektor)': val.pembenihan }))
+    .sort((a, b) => (b['Pembesaran (Kg)'] + b['Pembenihan (Ektor)']) - (a['Pembesaran (Kg)'] + a['Pembenihan (Ektor)']));
+
+  const pdfTextStyle = { fill: '#1A2332', fontSize: 11 };
+  const pdfGridStyle = { stroke: '#E0E0E0', strokeDasharray: '3 3' };
+
+  return (
+    <div style={{ position: 'absolute', left: '-10000px', top: 0, width: 900 }}>
+      {/* Trend Chart for PDF */}
+      <div id="pdf-chart-tren-produksi" style={{ background: '#FFFFFF', padding: 20, width: 900, marginBottom: 16 }}>
+        <h3 style={{ color: '#1A2332', fontSize: 14, fontWeight: 'bold', marginBottom: 8, fontFamily: 'sans-serif' }}>Tren Produksi</h3>
+        <div style={{ height: 300 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={trendData} margin={{ top: 10, right: 20, left: 10, bottom: 5 }}>
+              <CartesianGrid {...pdfGridStyle} />
+              <XAxis dataKey="year" tick={pdfTextStyle} />
+              <YAxis tick={{ ...pdfTextStyle, fontSize: 10 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
+              <Tooltip contentStyle={{ background: '#fff', border: '1px solid #ccc', borderRadius: 4, fontSize: 12 }} />
+              <Legend wrapperStyle={{ fontSize: 11, color: '#333' }} />
+              {trendLines.map((line) => (
+                <Line key={line.key} type="monotone" dataKey={line.key} stroke={line.color} strokeWidth={2} dot={{ r: 3 }} name={line.name} />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Kecamatan Bar Chart for PDF */}
+      <div id="pdf-chart-kecamatan" style={{ background: '#FFFFFF', padding: 20, width: 900, marginBottom: 16 }}>
+        <h3 style={{ color: '#1A2332', fontSize: 14, fontWeight: 'bold', marginBottom: 8, fontFamily: 'sans-serif' }}>Produksi per Kecamatan</h3>
+        <div style={{ height: 320 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={kecBarData} margin={{ top: 25, right: 20, left: 10, bottom: 40 }}>
+              <CartesianGrid {...pdfGridStyle} />
+              <XAxis dataKey="name" tick={{ ...pdfTextStyle, fontSize: 9 }} angle={-40} textAnchor="end" interval={0} height={70} />
+              <YAxis tick={{ ...pdfTextStyle, fontSize: 10 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
+              <Tooltip contentStyle={{ background: '#fff', border: '1px solid #ccc', borderRadius: 4, fontSize: 12 }} />
+              <Legend wrapperStyle={{ fontSize: 11, color: '#333' }} />
+              <Bar dataKey="Pembesaran (Kg)" fill="#06B6D4" radius={[4, 4, 0, 0]} label={renderBarLabelPdf} />
+              <Bar dataKey="Pembenihan (Ektor)" fill="#14B8A6" radius={[4, 4, 0, 0]} label={renderBarLabelPdf} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Container Bar Chart for PDF */}
+      <div id="pdf-chart-wadah-budidaya" style={{ background: '#FFFFFF', padding: 20, width: 900 }}>
+        <h3 style={{ color: '#1A2332', fontSize: 14, fontWeight: 'bold', marginBottom: 8, fontFamily: 'sans-serif' }}>Produksi per Wadah Budidaya</h3>
+        <div style={{ height: 320 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={contBarData} margin={{ top: 25, right: 20, left: 10, bottom: 40 }}>
+              <CartesianGrid {...pdfGridStyle} />
+              <XAxis dataKey="name" tick={{ ...pdfTextStyle, fontSize: 9 }} angle={-40} textAnchor="end" interval={0} height={70} />
+              <YAxis tick={{ ...pdfTextStyle, fontSize: 10 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
+              <Tooltip contentStyle={{ background: '#fff', border: '1px solid #ccc', borderRadius: 4, fontSize: 12 }} />
+              <Legend wrapperStyle={{ fontSize: 11, color: '#333' }} />
+              <Bar dataKey="Pembesaran (Kg)" fill="#06B6D4" radius={[4, 4, 0, 0]} label={renderBarLabelPdf} />
+              <Bar dataKey="Pembenihan (Ektor)" fill="#14B8A6" radius={[4, 4, 0, 0]} label={renderBarLabelPdf} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
     </div>
   );
 }

@@ -92,12 +92,12 @@ export function PdfExportDialog({ open, onOpenChange }: PdfExportDialogProps) {
       const dataData: any = await dataRes.json();
       const records: any[] = dataData.data || [];
 
-      // Capture charts as images
+      // Capture charts as images from always-rendered PDF chart container
       const chartImages: Record<string, string> = {};
       const chartIdMap: Record<string, string> = {
-        'chart-tren': 'chart-tren-produksi',
-        'chart-wadah': 'chart-wadah-budidaya',
-        'chart-kecamatan': 'chart-kecamatan',
+        'chart-tren': 'pdf-chart-tren-produksi',
+        'chart-wadah': 'pdf-chart-wadah-budidaya',
+        'chart-kecamatan': 'pdf-chart-kecamatan',
       };
 
       for (const sectionId of selectedSections) {
@@ -107,7 +107,7 @@ export function PdfExportDialog({ open, onOpenChange }: PdfExportDialogProps) {
           if (el) {
             try {
               const canvas = await html2canvas(el, {
-                backgroundColor: '#0D1B2E',
+                backgroundColor: '#FFFFFF',
                 scale: 2,
                 useCORS: true,
                 logging: false,
