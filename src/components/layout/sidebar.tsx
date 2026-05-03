@@ -68,12 +68,18 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           style={{ borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}` }}
         >
           <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2">
+              <img
+                src="/logo-sipbk.png"
+                alt="Logo SIPBK"
+                className="h-10 w-auto object-contain"
+                style={{ filter: isDark ? 'drop-shadow(0 0 6px rgba(6,182,212,0.25))' : 'none' }}
+              />
               <img
                 src="/logo-mempawah.png"
                 alt="Logo Kabupaten Mempawah"
-                className="w-9 h-9 rounded-xl object-contain"
-                style={{ background: 'rgba(255,255,255,0.9)', padding: 2 }}
+                className="w-8 h-8 rounded-lg object-contain"
+                style={{ background: 'rgba(255,255,255,0.9)', padding: 1 }}
               />
               <div>
                 <div className="text-sm font-bold" style={{ fontFamily: 'Syne, sans-serif', color: 'var(--foreground)' }}>

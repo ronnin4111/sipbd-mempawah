@@ -54,7 +54,7 @@ export function Header({ onMenuClick }: HeaderProps) {
       <div className="px-4 pt-4 pb-2 max-w-screen-2xl mx-auto">
         <div className="flex items-center justify-between">
           {/* Hamburger + Logo */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <button
               onClick={onMenuClick}
               className="w-10 h-10 flex items-center justify-center rounded-xl transition-all lg:hidden"
@@ -70,18 +70,24 @@ export function Header({ onMenuClick }: HeaderProps) {
                 <span className="block h-0.5 rounded-full" style={{ background: isDark ? '#7DD3FC' : '#0891B2' }} />
               </div>
             </button>
-            <div className="relative">
-              <img
-                src="/logo-mempawah.png"
-                alt="Logo Kabupaten Mempawah"
-                className="w-10 h-10 rounded-xl object-contain shadow-lg"
-                style={{
-                  background: 'rgba(255,255,255,0.9)',
-                  padding: 2,
-                  boxShadow: '0 4px 16px rgba(6,182,212,0.35)',
-                }}
-              />
-            </div>
+            {/* SIPBK Logo */}
+            <img
+              src="/logo-sipbk.png"
+              alt="Logo SIPBK"
+              className="h-12 sm:h-14 w-auto object-contain"
+              style={{ filter: isDark ? 'drop-shadow(0 0 8px rgba(6,182,212,0.3))' : 'none' }}
+            />
+            {/* Mempawah Emblem */}
+            <img
+              src="/logo-mempawah.png"
+              alt="Logo Kabupaten Mempawah"
+              className="w-9 h-9 rounded-lg object-contain"
+              style={{
+                background: 'rgba(255,255,255,0.9)',
+                padding: 2,
+                boxShadow: '0 2px 8px rgba(6,182,212,0.2)',
+              }}
+            />
             <div>
               <div className="font-bold text-sm leading-tight" style={{ fontFamily: 'Syne, sans-serif', color: 'var(--foreground)' }}>
                 SIPBUDIK

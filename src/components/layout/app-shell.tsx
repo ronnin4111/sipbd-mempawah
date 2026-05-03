@@ -23,9 +23,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       >
         <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-4">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-2">
-            <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
-              &copy; {new Date().getFullYear()} Dinas Perikanan Kabupaten Mempawah
-            </p>
+            <div className="flex items-center gap-2">
+              <img
+                src="/logo-sipbk.png"
+                alt="Logo SIPBK"
+                className="h-7 w-auto object-contain"
+              />
+              <img
+                src="/logo-mempawah.png"
+                alt="Logo Kab. Mempawah"
+                className="h-7 w-auto object-contain rounded"
+                style={{ background: 'rgba(255,255,255,0.9)', padding: 1 }}
+              />
+              <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+                &copy; {new Date().getFullYear()} Dinas Perikanan Kabupaten Mempawah
+              </p>
+            </div>
             <p className="text-xs" style={{ color: '#06B6D4' }}>
               Sistem Informasi Perikanan Budidaya (SIPBUDIK)
             </p>
