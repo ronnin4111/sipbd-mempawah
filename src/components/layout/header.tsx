@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Menu, Moon, Sun, Fish } from 'lucide-react';
+import { Menu, Moon, Sun } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useFilterStore } from '@/store/filter-store';
 import { useMounted } from '@/hooks/use-mounted';
@@ -71,20 +71,14 @@ export function Header({ onMenuClick }: HeaderProps) {
               </div>
             </button>
             <div className="relative">
-              <div
-                className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg"
+              <img
+                src="/logo-mempawah.png"
+                alt="Logo Kabupaten Mempawah"
+                className="w-10 h-10 rounded-xl object-contain shadow-lg"
                 style={{
-                  background: 'linear-gradient(135deg, #06B6D4, #0891B2)',
+                  background: 'rgba(255,255,255,0.9)',
+                  padding: 2,
                   boxShadow: '0 4px 16px rgba(6,182,212,0.35)',
-                }}
-              >
-                <Fish size={20} color="white" />
-              </div>
-              <div
-                className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full border-2 animate-pulse"
-                style={{
-                  background: '#2DD4BF',
-                  borderColor: isDark ? '#070E1A' : '#F0F6FF',
                 }}
               />
             </div>

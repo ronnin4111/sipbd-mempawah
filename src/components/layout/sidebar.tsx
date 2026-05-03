@@ -6,7 +6,6 @@ import {
   Map,
   TrendingUp,
   FileSpreadsheet,
-  Fish,
   ChevronRight,
   X,
 } from 'lucide-react';
@@ -70,12 +69,12 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         >
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2.5">
-              <div
-                className="w-9 h-9 rounded-xl flex items-center justify-center"
-                style={{ background: 'linear-gradient(135deg, #06B6D4, #0891B2)' }}
-              >
-                <Fish size={17} color="white" />
-              </div>
+              <img
+                src="/logo-mempawah.png"
+                alt="Logo Kabupaten Mempawah"
+                className="w-9 h-9 rounded-xl object-contain"
+                style={{ background: 'rgba(255,255,255,0.9)', padding: 2 }}
+              />
               <div>
                 <div className="text-sm font-bold" style={{ fontFamily: 'Syne, sans-serif', color: 'var(--foreground)' }}>
                   SIPBUDIK
