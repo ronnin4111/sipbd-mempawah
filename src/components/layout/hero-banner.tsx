@@ -225,7 +225,18 @@ export function HeroBanner() {
               padding: '6px 16px',
             }}
           >
-            <Fish size={14} style={{ color: isDark ? '#06B6D4' : '#0891B2' }} />
+            <img
+              src="/logo-sipbk-transparent.png"
+              alt="Logo SIPBK"
+              className="h-6 w-auto object-contain"
+              style={{ filter: isDark ? 'brightness(1.1)' : 'none' }}
+            />
+            <img
+              src="/logo-mempawah.png"
+              alt="Logo Kab. Mempawah"
+              className="h-6 w-auto object-contain rounded"
+              style={{ background: 'rgba(255,255,255,0.9)', padding: 1 }}
+            />
             <span
               className="text-xs font-semibold tracking-widest uppercase"
               style={{ color: isDark ? '#06B6D4' : '#0891B2' }}
