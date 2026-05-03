@@ -11,12 +11,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useFishFarmStats } from '@/hooks/use-fish-farms';
 
 const CHART_COLORS = [
-  '#0891B2', '#14B8A6', '#38BDF8', '#2DD4BF', '#7DD3FC',
-  '#0EA5E9', '#0D9488', '#5EEAD4', '#06B6D4', '#22D3EE',
-  '#67E8F9', '#A5F3FC', '#99F6E4', '#2DD4BF', '#5EEAD4',
+  '#06B6D4', '#14B8A6', '#38BDF8', '#22D3EE', '#7DD3FC',
+  '#0EA5E9', '#0D9488', '#5EEAD4', '#67E8F9', '#2DD4BF',
+  '#A5F3FC', '#99F6E4',
 ];
 
-const PEMBESARAN_COLOR = '#0891B2';
+const PEMBESARAN_COLOR = '#06B6D4';
 const PEMBENIHAN_COLOR = '#14B8A6';
 
 const formatNumber = (num: number) => new Intl.NumberFormat('id-ID').format(num);
@@ -26,7 +26,7 @@ const tooltipStyle = {
   fontSize: 12,
   borderRadius: 8,
   background: 'rgba(13,27,46,0.95)',
-  border: '1px solid rgba(8,145,178,0.3)',
+  border: '1px solid rgba(6,182,212,0.3)',
   color: '#E2EDF5',
   boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
 };
@@ -106,7 +106,6 @@ function TrendChart() {
     const sortedYears = Array.from(allYears).sort();
 
     // For multi-category views, combine pembesaran+pembenihan as total
-    // since mixing units on same chart is confusing
     const categories = Object.keys(trendData).sort();
     lines = categories.map((cat, i) => ({
       key: cat,
@@ -118,9 +117,6 @@ function TrendChart() {
       const row: Record<string, unknown> = { year };
       categories.forEach(cat => {
         const val = trendData[cat]?.[year];
-        // Show total (pembesaran in Kg + pembenihan in Ekor - show separately)
-        // Actually show pembesaran only to keep units consistent, or show total
-        // Best: show total production qty since mixing units is already the pattern
         row[cat] = val ? val.pembesaran + val.pembenihan : 0;
       });
       return row;
@@ -128,7 +124,7 @@ function TrendChart() {
   }
 
   return (
-    <ChartCard title="Tren Produksi 5 Tahun" index={0}>
+    <ChartCard title="Tren Produksi" index={0}>
       {/* View Selector */}
       <div className="flex flex-wrap gap-1.5 mb-4">
         {TREND_VIEWS.map((view) => (
@@ -232,7 +228,7 @@ function FishTypePieChart() {
         </div>
         {/* Pembenihan Pie */}
         <div>
-          <p className="text-xs text-center font-medium text-muted-foreground mb-1">Pembenihan (Ekor)</p>
+          <p className="text-xs text-center font-medium text-muted-foreground mb-1">Pembenihan (Ektor)</p>
           <div className="h-48 sm:h-56">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -254,7 +250,7 @@ function FishTypePieChart() {
                   ))}
                 </Pie>
                 <Tooltip
-                  formatter={(value: number) => formatNumber(value) + ' Ekor'}
+                  formatter={(value: number) => formatNumber(value) + ' Ektor'}
                   contentStyle={tooltipStyleSmall}
                 />
               </PieChart>
@@ -274,9 +270,9 @@ function KecamatanBarChart() {
     .map(([name, val]) => ({
       name,
       'Pembesaran (Kg)': val.pembesaran,
-      'Pembenihan (Ekor)': val.pembenihan,
+      'Pembenihan (Ektor)': val.pembenihan,
     }))
-    .sort((a, b) => (b['Pembesaran (Kg)'] + b['Pembenihan (Ekor)']) - (a['Pembesaran (Kg)'] + a['Pembenihan (Ekor)']));
+    .sort((a, b) => (b['Pembesaran (Kg)'] + b['Pembenihan (Ektor)']) - (a['Pembesaran (Kg)'] + a['Pembenihan (Ektor)']));
 
   return (
     <ChartCard title="Produksi per Kecamatan" index={2}>
@@ -288,14 +284,14 @@ function KecamatanBarChart() {
             <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
             <Tooltip
               formatter={(value: number, name: string) => {
-                const unit = name.includes('Pembesaran') ? ' Kg' : ' Ekor';
+                const unit = name.includes('Pembesaran') ? ' Kg' : ' Ektor';
                 return formatNumber(value) + unit;
               }}
               contentStyle={tooltipStyle}
             />
             <Legend wrapperStyle={{ fontSize: 11 }} />
             <Bar dataKey="Pembesaran (Kg)" fill={PEMBESARAN_COLOR} radius={[4, 4, 0, 0]} />
-            <Bar dataKey="Pembenihan (Ekor)" fill={PEMBENIHAN_COLOR} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="Pembenihan (Ektor)" fill={PEMBENIHAN_COLOR} radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -311,9 +307,9 @@ function ContainerBarChart() {
     .map(([name, val]) => ({
       name,
       'Pembesaran (Kg)': val.pembesaran,
-      'Pembenihan (Ekor)': val.pembenihan,
+      'Pembenihan (Ektor)': val.pembenihan,
     }))
-    .sort((a, b) => (b['Pembesaran (Kg)'] + b['Pembenihan (Ekor)']) - (a['Pembesaran (Kg)'] + a['Pembenihan (Ekor)']));
+    .sort((a, b) => (b['Pembesaran (Kg)'] + b['Pembenihan (Ektor)']) - (a['Pembesaran (Kg)'] + a['Pembenihan (Ektor)']));
 
   return (
     <ChartCard title="Produksi per Wadah Budidaya" index={3}>
@@ -325,14 +321,14 @@ function ContainerBarChart() {
             <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
             <Tooltip
               formatter={(value: number, name: string) => {
-                const unit = name.includes('Pembesaran') ? ' Kg' : ' Ekor';
+                const unit = name.includes('Pembesaran') ? ' Kg' : ' Ektor';
                 return formatNumber(value) + unit;
               }}
               contentStyle={tooltipStyle}
             />
             <Legend wrapperStyle={{ fontSize: 11 }} />
             <Bar dataKey="Pembesaran (Kg)" fill={PEMBESARAN_COLOR} radius={[4, 4, 0, 0]} />
-            <Bar dataKey="Pembenihan (Ekor)" fill={PEMBENIHAN_COLOR} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="Pembenihan (Ektor)" fill={PEMBENIHAN_COLOR} radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>

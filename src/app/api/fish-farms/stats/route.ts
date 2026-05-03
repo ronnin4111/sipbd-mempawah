@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 
+// Case-insensitive contains filter
+const ciContains = (value: string) => {
+  const isPostgres = process.env.DATABASE_URL?.includes('postgres');
+  return isPostgres
+    ? { contains: value, mode: 'insensitive' as const }
+    : { contains: value };
+};
+
 // Helper to build the same filter as the main route
 function buildWhere(searchParams: URLSearchParams) {
   const where: Record<string, unknown> = {};
@@ -44,12 +52,12 @@ function buildWhere(searchParams: URLSearchParams) {
   const searchParam = searchParams.get('search');
   if (searchParam) {
     where.OR = [
-      { kecamatan: { contains: searchParam } },
-      { desa: { contains: searchParam } },
-      { fishType: { contains: searchParam } },
-      { containerType: { contains: searchParam } },
-      { farmerName: { contains: searchParam } },
-      { groupName: { contains: searchParam } },
+      { kecamatan: ciContains(searchParam) },
+      { desa: ciContains(searchParam) },
+      { fishType: ciContains(searchParam) },
+      { containerType: ciContains(searchParam) },
+      { farmerName: ciContains(searchParam) },
+      { groupName: ciContains(searchParam) },
     ];
   }
 
@@ -270,6 +278,7 @@ export async function GET(request: NextRequest) {
       productionByKecamatanDetail[r.kecamatan].value += r.productionValue;
       productionByKecamatanDetail[r.kecamatan].rtp += r.rtpCount;
       productionByKecamatanDetail[r.kecamatan].farmer += r.farmerCount;
+      // Group: use unique group names per kecamatan
     });
 
     // Set group counts using unique group names

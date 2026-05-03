@@ -72,8 +72,6 @@ function Trend5YearTable() {
     ? rawEntries[0].year
     : '-';
 
-  const titleSuffix = years.length > 0 ? yearRange : yearRange;
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -84,7 +82,7 @@ function Trend5YearTable() {
         <CardHeader className="pb-2 px-4 sm:px-6 pt-4 sm:pt-6">
           <CardTitle className="text-sm sm:text-base font-semibold flex items-center gap-2">
             <TrendingUp className="h-5 w-5 text-teal-600" />
-            Tabel Tren Produksi Tahun : {titleSuffix}
+            Tabel Tren Produksi Tahun : {yearRange}
           </CardTitle>
         </CardHeader>
         <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">

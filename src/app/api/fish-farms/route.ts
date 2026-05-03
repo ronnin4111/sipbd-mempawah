@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 
+// Case-insensitive contains filter
+// SQLite: contains is already case-insensitive
+// PostgreSQL: needs mode: 'insensitive'
+const ciContains = (value: string) => {
+  const isPostgres = process.env.DATABASE_URL?.includes('postgres');
+  return isPostgres
+    ? { contains: value, mode: 'insensitive' as const }
+    : { contains: value };
+};
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -63,12 +73,12 @@ export async function GET(request: NextRequest) {
 
     if (searchParam) {
       where.OR = [
-        { kecamatan: { contains: searchParam } },
-        { desa: { contains: searchParam } },
-        { fishType: { contains: searchParam } },
-        { containerType: { contains: searchParam } },
-        { farmerName: { contains: searchParam } },
-        { groupName: { contains: searchParam } },
+        { kecamatan: ciContains(searchParam) },
+        { desa: ciContains(searchParam) },
+        { fishType: ciContains(searchParam) },
+        { containerType: ciContains(searchParam) },
+        { farmerName: ciContains(searchParam) },
+        { groupName: ciContains(searchParam) },
       ];
     }
 
