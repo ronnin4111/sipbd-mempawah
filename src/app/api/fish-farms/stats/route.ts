@@ -254,6 +254,34 @@ export async function GET(request: NextRequest) {
       }
     });
 
+    // === Cross-tab: Kecamatan × FishType ===
+    const productionByKecamatanByFishType: Record<string, Record<string, { pembesaran: number; pembenihan: number }>> = {};
+    records.forEach(r => {
+      if (!productionByKecamatanByFishType[r.kecamatan]) productionByKecamatanByFishType[r.kecamatan] = {};
+      if (!productionByKecamatanByFishType[r.kecamatan][r.fishType]) {
+        productionByKecamatanByFishType[r.kecamatan][r.fishType] = { pembesaran: 0, pembenihan: 0 };
+      }
+      if (r.businessType === 'Pembesaran') {
+        productionByKecamatanByFishType[r.kecamatan][r.fishType].pembesaran += r.productionQty;
+      } else {
+        productionByKecamatanByFishType[r.kecamatan][r.fishType].pembenihan += r.productionQty;
+      }
+    });
+
+    // === Cross-tab: Kecamatan × ContainerType ===
+    const productionByKecamatanByContainer: Record<string, Record<string, { pembesaran: number; pembenihan: number }>> = {};
+    records.forEach(r => {
+      if (!productionByKecamatanByContainer[r.kecamatan]) productionByKecamatanByContainer[r.kecamatan] = {};
+      if (!productionByKecamatanByContainer[r.kecamatan][r.containerType]) {
+        productionByKecamatanByContainer[r.kecamatan][r.containerType] = { pembesaran: 0, pembenihan: 0 };
+      }
+      if (r.businessType === 'Pembesaran') {
+        productionByKecamatanByContainer[r.kecamatan][r.containerType].pembesaran += r.productionQty;
+      } else {
+        productionByKecamatanByContainer[r.kecamatan][r.containerType].pembenihan += r.productionQty;
+      }
+    });
+
     // === Production by kecamatan detail - separated by business type ===
     const productionByKecamatanDetail: Record<string, {
       pembesaranProduction: number;
@@ -398,6 +426,16 @@ export async function GET(request: NextRequest) {
       trendByContainer: Object.fromEntries(
         Object.entries(trendByContainer).map(([cont, years]) => [cont, Object.fromEntries(
           Object.entries(years).map(([y, v]) => [y, { pembesaran: round2(v.pembesaran), pembenihan: round2(v.pembenihan) }])
+        )])
+      ),
+      productionByKecamatanByFishType: Object.fromEntries(
+        Object.entries(productionByKecamatanByFishType).map(([kec, fishTypes]) => [kec, Object.fromEntries(
+          Object.entries(fishTypes).map(([ft, v]) => [ft, { pembesaran: round2(v.pembesaran), pembenihan: round2(v.pembenihan) }])
+        )])
+      ),
+      productionByKecamatanByContainer: Object.fromEntries(
+        Object.entries(productionByKecamatanByContainer).map(([kec, containers]) => [kec, Object.fromEntries(
+          Object.entries(containers).map(([ct, v]) => [ct, { pembesaran: round2(v.pembesaran), pembenihan: round2(v.pembenihan) }])
         )])
       ),
     });

@@ -22,6 +22,7 @@ const SECTION_OPTIONS = [
   { id: 'data-produksi', label: 'Data Produksi Perikanan', type: 'table' as const },
   { id: 'chart-tren', label: 'Grafik Tren Produksi', type: 'chart' as const },
   { id: 'chart-produksi', label: 'Grafik Produksi', type: 'chart' as const },
+  { id: 'chart-produksi-kecamatan', label: 'Grafik Produksi per Kecamatan', type: 'chart' as const },
 ] as const;
 
 type SectionId = typeof SECTION_OPTIONS[number]['id'];
@@ -99,6 +100,7 @@ export function PdfExportDialog({ open, onOpenChange }: PdfExportDialogProps) {
       const chartIdMap: Record<string, string> = {
         'chart-tren': 'pdf-chart-tren-produksi',
         'chart-produksi': 'pdf-chart-produksi',
+        'chart-produksi-kecamatan': 'pdf-chart-produksi-kecamatan',
       };
 
       for (const sectionId of selectedSections) {

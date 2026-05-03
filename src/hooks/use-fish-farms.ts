@@ -87,6 +87,8 @@ export interface StatsResponse {
   trendByFishType: Record<string, Record<string, { pembesaran: number; pembenihan: number }>>;
   trendByKecamatan: Record<string, Record<string, { pembesaran: number; pembenihan: number }>>;
   trendByContainer: Record<string, Record<string, { pembesaran: number; pembenihan: number }>>;
+  productionByKecamatanByFishType: Record<string, Record<string, { pembesaran: number; pembenihan: number }>>;
+  productionByKecamatanByContainer: Record<string, Record<string, { pembesaran: number; pembenihan: number }>>;
 }
 
 export function useFishFarms(page: number = 1, pageSize: number = 20) {
