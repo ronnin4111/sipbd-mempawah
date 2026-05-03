@@ -7,8 +7,8 @@ import {
   PieChart, Pie, Cell,
   BarChart, Bar,
 } from 'recharts';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useFishFarmStats } from '@/hooks/use-fish-farms';
+import { BarChart3, TrendingUp, PieChart as PieChartIcon } from 'lucide-react';
 
 const CHART_COLORS = [
   '#06B6D4', '#14B8A6', '#38BDF8', '#22D3EE', '#7DD3FC',
@@ -36,7 +36,11 @@ const tooltipStyleSmall = {
   fontSize: 11,
 };
 
+// === TYPE DEFINITIONS ===
+
 type TrendViewBy = 'jenis-usaha' | 'jenis-ikan' | 'kecamatan' | 'wadah';
+type ProduksiViewBy = 'jenis-ikan' | 'kecamatan' | 'wadah';
+type ChartType = 'bar' | 'line' | 'pie';
 
 const TREND_VIEWS: { id: TrendViewBy; label: string }[] = [
   { id: 'jenis-usaha', label: 'Jenis Usaha' },
@@ -44,6 +48,54 @@ const TREND_VIEWS: { id: TrendViewBy; label: string }[] = [
   { id: 'kecamatan', label: 'Kecamatan' },
   { id: 'wadah', label: 'Wadah Budidaya' },
 ];
+
+const PRODUKSI_VIEWS: { id: ProduksiViewBy; label: string }[] = [
+  { id: 'jenis-ikan', label: 'Jenis Ikan' },
+  { id: 'kecamatan', label: 'Kecamatan' },
+  { id: 'wadah', label: 'Wadah Budidaya' },
+];
+
+const CHART_TYPES: { id: ChartType; label: string; icon: React.ReactNode }[] = [
+  { id: 'bar', label: 'Batang', icon: <BarChart3 className="h-3.5 w-3.5" /> },
+  { id: 'line', label: 'Garis', icon: <TrendingUp className="h-3.5 w-3.5" /> },
+  { id: 'pie', label: 'Pai', icon: <PieChartIcon className="h-3.5 w-3.5" /> },
+];
+
+// === HELPER: Selector Button ===
+
+function SelectorButton({
+  options,
+  value,
+  onChange,
+  size = 'sm',
+}: {
+  options: { id: string; label: string; icon?: React.ReactNode }[];
+  value: string;
+  onChange: (val: string) => void;
+  size?: 'sm' | 'xs';
+}) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {options.map((opt) => (
+        <button
+          key={opt.id}
+          onClick={() => onChange(opt.id)}
+          className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg transition-all"
+          style={{
+            background: value === opt.id ? 'rgba(6,182,212,0.15)' : 'transparent',
+            border: `1px solid ${value === opt.id ? 'rgba(6,182,212,0.4)' : 'var(--border)'}`,
+            color: value === opt.id ? '#06B6D4' : 'var(--muted-foreground)',
+          }}
+        >
+          {opt.icon}
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// === CHART CARD WRAPPER ===
 
 function ChartCard({ title, children, index }: { title: string; children: React.ReactNode; index: number }) {
   return (
@@ -64,17 +116,68 @@ function ChartCard({ title, children, index }: { title: string; children: React.
   );
 }
 
+// === BAR LABEL RENDERERS ===
+
+const renderBarLabel = (props: Record<string, unknown>) => {
+  const x = props.x as number;
+  const y = props.y as number;
+  const width = props.width as number;
+  const value = props.value as number;
+  if (!value || value === 0) return <g />;
+  const formatted = value >= 1000 ? `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}k` : value.toFixed(0);
+  return (
+    <text x={x + width / 2} y={y - 4} fill="#E2EDF5" textAnchor="middle" fontSize={9} fontWeight={600} opacity={0.9}>
+      {formatted}
+    </text>
+  );
+};
+
+const renderBarLabelPdf = (props: Record<string, unknown>) => {
+  const x = props.x as number;
+  const y = props.y as number;
+  const width = props.width as number;
+  const value = props.value as number;
+  if (!value || value === 0) return <g />;
+  const formatted = value >= 1000 ? `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}k` : value.toFixed(0);
+  return (
+    <text x={x + width / 2} y={y - 4} fill="#1A2332" textAnchor="middle" fontSize={9} fontWeight={600} opacity={0.9}>
+      {formatted}
+    </text>
+  );
+};
+
+// === HELPER: Get produksi data from stats ===
+
+function getProduksiData(
+  stats: NonNullable<ReturnType<typeof useFishFarmStats>['data']>,
+  viewBy: ProduksiViewBy
+) {
+  const source = viewBy === 'jenis-ikan'
+    ? stats.productionByFishType
+    : viewBy === 'kecamatan'
+    ? stats.productionByKecamatan
+    : stats.productionByContainer;
+
+  return Object.entries(source)
+    .map(([name, val]) => ({
+      name,
+      'Pembesaran (Kg)': val.pembesaran,
+      'Pembenihan (Ekor)': val.pembenihan,
+    }))
+    .sort((a, b) => (b['Pembesaran (Kg)'] + b['Pembenihan (Ektor)']) - (a['Pembesaran (Kg)'] + a['Pembenihan (Ektor)']));
+}
+
+// === 1. TREND CHART ===
+
 function TrendChart() {
   const { data: stats } = useFishFarmStats();
   const [viewBy, setViewBy] = useState<TrendViewBy>('jenis-usaha');
   if (!stats) return null;
 
-  // Build chart data based on view selection
   let data: Record<string, unknown>[] = [];
   let lines: { key: string; color: string; name: string }[] = [];
 
   if (viewBy === 'jenis-usaha') {
-    // Original: Pembesaran vs Pembenihan by year
     data = Object.entries(stats.trend5Year)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([year, val]) => ({
@@ -87,32 +190,20 @@ function TrendChart() {
       { key: 'Pembenihan (Ekor)', color: PEMBENIHAN_COLOR, name: 'Pembenihan (Ekor)' },
     ];
   } else {
-    // Multi-line: each category item as a separate line
     let trendData: Record<string, Record<string, { pembesaran: number; pembenihan: number }>>;
+    if (viewBy === 'jenis-ikan') trendData = stats.trendByFishType;
+    else if (viewBy === 'kecamatan') trendData = stats.trendByKecamatan;
+    else trendData = stats.trendByContainer;
 
-    if (viewBy === 'jenis-ikan') {
-      trendData = stats.trendByFishType;
-    } else if (viewBy === 'kecamatan') {
-      trendData = stats.trendByKecamatan;
-    } else {
-      trendData = stats.trendByContainer;
-    }
-
-    // Get all years from the data
     const allYears = new Set<string>();
-    Object.values(trendData).forEach(yearMap => {
-      Object.keys(yearMap).forEach(y => allYears.add(y));
-    });
+    Object.values(trendData).forEach(yearMap => Object.keys(yearMap).forEach(y => allYears.add(y)));
     const sortedYears = Array.from(allYears).sort();
-
-    // For multi-category views, combine pembesaran+pembenihan as total
     const categories = Object.keys(trendData).sort();
     lines = categories.map((cat, i) => ({
       key: cat,
       color: CHART_COLORS[i % CHART_COLORS.length],
       name: cat,
     }));
-
     data = sortedYears.map(year => {
       const row: Record<string, unknown> = { year };
       categories.forEach(cat => {
@@ -126,211 +217,174 @@ function TrendChart() {
   return (
     <ChartCard title="Tren Produksi" index={0}>
       <div id="chart-tren-produksi">
-      {/* View Selector */}
-      <div className="flex flex-wrap gap-1.5 mb-4">
-        {TREND_VIEWS.map((view) => (
-          <button
-            key={view.id}
-            onClick={() => setViewBy(view.id)}
-            className="px-3 py-1.5 text-xs font-medium rounded-lg transition-all"
-            style={{
-              background: viewBy === view.id ? 'rgba(6,182,212,0.15)' : 'transparent',
-              border: `1px solid ${viewBy === view.id ? 'rgba(6,182,212,0.4)' : 'var(--border)'}`,
-              color: viewBy === view.id ? '#06B6D4' : 'var(--muted-foreground)',
-            }}
-          >
-            {view.label}
-          </button>
-        ))}
-      </div>
+        <div className="mb-4">
+          <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: '#06B6D4' }}>
+            Tampilkan berdasarkan
+          </p>
+          <SelectorButton
+            options={TREND_VIEWS}
+            value={viewBy}
+            onChange={(v) => setViewBy(v as TrendViewBy)}
+          />
+        </div>
 
-      <div className="h-64 sm:h-72">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-            <XAxis dataKey="year" tick={{ fontSize: 12 }} />
-            <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
-            <Tooltip
-              formatter={(value: number, name: string) => {
-                if (viewBy === 'jenis-usaha') {
-                  const unit = name.includes('Pembesaran') ? ' Kg' : ' Ekor';
-                  return formatNumber(value) + unit;
-                }
-                return formatNumber(value);
-              }}
-              contentStyle={tooltipStyle}
-            />
-            <Legend wrapperStyle={{ fontSize: 11 }} />
-            {lines.map((line) => (
-              <Line
-                key={line.key}
-                type="monotone"
-                dataKey={line.key}
-                stroke={line.color}
-                strokeWidth={2}
-                dot={{ r: 3 }}
-                activeDot={{ r: 5 }}
-                name={line.name}
+        <div className="h-72 sm:h-80">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={data} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+              <XAxis dataKey="year" tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
+              <Tooltip
+                formatter={(value: number, name: string) => {
+                  if (viewBy === 'jenis-usaha') {
+                    const unit = name.includes('Pembesaran') ? ' Kg' : ' Ekor';
+                    return formatNumber(value) + unit;
+                  }
+                  return formatNumber(value);
+                }}
+                contentStyle={tooltipStyle}
               />
-            ))}
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-      </div>
-    </ChartCard>
-  );
-}
-
-function FishTypePieChart() {
-  const { data: stats } = useFishFarmStats();
-  if (!stats) return null;
-
-  // Show two pies: Pembesaran (Kg) and Pembenihan (Ekor)
-  const pembesaranData = Object.entries(stats.productionByFishType)
-    .filter(([, v]) => v.pembesaran > 0)
-    .map(([name, v]) => ({ name, value: v.pembesaran }));
-
-  const pembenihanData = Object.entries(stats.productionByFishType)
-    .filter(([, v]) => v.pembenihan > 0)
-    .map(([name, v]) => ({ name, value: v.pembenihan }));
-
-  return (
-    <ChartCard title="Produksi per Jenis Ikan" index={1}>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        {/* Pembesaran Pie */}
-        <div>
-          <p className="text-xs text-center font-medium text-muted-foreground mb-1">Pembesaran (Kg)</p>
-          <div className="h-48 sm:h-56">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={pembesaranData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={30}
-                  outerRadius={65}
-                  paddingAngle={2}
-                  dataKey="value"
-                  label={({ name, percent }: { name: string; percent: number }) =>
-                    `${name} (${(percent * 100).toFixed(0)}%)`
-                  }
-                  labelLine={{ strokeWidth: 1 }}
-                >
-                  {pembesaranData.map((_, index) => (
-                    <Cell key={`cell-p-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  formatter={(value: number) => formatNumber(value) + ' Kg'}
-                  contentStyle={tooltipStyleSmall}
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              {lines.map((line) => (
+                <Line
+                  key={line.key}
+                  type="monotone"
+                  dataKey={line.key}
+                  stroke={line.color}
+                  strokeWidth={2}
+                  dot={{ r: 3 }}
+                  activeDot={{ r: 5 }}
+                  name={line.name}
                 />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-        {/* Pembenihan Pie */}
-        <div>
-          <p className="text-xs text-center font-medium text-muted-foreground mb-1">Pembenihan (Ektor)</p>
-          <div className="h-48 sm:h-56">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={pembenihanData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={30}
-                  outerRadius={65}
-                  paddingAngle={2}
-                  dataKey="value"
-                  label={({ name, percent }: { name: string; percent: number }) =>
-                    `${name} (${(percent * 100).toFixed(0)}%)`
-                  }
-                  labelLine={{ strokeWidth: 1 }}
-                >
-                  {pembenihanData.map((_, index) => (
-                    <Cell key={`cell-b-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  formatter={(value: number) => formatNumber(value) + ' Ektor'}
-                  contentStyle={tooltipStyleSmall}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
         </div>
       </div>
     </ChartCard>
   );
 }
 
-// Custom label renderer for bar charts - shows value on top of bar
-// Uses fixed color (#E2EDF5) for both screen and PDF readability
-const renderBarLabel = (props: Record<string, unknown>) => {
-  const x = props.x as number;
-  const y = props.y as number;
-  const width = props.width as number;
-  const value = props.value as number;
-  if (!value || value === 0) return <g />;
-  const formatted = value >= 1000 ? `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}k` : value.toFixed(0);
-  return (
-    <text
-      x={x + width / 2}
-      y={y - 4}
-      fill="#E2EDF5"
-      textAnchor="middle"
-      fontSize={9}
-      fontWeight={600}
-      opacity={0.9}
-    >
-      {formatted}
-    </text>
-  );
-};
+// === 2. PRODUKSI CHART (UNIFIED) ===
 
-// PDF-friendly label renderer with dark text on white background
-const renderBarLabelPdf = (props: Record<string, unknown>) => {
-  const x = props.x as number;
-  const y = props.y as number;
-  const width = props.width as number;
-  const value = props.value as number;
-  if (!value || value === 0) return <g />;
-  const formatted = value >= 1000 ? `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}k` : value.toFixed(0);
-  return (
-    <text
-      x={x + width / 2}
-      y={y - 4}
-      fill="#1A2332"
-      textAnchor="middle"
-      fontSize={9}
-      fontWeight={600}
-      opacity={0.9}
-    >
-      {formatted}
-    </text>
-  );
-};
-
-function KecamatanBarChart() {
+function ProduksiChart() {
   const { data: stats } = useFishFarmStats();
+  const [viewBy, setViewBy] = useState<ProduksiViewBy>('jenis-ikan');
+  const [chartType, setChartType] = useState<ChartType>('bar');
+
   if (!stats) return null;
 
-  const data = Object.entries(stats.productionByKecamatan)
-    .map(([name, val]) => ({
-      name,
-      'Pembesaran (Kg)': val.pembesaran,
-      'Pembenihan (Ektor)': val.pembenihan,
-    }))
-    .sort((a, b) => (b['Pembesaran (Kg)'] + b['Pembenihan (Ektor)']) - (a['Pembesaran (Kg)'] + a['Pembenihan (Ektor)']));
+  const data = getProduksiData(stats, viewBy);
+  const title = `Produksi per ${PRODUKSI_VIEWS.find(v => v.id === viewBy)?.label ?? ''}`;
 
-  return (
-    <ChartCard title="Produksi per Kecamatan" index={2}>
-      <div id="chart-kecamatan">
-      <div className="h-64 sm:h-80">
+  // Pie chart data
+  const pembesaranPieData = data
+    .filter(d => (d['Pembesaran (Kg)'] as number) > 0)
+    .map(d => ({ name: d.name, value: d['Pembesaran (Kg)'] as number }));
+
+  const pembenihanPieData = data
+    .filter(d => (d['Pembenihan (Ektor)'] as number) > 0)
+    .map(d => ({ name: d.name, value: d['Pembenihan (Ektor)'] as number }));
+
+  const renderChart = () => {
+    if (chartType === 'pie') {
+      return (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div>
+            <p className="text-xs text-center font-medium text-muted-foreground mb-1">Pembesaran (Kg)</p>
+            <div className="h-64 sm:h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={pembesaranPieData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={35}
+                    outerRadius={75}
+                    paddingAngle={2}
+                    dataKey="value"
+                    label={({ name, percent }: { name: string; percent: number }) =>
+                      `${name} (${(percent * 100).toFixed(0)}%)`
+                    }
+                    labelLine={{ strokeWidth: 1 }}
+                  >
+                    {pembesaranPieData.map((_, index) => (
+                      <Cell key={`cell-p-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    formatter={(value: number) => formatNumber(value) + ' Kg'}
+                    contentStyle={tooltipStyleSmall}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+          <div>
+            <p className="text-xs text-center font-medium text-muted-foreground mb-1">Pembenihan (Ektor)</p>
+            <div className="h-64 sm:h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={pembenihanPieData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={35}
+                    outerRadius={75}
+                    paddingAngle={2}
+                    dataKey="value"
+                    label={({ name, percent }: { name: string; percent: number }) =>
+                      `${name} (${(percent * 100).toFixed(0)}%)`
+                    }
+                    labelLine={{ strokeWidth: 1 }}
+                  >
+                    {pembenihanPieData.map((_, index) => (
+                      <Cell key={`cell-b-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    formatter={(value: number) => formatNumber(value) + ' Ektor'}
+                    contentStyle={tooltipStyleSmall}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (chartType === 'line') {
+      return (
+        <div className="h-72 sm:h-80">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={data} margin={{ top: 5, right: 10, left: 0, bottom: 30 }}>
+              <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+              <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-35} textAnchor="end" interval={0} height={60} />
+              <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
+              <Tooltip
+                formatter={(value: number, name: string) => {
+                  const unit = name.includes('Pembesaran') ? ' Kg' : ' Ektor';
+                  return formatNumber(value) + unit;
+                }}
+                contentStyle={tooltipStyle}
+              />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Line type="monotone" dataKey="Pembesaran (Kg)" stroke={PEMBESARAN_COLOR} strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+              <Line type="monotone" dataKey="Pembenihan (Ektor)" stroke={PEMBENIHAN_COLOR} strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      );
+    }
+
+    // Default: bar chart
+    return (
+      <div className="h-72 sm:h-80">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 20, right: 10, left: 0, bottom: 30 }}>
             <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-            <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-40} textAnchor="end" interval={0} height={60} />
+            <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-35} textAnchor="end" interval={0} height={60} />
             <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
             <Tooltip
               formatter={(value: number, name: string) => {
@@ -345,65 +399,61 @@ function KecamatanBarChart() {
           </BarChart>
         </ResponsiveContainer>
       </div>
-      </div>
-    </ChartCard>
-  );
-}
-
-function ContainerBarChart() {
-  const { data: stats } = useFishFarmStats();
-  if (!stats) return null;
-
-  const data = Object.entries(stats.productionByContainer)
-    .map(([name, val]) => ({
-      name,
-      'Pembesaran (Kg)': val.pembesaran,
-      'Pembenihan (Ektor)': val.pembenihan,
-    }))
-    .sort((a, b) => (b['Pembesaran (Kg)'] + b['Pembenihan (Ektor)']) - (a['Pembesaran (Kg)'] + a['Pembenihan (Ektor)']));
+    );
+  };
 
   return (
-    <ChartCard title="Produksi per Wadah Budidaya" index={3}>
-      <div id="chart-wadah-budidaya">
-      <div className="h-64 sm:h-80">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 20, right: 10, left: 0, bottom: 30 }}>
-            <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-            <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-40} textAnchor="end" interval={0} height={60} />
-            <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
-            <Tooltip
-              formatter={(value: number, name: string) => {
-                const unit = name.includes('Pembesaran') ? ' Kg' : ' Ektor';
-                return formatNumber(value) + unit;
-              }}
-              contentStyle={tooltipStyle}
+    <ChartCard title={title} index={1}>
+      <div id="chart-produksi">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
+          {/* Dimension selector */}
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: '#06B6D4' }}>
+              Dimensi
+            </p>
+            <SelectorButton
+              options={PRODUKSI_VIEWS}
+              value={viewBy}
+              onChange={(v) => setViewBy(v as ProduksiViewBy)}
             />
-            <Legend wrapperStyle={{ fontSize: 11 }} />
-            <Bar dataKey="Pembesaran (Kg)" fill={PEMBESARAN_COLOR} radius={[4, 4, 0, 0]} label={renderBarLabel} />
-            <Bar dataKey="Pembenihan (Ektor)" fill={PEMBENIHAN_COLOR} radius={[4, 4, 0, 0]} label={renderBarLabel} />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+          </div>
+          {/* Chart type selector */}
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: '#06B6D4' }}>
+              Tipe Grafik
+            </p>
+            <SelectorButton
+              options={CHART_TYPES}
+              value={chartType}
+              onChange={(v) => setChartType(v as ChartType)}
+            />
+          </div>
+        </div>
+
+        {renderChart()}
       </div>
     </ChartCard>
   );
 }
+
+// === DASHBOARD EXPORT ===
 
 export function DashboardCharts() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
       <TrendChart />
-      <FishTypePieChart />
-      <KecamatanBarChart />
-      <ContainerBarChart />
+      <ProduksiChart />
     </div>
   );
 }
 
-// PDF-optimized charts with white background and dark text
+// === PDF-OPTIMIZED CHARTS ===
+
 export function PdfDashboardCharts() {
   const { data: stats } = useFishFarmStats();
-  const [viewBy, setViewBy] = useState<TrendViewBy>('jenis-usaha');
+  const [trendViewBy, setTrendViewBy] = useState<TrendViewBy>('jenis-usaha');
+  const [produksiViewBy, setProduksiViewBy] = useState<ProduksiViewBy>('jenis-ikan');
+  const [produksiChartType, setProduksiChartType] = useState<ChartType>('bar');
 
   if (!stats) return null;
 
@@ -411,7 +461,7 @@ export function PdfDashboardCharts() {
   let trendData: Record<string, unknown>[] = [];
   let trendLines: { key: string; color: string; name: string }[] = [];
 
-  if (viewBy === 'jenis-usaha') {
+  if (trendViewBy === 'jenis-usaha') {
     trendData = Object.entries(stats.trend5Year)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([year, val]) => ({
@@ -425,8 +475,8 @@ export function PdfDashboardCharts() {
     ];
   } else {
     let trendDataSource: Record<string, Record<string, { pembesaran: number; pembenihan: number }>>;
-    if (viewBy === 'jenis-ikan') trendDataSource = stats.trendByFishType;
-    else if (viewBy === 'kecamatan') trendDataSource = stats.trendByKecamatan;
+    if (trendViewBy === 'jenis-ikan') trendDataSource = stats.trendByFishType;
+    else if (trendViewBy === 'kecamatan') trendDataSource = stats.trendByKecamatan;
     else trendDataSource = stats.trendByContainer;
 
     const allYears = new Set<string>();
@@ -444,18 +494,98 @@ export function PdfDashboardCharts() {
     });
   }
 
-  // Build kecamatan bar data
-  const kecBarData = Object.entries(stats.productionByKecamatan)
-    .map(([name, val]) => ({ name, 'Pembesaran (Kg)': val.pembesaran, 'Pembenihan (Ektor)': val.pembenihan }))
-    .sort((a, b) => (b['Pembesaran (Kg)'] + b['Pembenihan (Ektor)']) - (a['Pembesaran (Kg)'] + a['Pembenihan (Ektor)']));
+  // Build produksi data
+  const produksiData = getProduksiData(stats, produksiViewBy);
+  const produksiTitle = `Produksi per ${PRODUKSI_VIEWS.find(v => v.id === produksiViewBy)?.label ?? ''}`;
 
-  // Build container bar data
-  const contBarData = Object.entries(stats.productionByContainer)
-    .map(([name, val]) => ({ name, 'Pembesaran (Kg)': val.pembesaran, 'Pembenihan (Ektor)': val.pembenihan }))
-    .sort((a, b) => (b['Pembesaran (Kg)'] + b['Pembenihan (Ektor)']) - (a['Pembesaran (Kg)'] + a['Pembenihan (Ektor)']));
+  // Pie data for PDF
+  const pembesaranPieData = produksiData
+    .filter(d => (d['Pembesaran (Kg)'] as number) > 0)
+    .map(d => ({ name: d.name, value: d['Pembesaran (Kg)'] as number }));
+  const pembenihanPieData = produksiData
+    .filter(d => (d['Pembenihan (Ektor)'] as number) > 0)
+    .map(d => ({ name: d.name, value: d['Pembenihan (Ektor)'] as number }));
 
   const pdfTextStyle = { fill: '#1A2332', fontSize: 11 };
   const pdfGridStyle = { stroke: '#E0E0E0', strokeDasharray: '3 3' };
+
+  const renderPdfProduksiChart = () => {
+    if (produksiChartType === 'pie') {
+      return (
+        <div style={{ display: 'flex', gap: 16 }}>
+          <div style={{ flex: 1 }}>
+            <p style={{ textAlign: 'center', fontSize: 11, fontWeight: 600, color: '#555', marginBottom: 4 }}>Pembesaran (Kg)</p>
+            <div style={{ height: 280 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={pembesaranPieData} cx="50%" cy="50%" innerRadius={35} outerRadius={80} paddingAngle={2} dataKey="value"
+                    label={({ name, percent }: { name: string; percent: number }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+                    labelLine={{ strokeWidth: 1 }}>
+                    {pembesaranPieData.map((_, index) => (
+                      <Cell key={`cell-p-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip contentStyle={{ background: '#fff', border: '1px solid #ccc', borderRadius: 4, fontSize: 12 }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+          <div style={{ flex: 1 }}>
+            <p style={{ textAlign: 'center', fontSize: 11, fontWeight: 600, color: '#555', marginBottom: 4 }}>Pembenihan (Ektor)</p>
+            <div style={{ height: 280 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={pembenihanPieData} cx="50%" cy="50%" innerRadius={35} outerRadius={80} paddingAngle={2} dataKey="value"
+                    label={({ name, percent }: { name: string; percent: number }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+                    labelLine={{ strokeWidth: 1 }}>
+                    {pembenihanPieData.map((_, index) => (
+                      <Cell key={`cell-b-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip contentStyle={{ background: '#fff', border: '1px solid #ccc', borderRadius: 4, fontSize: 12 }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (produksiChartType === 'line') {
+      return (
+        <div style={{ height: 320 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={produksiData} margin={{ top: 10, right: 20, left: 10, bottom: 40 }}>
+              <CartesianGrid {...pdfGridStyle} />
+              <XAxis dataKey="name" tick={{ ...pdfTextStyle, fontSize: 9 }} angle={-40} textAnchor="end" interval={0} height={70} />
+              <YAxis tick={{ ...pdfTextStyle, fontSize: 10 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
+              <Tooltip contentStyle={{ background: '#fff', border: '1px solid #ccc', borderRadius: 4, fontSize: 12 }} />
+              <Legend wrapperStyle={{ fontSize: 11, color: '#333' }} />
+              <Line type="monotone" dataKey="Pembesaran (Kg)" stroke="#06B6D4" strokeWidth={2} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="Pembenihan (Ektor)" stroke="#14B8A6" strokeWidth={2} dot={{ r: 3 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      );
+    }
+
+    // Default: bar
+    return (
+      <div style={{ height: 320 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={produksiData} margin={{ top: 25, right: 20, left: 10, bottom: 40 }}>
+            <CartesianGrid {...pdfGridStyle} />
+            <XAxis dataKey="name" tick={{ ...pdfTextStyle, fontSize: 9 }} angle={-40} textAnchor="end" interval={0} height={70} />
+            <YAxis tick={{ ...pdfTextStyle, fontSize: 10 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
+            <Tooltip contentStyle={{ background: '#fff', border: '1px solid #ccc', borderRadius: 4, fontSize: 12 }} />
+            <Legend wrapperStyle={{ fontSize: 11, color: '#333' }} />
+            <Bar dataKey="Pembesaran (Kg)" fill="#06B6D4" radius={[4, 4, 0, 0]} label={renderBarLabelPdf} />
+            <Bar dataKey="Pembenihan (Ektor)" fill="#14B8A6" radius={[4, 4, 0, 0]} label={renderBarLabelPdf} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    );
+  };
 
   return (
     <div style={{ position: 'fixed', left: 0, top: 0, width: 900, zIndex: -9999, pointerEvents: 'none' }}>
@@ -478,12 +608,18 @@ export function PdfDashboardCharts() {
         </div>
       </div>
 
-      {/* Kecamatan Bar Chart for PDF */}
+      {/* Produksi Chart for PDF - unified */}
+      <div id="pdf-chart-produksi" style={{ background: '#FFFFFF', padding: 20, width: 900, marginBottom: 16 }}>
+        <h3 style={{ color: '#1A2332', fontSize: 14, fontWeight: 'bold', marginBottom: 8, fontFamily: 'sans-serif' }}>{produksiTitle}</h3>
+        {renderPdfProduksiChart()}
+      </div>
+
+      {/* Legacy IDs for backward compatibility with PDF export dialog */}
       <div id="pdf-chart-kecamatan" style={{ background: '#FFFFFF', padding: 20, width: 900, marginBottom: 16 }}>
         <h3 style={{ color: '#1A2332', fontSize: 14, fontWeight: 'bold', marginBottom: 8, fontFamily: 'sans-serif' }}>Produksi per Kecamatan</h3>
         <div style={{ height: 320 }}>
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={kecBarData} margin={{ top: 25, right: 20, left: 10, bottom: 40 }}>
+            <BarChart data={getProduksiData(stats, 'kecamatan')} margin={{ top: 25, right: 20, left: 10, bottom: 40 }}>
               <CartesianGrid {...pdfGridStyle} />
               <XAxis dataKey="name" tick={{ ...pdfTextStyle, fontSize: 9 }} angle={-40} textAnchor="end" interval={0} height={70} />
               <YAxis tick={{ ...pdfTextStyle, fontSize: 10 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
@@ -496,12 +632,11 @@ export function PdfDashboardCharts() {
         </div>
       </div>
 
-      {/* Container Bar Chart for PDF */}
       <div id="pdf-chart-wadah-budidaya" style={{ background: '#FFFFFF', padding: 20, width: 900 }}>
         <h3 style={{ color: '#1A2332', fontSize: 14, fontWeight: 'bold', marginBottom: 8, fontFamily: 'sans-serif' }}>Produksi per Wadah Budidaya</h3>
         <div style={{ height: 320 }}>
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={contBarData} margin={{ top: 25, right: 20, left: 10, bottom: 40 }}>
+            <BarChart data={getProduksiData(stats, 'wadah')} margin={{ top: 25, right: 20, left: 10, bottom: 40 }}>
               <CartesianGrid {...pdfGridStyle} />
               <XAxis dataKey="name" tick={{ ...pdfTextStyle, fontSize: 9 }} angle={-40} textAnchor="end" interval={0} height={70} />
               <YAxis tick={{ ...pdfTextStyle, fontSize: 10 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />

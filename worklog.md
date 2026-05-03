@@ -118,3 +118,30 @@ Stage Summary:
 - The "1" the user saw was from the "1 filter" badge, not the result count
 - Result count is now visually dominant (cyan, semibold, first position)
 - Filter badge clearly says "filter aktif" so users won't confuse it with result count
+
+---
+Task ID: 9
+Agent: Main Agent
+Task: Redesign dashboard to have only 2 charts - Tren & Produksi with dimension + chart type selectors
+
+Work Log:
+- Completely rewrote src/components/dashboard/charts.tsx
+- Removed 4 separate chart components (FishTypePieChart, KecamatanBarChart, ContainerBarChart, TrendChart) 
+- Created unified ProduksiChart component with:
+  - Dimension selector: Jenis Ikan / Kecamatan / Wadah Budidaya
+  - Chart type selector: Batang (Bar) / Garis (Line) / Pai (Pie)
+  - Dynamic title that changes based on selected dimension
+- Kept TrendChart with its existing view-by selector
+- DashboardCharts now renders only 2 charts in a 2-column grid
+- Added reusable SelectorButton component for consistent UI
+- Updated PdfDashboardCharts with unified "pdf-chart-produksi" ID
+- Kept legacy PDF chart IDs (pdf-chart-kecamatan, pdf-chart-wadah-budidaya) for backward compatibility
+- Updated pdf-export-dialog.tsx SECTION_OPTIONS: replaced 3 separate chart options with 2 (chart-tren, chart-produksi)
+- Updated chartIdMap in PDF export to match new chart IDs
+
+Stage Summary:
+- Dashboard now shows exactly 2 charts side by side
+- Left: Tren Produksi (with Jenis Usaha/Ikan/Kecamatan/Wadah selector)
+- Right: Produksi per [selected dimension] (with Dimensi selector + Tipe Grafik: Batang/Garis/Pai)
+- Chart title dynamically changes: "Produksi per Jenis Ikan", "Produksi per Kecamatan", "Produksi per Wadah Budidaya"
+- PDF export updated with new unified chart section

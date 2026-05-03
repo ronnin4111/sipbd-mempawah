@@ -20,9 +20,8 @@ const SECTION_OPTIONS = [
   { id: 'tabel-target', label: 'Tabel Target vs Realisasi', type: 'table' as const },
   { id: 'tabel-kecamatan', label: 'Tabel Produksi per Kecamatan', type: 'table' as const },
   { id: 'data-produksi', label: 'Data Produksi Perikanan', type: 'table' as const },
-  { id: 'chart-wadah', label: 'Grafik Produksi per Wadah Budidaya', type: 'chart' as const },
   { id: 'chart-tren', label: 'Grafik Tren Produksi', type: 'chart' as const },
-  { id: 'chart-kecamatan', label: 'Grafik Produksi per Kecamatan', type: 'chart' as const },
+  { id: 'chart-produksi', label: 'Grafik Produksi', type: 'chart' as const },
 ] as const;
 
 type SectionId = typeof SECTION_OPTIONS[number]['id'];
@@ -99,8 +98,7 @@ export function PdfExportDialog({ open, onOpenChange }: PdfExportDialogProps) {
       const chartImages: Record<string, string> = {};
       const chartIdMap: Record<string, string> = {
         'chart-tren': 'pdf-chart-tren-produksi',
-        'chart-wadah': 'pdf-chart-wadah-budidaya',
-        'chart-kecamatan': 'pdf-chart-kecamatan',
+        'chart-produksi': 'pdf-chart-produksi',
       };
 
       for (const sectionId of selectedSections) {
