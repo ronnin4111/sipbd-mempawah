@@ -11,13 +11,13 @@ import { useFishFarmStats } from '@/hooks/use-fish-farms';
 import { BarChart3, TrendingUp, PieChart as PieChartIcon } from 'lucide-react';
 
 const CHART_COLORS = [
-  '#06B6D4', '#14B8A6', '#38BDF8', '#22D3EE', '#7DD3FC',
-  '#0EA5E9', '#0D9488', '#5EEAD4', '#67E8F9', '#2DD4BF',
-  '#A5F3FC', '#99F6E4',
+  '#EF4444', '#F59E0B', '#22C55E', '#3B82F6', '#A855F7',
+  '#EC4899', '#F97316', '#14B8A6', '#6366F1', '#84CC16',
+  '#E11D48', '#0891B2',
 ];
 
-const PEMBESARAN_COLOR = '#06B6D4';
-const PEMBENIHAN_COLOR = '#14B8A6';
+const PEMBESARAN_COLOR = '#3B82F6';
+const PEMBENIHAN_COLOR = '#22C55E';
 
 const formatNumber = (num: number) => new Intl.NumberFormat('id-ID').format(num);
 
@@ -698,8 +698,8 @@ export function PdfDashboardCharts() {
         'Pembenihan (Ekor)': val.pembenihan,
       }));
     trendLines = [
-      { key: 'Pembesaran (Kg)', color: '#06B6D4', name: 'Pembesaran (Kg)' },
-      { key: 'Pembenihan (Ekor)', color: '#14B8A6', name: 'Pembenihan (Ekor)' },
+      { key: 'Pembesaran (Kg)', color: '#3B82F6', name: 'Pembesaran (Kg)' },
+      { key: 'Pembenihan (Ekor)', color: '#22C55E', name: 'Pembenihan (Ekor)' },
     ];
   } else {
     let trendDataSource: Record<string, Record<string, { pembesaran: number; pembenihan: number }>>;
@@ -827,8 +827,8 @@ export function PdfDashboardCharts() {
               <YAxis tick={{ ...pdfTextStyle, fontSize: 10 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
               <Tooltip contentStyle={{ background: '#fff', border: '1px solid #ccc', borderRadius: 4, fontSize: 12 }} />
               <Legend wrapperStyle={{ fontSize: 11, color: '#333' }} />
-              <Line type="monotone" dataKey="Pembesaran (Kg)" stroke="#06B6D4" strokeWidth={2} dot={{ r: 3 }} />
-              <Line type="monotone" dataKey="Pembenihan (Ekor)" stroke="#14B8A6" strokeWidth={2} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="Pembesaran (Kg)" stroke="#3B82F6" strokeWidth={2} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="Pembenihan (Ekor)" stroke="#22C55E" strokeWidth={2} dot={{ r: 3 }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -845,8 +845,8 @@ export function PdfDashboardCharts() {
             <YAxis tick={{ ...pdfTextStyle, fontSize: 10 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
             <Tooltip contentStyle={{ background: '#fff', border: '1px solid #ccc', borderRadius: 4, fontSize: 12 }} />
             <Legend wrapperStyle={{ fontSize: 11, color: '#333' }} />
-            <Bar dataKey="Pembesaran (Kg)" fill="#06B6D4" radius={[4, 4, 0, 0]} label={renderBarLabelPdf} />
-            <Bar dataKey="Pembenihan (Ekor)" fill="#14B8A6" radius={[4, 4, 0, 0]} label={renderBarLabelPdf} />
+            <Bar dataKey="Pembesaran (Kg)" fill="#3B82F6" radius={[4, 4, 0, 0]} label={renderBarLabelPdf} />
+            <Bar dataKey="Pembenihan (Ekor)" fill="#22C55E" radius={[4, 4, 0, 0]} label={renderBarLabelPdf} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -936,8 +936,8 @@ export function PdfDashboardCharts() {
               <YAxis tick={{ ...pdfTextStyle, fontSize: 10 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
               <Tooltip contentStyle={{ background: '#fff', border: '1px solid #ccc', borderRadius: 4, fontSize: 12 }} />
               <Legend wrapperStyle={{ fontSize: 11, color: '#333' }} />
-              <Bar dataKey="Pembesaran (Kg)" fill="#06B6D4" radius={[4, 4, 0, 0]} label={renderBarLabelPdf} />
-              <Bar dataKey="Pembenihan (Ekor)" fill="#14B8A6" radius={[4, 4, 0, 0]} label={renderBarLabelPdf} />
+              <Bar dataKey="Pembesaran (Kg)" fill="#3B82F6" radius={[4, 4, 0, 0]} label={renderBarLabelPdf} />
+              <Bar dataKey="Pembenihan (Ekor)" fill="#22C55E" radius={[4, 4, 0, 0]} label={renderBarLabelPdf} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -953,8 +953,8 @@ export function PdfDashboardCharts() {
               <YAxis tick={{ ...pdfTextStyle, fontSize: 10 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
               <Tooltip contentStyle={{ background: '#fff', border: '1px solid #ccc', borderRadius: 4, fontSize: 12 }} />
               <Legend wrapperStyle={{ fontSize: 11, color: '#333' }} />
-              <Bar dataKey="Pembesaran (Kg)" fill="#06B6D4" radius={[4, 4, 0, 0]} label={renderBarLabelPdf} />
-              <Bar dataKey="Pembenihan (Ekor)" fill="#14B8A6" radius={[4, 4, 0, 0]} label={renderBarLabelPdf} />
+              <Bar dataKey="Pembesaran (Kg)" fill="#3B82F6" radius={[4, 4, 0, 0]} label={renderBarLabelPdf} />
+              <Bar dataKey="Pembenihan (Ekor)" fill="#22C55E" radius={[4, 4, 0, 0]} label={renderBarLabelPdf} />
             </BarChart>
           </ResponsiveContainer>
         </div>

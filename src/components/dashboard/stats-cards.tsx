@@ -110,8 +110,8 @@ export function StatsCards() {
       label: 'Produksi Pembesaran',
       value: stats.pembesaranProduction,
       unit: 'Kg',
-      icon: <Fish className="h-5 w-5" style={{ color: '#06B6D4' }} />,
-      color: '#06B6D4',
+      icon: <Fish className="h-5 w-5" style={{ color: '#3B82F6' }} />,
+      color: '#3B82F6',
       index: 0,
       breakdown: Object.entries(stats.productionByFishType)
         .filter(([, v]) => v.pembesaran > 0)
@@ -123,8 +123,8 @@ export function StatsCards() {
       label: 'Produksi Pembenihan',
       value: stats.pembenihanProduction,
       unit: 'Ekor',
-      icon: <Fish className="h-5 w-5" style={{ color: '#14B8A6' }} />,
-      color: '#14B8A6',
+      icon: <Fish className="h-5 w-5" style={{ color: '#22C55E' }} />,
+      color: '#22C55E',
       index: 1,
       breakdown: Object.entries(stats.productionByFishType)
         .filter(([, v]) => v.pembenihan > 0)
