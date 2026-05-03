@@ -217,7 +217,7 @@ export function HeroBanner() {
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.5, delay: 0.1 }}
-            className="inline-flex items-center gap-2 mb-4 sm:mb-5"
+            className="inline-flex items-center gap-2.5 mb-4 sm:mb-5"
             style={{
               background: isDark ? 'rgba(6,182,212,0.1)' : 'rgba(8,145,178,0.08)',
               border: `1px solid ${isDark ? 'rgba(6,182,212,0.25)' : 'rgba(8,145,178,0.2)'}`,
@@ -228,14 +228,8 @@ export function HeroBanner() {
             <img
               src="/logo-sipbk-transparent.png"
               alt="Logo SIPBK"
-              className="h-6 w-auto object-contain"
-              style={{ filter: isDark ? 'brightness(1.1)' : 'none' }}
-            />
-            <img
-              src="/logo-mempawah.png"
-              alt="Logo Kab. Mempawah"
-              className="h-6 w-auto object-contain rounded"
-              style={{ background: 'rgba(255,255,255,0.9)', padding: 1 }}
+              className="h-7 sm:h-8 w-auto object-contain"
+              style={{ filter: isDark ? 'brightness(1.1) drop-shadow(0 0 6px rgba(6,182,212,0.2))' : 'none' }}
             />
             <span
               className="text-xs font-semibold tracking-widest uppercase"
