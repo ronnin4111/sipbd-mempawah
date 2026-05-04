@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
         const batch = formattedRecords.slice(i, i + BATCH_SIZE);
         await tx.fishFarm.createMany({
           data: batch,
-          skipDuplicates: true,
+          
         });
         count += batch.length;
       }
