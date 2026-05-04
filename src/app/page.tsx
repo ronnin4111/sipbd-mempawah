@@ -58,7 +58,7 @@ function DataProduksiSection() {
       {/* Using key to remount DataTable when filters change, which resets page to 1 */}
       <DataTable
         key={filterKey}
-        page={1}
+        page={page}
         pageSize={pageSize}
         onPageChange={handlePageChange}
         onPageSizeChange={handlePageSizeChange}
