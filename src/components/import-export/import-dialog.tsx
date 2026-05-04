@@ -71,7 +71,7 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
   const [file, setFile] = useState<File | null>(null);
   const [previewData, setPreviewData] = useState<PreviewRow[]>([]);
   const [importing, setImporting] = useState(false);
-  const [importResult, setImportResult] = useState<{ success: boolean; count: number; deletedCount: number } | null>(null);
+  const [importResult, setImportResult] = useState<{ success: boolean; count: number; deletedCount: number; skippedCount?: number; skippedReasons?: string[] } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [replaceAll, setReplaceAll] = useState(true);
   const [deleting, setDeleting] = useState(false);
@@ -127,7 +127,7 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
         if (!result) return;
         const wb = XLSX.read(result, { type: 'binary' });
         const ws = wb.Sheets[wb.SheetNames[0]];
-        const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws);
+        const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' });
 
         if (jsonData.length === 0) {
           toast.error('File Excel kosong');
@@ -216,11 +216,18 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
       });
       const result = await res.json();
       if (res.ok) {
-        setImportResult({ success: true, count: result.count, deletedCount: result.deletedCount || 0 });
+        setImportResult({ 
+          success: true, 
+          count: result.count, 
+          deletedCount: result.deletedCount || 0,
+          skippedCount: result.skippedCount || 0,
+          skippedReasons: result.skippedReasons || [],
+        });
+        const skippedInfo = result.skippedCount > 0 ? ` (${result.skippedCount} baris dilewati)` : '';
         if (replaceAll && result.deletedCount > 0) {
-          toast.success(`Berhasil! ${result.deletedCount} data lama dihapus, ${result.count} data baru diimpor`);
+          toast.success(`Berhasil! ${result.deletedCount} data lama dihapus, ${result.count} data baru diimpor${skippedInfo}`);
         } else {
-          toast.success(`Berhasil mengimpor ${result.count} data`);
+          toast.success(`Berhasil mengimpor ${result.count} data${skippedInfo}`);
         }
         // CRITICAL: Invalidate all caches so new data appears immediately
         refreshAllData();
@@ -482,6 +489,24 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
                 <p className="text-xs text-emerald-600/70 dark:text-emerald-400/70 ml-6">
                   {importResult.deletedCount} data lama dihapus
                 </p>
+              )}
+              {importResult.skippedCount && importResult.skippedCount > 0 && (
+                <div className="ml-6 mt-1">
+                  <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">
+                    <AlertTriangle className="h-3 w-3 inline mr-1" />
+                    {importResult.skippedCount} baris dilewati (data tidak valid)
+                  </p>
+                  {importResult.skippedReasons && importResult.skippedReasons.length > 0 && (
+                    <ul className="text-xs text-amber-600/70 dark:text-amber-400/70 mt-1 ml-4 list-disc">
+                      {importResult.skippedReasons.slice(0, 5).map((reason, i) => (
+                        <li key={i}>{reason}</li>
+                      ))}
+                      {importResult.skippedReasons.length > 5 && (
+                        <li>...dan {importResult.skippedReasons.length - 5} alasan lainnya</li>
+                      )}
+                    </ul>
+                  )}
+                </div>
               )}
               <div className="ml-6 mt-2">
                 <Button

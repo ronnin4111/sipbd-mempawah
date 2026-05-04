@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { AppShell } from '@/components/layout/app-shell';
 import { DashboardCharts, PdfDashboardCharts } from '@/components/dashboard/charts';
@@ -37,11 +37,18 @@ function DataProduksiSection() {
   const businessType = useFilterStore((s) => s.businessType);
   const search = useFilterStore((s) => s.search);
 
-  // Compute a filter key to detect changes - used as key on DataTable to reset pagination
+  // Compute a filter key to detect changes
   const filterKey = useMemo(() =>
     `${years.join(',')}|${kecamatan.join(',')}|${desa.join(',')}|${fishType.join(',')}|${containerType.join(',')}|${businessType.join(',')}|${search}`,
     [years, kecamatan, desa, fishType, containerType, businessType, search]
   );
+
+  // Reset page to 1 when filters change
+  const prevFilterKey = useRef(filterKey);
+  if (prevFilterKey.current !== filterKey) {
+    prevFilterKey.current = filterKey;
+    setPage(1);
+  }
 
   const handlePageChange = (newPage: number) => {
     setPage(newPage);
@@ -55,9 +62,7 @@ function DataProduksiSection() {
   return (
     <div className="space-y-4">
       <FilterBar />
-      {/* Using key to remount DataTable when filters change, which resets page to 1 */}
       <DataTable
-        key={filterKey}
         page={page}
         pageSize={pageSize}
         onPageChange={handlePageChange}

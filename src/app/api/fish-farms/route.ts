@@ -84,7 +84,7 @@ export async function GET(request: NextRequest) {
 
     // Pagination
     const page = Math.max(1, parseInt(pageParam || '1', 10));
-    const pageSize = Math.min(100, Math.max(1, parseInt(pageSizeParam || '20', 10)));
+    const pageSize = Math.min(5000, Math.max(1, parseInt(pageSizeParam || '20', 10)));
     const skip = (page - 1) * pageSize;
 
     const [data, total] = await Promise.all([

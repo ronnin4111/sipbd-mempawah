@@ -49,16 +49,53 @@ export async function POST(request: NextRequest) {
 
     let count = 0;
     let deletedCount = 0;
+    const skippedReasons: string[] = [];
 
-    // Filter valid records first
-    const validRecords = data.filter((record) =>
-      record.year && record.kecamatan && record.desa &&
-      record.fishType && record.containerType && record.businessType
-    );
+    // Validate each record and collect detailed skip reasons
+    const validRecords: ImportFishFarm[] = [];
+    const skippedIndexes: number[] = [];
+
+    data.forEach((record, index) => {
+      const missing: string[] = [];
+
+      // Check year - must be a valid number > 0
+      const year = Number(record.year);
+      if (!year || year <= 0 || isNaN(year)) {
+        missing.push('Tahun');
+      }
+
+      // Check string fields - must be non-empty after trimming
+      if (!String(record.kecamatan || '').trim()) {
+        missing.push('Kecamatan');
+      }
+      if (!String(record.desa || '').trim()) {
+        missing.push('Desa');
+      }
+      if (!String(record.fishType || '').trim()) {
+        missing.push('Jenis Ikan');
+      }
+      if (!String(record.containerType || '').trim()) {
+        missing.push('Jenis Wadah');
+      }
+      if (!String(record.businessType || '').trim()) {
+        missing.push('Jenis Usaha');
+      }
+
+      if (missing.length > 0) {
+        skippedIndexes.push(index);
+        // Only store unique reason patterns (avoid flooding with 300+ identical reasons)
+        const reason = `Baris ${index + 2}: ${missing.join(', ')} kosong`;
+        if (skippedReasons.length < 20) {
+          skippedReasons.push(reason);
+        }
+      } else {
+        validRecords.push(record);
+      }
+    });
 
     if (validRecords.length === 0) {
       return NextResponse.json(
-        { error: 'Tidak ada data valid untuk diimpor' },
+        { error: 'Tidak ada data valid untuk diimpor', skippedCount: data.length, skippedReasons },
         { status: 400 }
       );
     }
@@ -66,13 +103,13 @@ export async function POST(request: NextRequest) {
     // Format records for bulk insert
     const formattedRecords = validRecords.map((record) => ({
       year: Number(record.year),
-      kecamatan: String(record.kecamatan),
-      desa: String(record.desa),
-      fishType: String(record.fishType),
-      containerType: String(record.containerType),
-      businessType: String(record.businessType),
-      farmerName: String(record.farmerName || ''),
-      groupName: String(record.groupName || ''),
+      kecamatan: String(record.kecamatan).trim(),
+      desa: String(record.desa).trim(),
+      fishType: String(record.fishType).trim(),
+      containerType: String(record.containerType).trim(),
+      businessType: String(record.businessType).trim(),
+      farmerName: String(record.farmerName || '').trim(),
+      groupName: String(record.groupName || '').trim(),
       productionQty: Number(record.productionQty) || 0,
       rtpCount: Number(record.rtpCount) || 0,
       farmerCount: Number(record.farmerCount) || 0,
@@ -92,16 +129,23 @@ export async function POST(request: NextRequest) {
         const deleteResult = await tx.fishFarm.deleteMany({});
         deletedCount = deleteResult.count;
       } else {
-        // Delete existing records with same composite keys
+        // Delete existing records with same composite keys - batch by unique composite keys
+        const compositeKeys = new Map<string, ImportFishFarm>();
         for (const record of validRecords) {
+          const key = `${record.year}|${record.kecamatan}|${record.desa}|${record.fishType}|${record.containerType}|${record.businessType}`;
+          if (!compositeKeys.has(key)) {
+            compositeKeys.set(key, record);
+          }
+        }
+        for (const record of compositeKeys.values()) {
           await tx.fishFarm.deleteMany({
             where: {
               year: Number(record.year),
-              kecamatan: record.kecamatan,
-              desa: record.desa,
-              fishType: record.fishType,
-              containerType: record.containerType,
-              businessType: record.businessType,
+              kecamatan: String(record.kecamatan).trim(),
+              desa: String(record.desa).trim(),
+              fishType: String(record.fishType).trim(),
+              containerType: String(record.containerType).trim(),
+              businessType: String(record.businessType).trim(),
             },
           });
         }
@@ -113,13 +157,19 @@ export async function POST(request: NextRequest) {
         const batch = formattedRecords.slice(i, i + BATCH_SIZE);
         await tx.fishFarm.createMany({
           data: batch,
-          
         });
         count += batch.length;
       }
     });
 
-    return NextResponse.json({ success: true, count, deletedCount });
+    const skippedCount = data.length - validRecords.length;
+    return NextResponse.json({
+      success: true,
+      count,
+      deletedCount,
+      skippedCount,
+      skippedReasons: skippedCount > 0 ? skippedReasons : undefined,
+    });
   } catch (error) {
     console.error('Error importing fish farms:', error);
     const message = error instanceof Error ? error.message : 'Gagal mengimpor data perikanan';

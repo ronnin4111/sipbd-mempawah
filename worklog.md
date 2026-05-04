@@ -145,3 +145,27 @@ Stage Summary:
 - Right: Produksi per [selected dimension] (with Dimensi selector + Tipe Grafik: Batang/Garis/Pai)
 - Chart title dynamically changes: "Produksi per Jenis Ikan", "Produksi per Kecamatan", "Produksi per Wadah Budidaya"
 - PDF export updated with new unified chart section
+
+---
+Task ID: 1
+Agent: Main Agent
+Task: Fix import bug (172/483 rows) and pagination bug
+
+Work Log:
+- Investigated import route: found validation filter using truthy checks silently drops rows with empty required fields
+- Investigated XLSX parsing: found `sheet_to_json` without `defval` option produces undefined for empty cells
+- Fixed import-dialog.tsx: Added `defval: ''` to XLSX `sheet_to_json` to handle empty cells properly
+- Fixed import-dialog.tsx: Added skipped count/reasons display in import result UI
+- Fixed import route: Improved validation with specific checks (year > 0, non-empty trimmed strings), added `skippedCount` and `skippedReasons` to response
+- Fixed import route: Optimized non-replaceAll mode by deduplicating composite keys before deleteMany loop
+- Fixed import route: Added string trimming for all text fields
+- Fixed pagination: Removed `key={filterKey}` from DataTable that was causing remount issues
+- Fixed pagination: Added `useRef` to detect filter changes and reset page to 1
+- Fixed GET API route: Increased pageSize cap from 100 to 5000 to support export-all functionality
+- Added `useRef` import to page.tsx
+
+Stage Summary:
+- Import now reports skipped rows with specific reasons (e.g., "Baris 5: Tahun, Kecamatan kosong")
+- XLSX parsing handles empty cells with defval option
+- Pagination properly resets when filters change
+- Export can now fetch up to 5000 records at once
