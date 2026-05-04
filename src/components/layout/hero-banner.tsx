@@ -141,24 +141,40 @@ export function HeroBanner() {
   const mounted = useMounted();
   const isDark = mounted ? theme === 'dark' : true;
 
-  const totalProduksi = stats ? stats.pembesaranProduction + stats.pembenihanProduction : 0;
-  const totalPembudidaya = stats?.totalFarmer ?? 0;
+  const pembesaranProduction = stats?.pembesaranProduction ?? 0;
+  const pembenihanProduction = stats?.pembenihanProduction ?? 0;
+  const pembudidayaPembesaran = stats?.farmerByBusinessType?.['Pembesaran'] ?? 0;
+  const pembudidayaPembenihan = stats?.farmerByBusinessType?.['Pembenihan'] ?? 0;
   const totalKecamatan = stats?.productionByKecamatan ? Object.keys(stats.productionByKecamatan).length : 0;
 
   const statCards = [
     {
-      label: 'Total Produksi',
-      value: totalProduksi,
+      label: 'Produksi Pembesaran',
+      value: pembesaranProduction,
       unit: 'Kg',
       icon: <Fish className="h-6 w-6" />,
-      color: '#06B6D4',
+      color: '#3B82F6',
     },
     {
-      label: 'Pembudidaya',
-      value: totalPembudidaya,
+      label: 'Produksi Pembenihan',
+      value: pembenihanProduction,
+      unit: 'Ekor',
+      icon: <Fish className="h-6 w-6" />,
+      color: '#22C55E',
+    },
+    {
+      label: 'Pembudidaya Pembesaran',
+      value: pembudidayaPembesaran,
       unit: 'Orang',
       icon: <Users className="h-6 w-6" />,
-      color: '#14B8A6',
+      color: '#F59E0B',
+    },
+    {
+      label: 'Pembudidaya Pembenihan',
+      value: pembudidayaPembenihan,
+      unit: 'Orang',
+      icon: <Users className="h-6 w-6" />,
+      color: '#A855F7',
     },
     {
       label: 'Kecamatan',
@@ -263,11 +279,11 @@ export function HeroBanner() {
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.3 }}
-          className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 max-w-3xl mx-auto"
+          className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 max-w-5xl mx-auto"
         >
           {isLoading ? (
             // Loading skeletons
-            [0, 1, 2].map((i) => (
+            [0, 1, 2, 3, 4].map((i) => (
               <div
                 key={i}
                 className="flex items-center gap-4 p-5 rounded-2xl animate-pulse"
@@ -291,7 +307,7 @@ export function HeroBanner() {
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4, delay: 0.4 + i * 0.1 }}
-                className="flex items-center gap-4 p-5 rounded-2xl group transition-all duration-300 cursor-default"
+                className="flex flex-col sm:flex-row items-center sm:items-center gap-3 sm:gap-4 p-4 sm:p-5 rounded-2xl group transition-all duration-300 cursor-default"
                 style={{
                   background: isDark ? 'rgba(13,27,46,0.6)' : 'rgba(255,255,255,0.7)',
                   border: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}`,
@@ -307,7 +323,7 @@ export function HeroBanner() {
                 }}
               >
                 <div
-                  className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform duration-300 group-hover:scale-110"
+                  className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform duration-300 group-hover:scale-110"
                   style={{
                     background: `${card.color}15`,
                     border: `1px solid ${card.color}30`,
@@ -316,17 +332,17 @@ export function HeroBanner() {
                 >
                   {card.icon}
                 </div>
-                <div>
-                  <div className="flex items-baseline gap-1.5">
+                <div className="text-center sm:text-left">
+                  <div className="flex items-baseline justify-center sm:justify-start gap-1.5">
                     <span
-                      className="text-xl sm:text-2xl font-bold"
+                      className="text-lg sm:text-2xl font-bold"
                       style={{ color: 'var(--foreground)' }}
                     >
                       <AnimatedNumber value={card.value} />
                     </span>
                     {card.unit && (
                       <span
-                        className="text-xs font-medium"
+                        className="text-[10px] sm:text-xs font-medium"
                         style={{ color: 'var(--muted-foreground)' }}
                       >
                         {card.unit}
@@ -334,7 +350,7 @@ export function HeroBanner() {
                     )}
                   </div>
                   <span
-                    className="text-xs"
+                    className="text-[10px] sm:text-xs"
                     style={{ color: 'var(--muted-foreground)' }}
                   >
                     {card.label}

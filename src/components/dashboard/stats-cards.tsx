@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Fish, Users, UserCheck, Building2 } from 'lucide-react';
+import { Fish, Users, UserCheck } from 'lucide-react';
 import { useFishFarmStats } from '@/hooks/use-fish-farms';
 import { useEffect, useState } from 'react';
 
@@ -107,7 +107,7 @@ export function StatsCards() {
 
   const items: StatItemProps[] = [
     {
-      label: 'Produksi Pembesaran',
+      label: 'Total Produksi Pembesaran',
       value: stats.pembesaranProduction,
       unit: 'Kg',
       icon: <Fish className="h-5 w-5" style={{ color: '#3B82F6' }} />,
@@ -120,7 +120,7 @@ export function StatsCards() {
         .slice(0, 3),
     },
     {
-      label: 'Produksi Pembenihan',
+      label: 'Total Produksi Pembenihan',
       value: stats.pembenihanProduction,
       unit: 'Ekor',
       icon: <Fish className="h-5 w-5" style={{ color: '#22C55E' }} />,
@@ -133,28 +133,28 @@ export function StatsCards() {
         .slice(0, 3),
     },
     {
-      label: 'Total RTP & Pembudidaya',
-      value: stats.totalRtp,
-      unit: 'RTP',
-      icon: <Building2 className="h-5 w-5" style={{ color: '#0EA5E9' }} />,
-      color: '#0EA5E9',
+      label: 'Pembudidaya Pembesaran',
+      value: stats.farmerByBusinessType['Pembesaran'] || 0,
+      unit: 'Orang',
+      icon: <Users className="h-5 w-5" style={{ color: '#F59E0B' }} />,
+      color: '#F59E0B',
       index: 2,
       breakdown: [
-        ...Object.entries(stats.rtpByBusinessType).map(([k, v]) => ({ label: `RTP ${k}`, value: v })),
-        ...Object.entries(stats.farmerByBusinessType).map(([k, v]) => ({ label: `${k}`, value: v })),
+        { label: 'RTP', value: stats.rtpByBusinessType['Pembesaran'] || 0, unit: 'RTP' },
+        { label: 'Kelompok', value: stats.groupByBusinessType['Pembesaran'] || 0, unit: 'Kelompok' },
       ],
     },
     {
-      label: 'Total Kelompok',
-      value: stats.totalGroup,
-      unit: 'Kelompok',
-      icon: <UserCheck className="h-5 w-5" style={{ color: '#38BDF8' }} />,
-      color: '#38BDF8',
+      label: 'Pembudidaya Pembenihan',
+      value: stats.farmerByBusinessType['Pembenihan'] || 0,
+      unit: 'Orang',
+      icon: <UserCheck className="h-5 w-5" style={{ color: '#A855F7' }} />,
+      color: '#A855F7',
       index: 3,
-      breakdown: Object.entries(stats.groupByBusinessType).map(([k, v]) => ({
-        label: k,
-        value: v,
-      })),
+      breakdown: [
+        { label: 'RTP', value: stats.rtpByBusinessType['Pembenihan'] || 0, unit: 'RTP' },
+        { label: 'Kelompok', value: stats.groupByBusinessType['Pembenihan'] || 0, unit: 'Kelompok' },
+      ],
     },
   ];
 
