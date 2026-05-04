@@ -49,6 +49,9 @@ export async function PUT(
     if (data.productionValue !== undefined) updateData.productionValue = Number(data.productionValue) || 0;
     if (data.latitude !== undefined) updateData.latitude = Number(data.latitude) || 0;
     if (data.longitude !== undefined) updateData.longitude = Number(data.longitude) || 0;
+    if (data.kusuka !== undefined) updateData.kusuka = typeof data.kusuka === 'boolean' ? data.kusuka : String(data.kusuka).toLowerCase() === 'ya';
+    if (data.cpib !== undefined) updateData.cpib = typeof data.cpib === 'boolean' ? data.cpib : String(data.cpib).toLowerCase() === 'ya';
+    if (data.cbib !== undefined) updateData.cbib = typeof data.cbib === 'boolean' ? data.cbib : String(data.cbib).toLowerCase() === 'ya';
 
     const record = await db.fishFarm.update({
       where: { id },

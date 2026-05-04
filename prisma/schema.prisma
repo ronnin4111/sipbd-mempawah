@@ -25,6 +25,9 @@ model FishFarm {
   productionValue Float
   latitude        Float
   longitude       Float
+  kusuka          Boolean  @default(false)
+  cpib            Boolean  @default(false)
+  cbib            Boolean  @default(false)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }

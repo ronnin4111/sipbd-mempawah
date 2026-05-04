@@ -49,6 +49,9 @@ interface PreviewRow {
   productionValue: number;
   latitude: number;
   longitude: number;
+  kusuka: boolean;
+  cpib: boolean;
+  cbib: boolean;
 }
 
 const REQUIRED_HEADERS = [
@@ -57,6 +60,8 @@ const REQUIRED_HEADERS = [
   'productionQty', 'rtpCount', 'farmerCount', 'groupCount', 'targetQty',
   'productionValue', 'latitude', 'longitude',
 ];
+
+const OPTIONAL_HEADERS = ['kusuka', 'cpib', 'cbib'];
 
 export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
   const queryClient = useQueryClient();
@@ -153,6 +158,9 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
           productionValue: Number(row.productionValue) || 0,
           latitude: Number(row.latitude) || 0,
           longitude: Number(row.longitude) || 0,
+          kusuka: typeof row.kusuka === 'boolean' ? row.kusuka : String(row.kusuka || '').toLowerCase() === 'ya',
+          cpib: typeof row.cpib === 'boolean' ? row.cpib : String(row.cpib || '').toLowerCase() === 'ya',
+          cbib: typeof row.cbib === 'boolean' ? row.cbib : String(row.cbib || '').toLowerCase() === 'ya',
         }));
 
         setPreviewData(parsed);

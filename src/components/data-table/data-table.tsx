@@ -93,6 +93,9 @@ const COLUMN_LABELS: Record<string, string> = {
   groupCount: 'Kelompok',
   targetQty: 'Target',
   productionValue: 'Nilai Produksi',
+  kusuka: 'KUSUKA',
+  cpib: 'CPIB',
+  cbib: 'CBIB',
   actions: 'Aksi',
 };
 
@@ -191,6 +194,9 @@ export function DataTable({ page, pageSize, onPageChange, onPageSizeChange }: Da
       productionValue: row.productionValue,
       latitude: row.latitude,
       longitude: row.longitude,
+      kusuka: row.kusuka ?? false,
+      cpib: row.cpib ?? false,
+      cbib: row.cbib ?? false,
     });
     setEditDialogOpen(true);
   }, [isAdminUnlocked]);
@@ -221,6 +227,9 @@ export function DataTable({ page, pageSize, onPageChange, onPageSizeChange }: Da
       productionValue: 0,
       latitude: 0,
       longitude: 0,
+      kusuka: false,
+      cpib: false,
+      cbib: false,
     });
     setEditDialogOpen(true);
   }, [isAdminUnlocked]);
@@ -424,6 +433,45 @@ export function DataTable({ page, pageSize, onPageChange, onPageSizeChange }: Da
         header: 'Nilai Produksi (Rp)',
         size: 140,
         cell: ({ row }) => formatCurrency(row.getValue('productionValue') as number),
+      },
+      {
+        accessorKey: 'kusuka',
+        header: 'KUSUKA',
+        size: 70,
+        cell: ({ row }) => {
+          const val = row.getValue('kusuka') as boolean;
+          return val ? (
+            <Badge className="text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 whitespace-nowrap">Ya</Badge>
+          ) : (
+            <span className="text-xs text-muted-foreground">-</span>
+          );
+        },
+      },
+      {
+        accessorKey: 'cpib',
+        header: 'CPIB',
+        size: 70,
+        cell: ({ row }) => {
+          const val = row.getValue('cpib') as boolean;
+          return val ? (
+            <Badge className="text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border-blue-200 dark:border-blue-800 whitespace-nowrap">Ya</Badge>
+          ) : (
+            <span className="text-xs text-muted-foreground">-</span>
+          );
+        },
+      },
+      {
+        accessorKey: 'cbib',
+        header: 'CBIB',
+        size: 70,
+        cell: ({ row }) => {
+          const val = row.getValue('cbib') as boolean;
+          return val ? (
+            <Badge className="text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-amber-200 dark:border-amber-800 whitespace-nowrap">Ya</Badge>
+          ) : (
+            <span className="text-xs text-muted-foreground">-</span>
+          );
+        },
       },
       // Actions column - only visible when admin is unlocked
       ...(isAdminUnlocked ? [{
@@ -973,6 +1021,40 @@ export function DataTable({ page, pageSize, onPageChange, onPageSizeChange }: Da
                   onChange={(e) => setFormData({ ...formData, longitude: Number(e.target.value) })}
                   className="h-8 text-xs"
                 />
+              </div>
+            </div>
+
+            {/* Row 9: KUSUKA, CPIB, CBIB */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium flex items-center gap-2">
+                  <Checkbox
+                    checked={!!formData.kusuka}
+                    onCheckedChange={(checked) => setFormData({ ...formData, kusuka: !!checked })}
+                    className="h-4 w-4"
+                  />
+                  KUSUKA
+                </label>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium flex items-center gap-2">
+                  <Checkbox
+                    checked={!!formData.cpib}
+                    onCheckedChange={(checked) => setFormData({ ...formData, cpib: !!checked })}
+                    className="h-4 w-4"
+                  />
+                  CPIB
+                </label>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium flex items-center gap-2">
+                  <Checkbox
+                    checked={!!formData.cbib}
+                    onCheckedChange={(checked) => setFormData({ ...formData, cbib: !!checked })}
+                    className="h-4 w-4"
+                  />
+                  CBIB
+                </label>
               </div>
             </div>
 

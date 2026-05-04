@@ -83,6 +83,9 @@ export async function GET(request: NextRequest) {
     const totalRtp = records.reduce((sum, r) => sum + r.rtpCount, 0);
     const totalFarmer = records.reduce((sum, r) => sum + r.farmerCount, 0);
 
+    // === KUSUKA count ===
+    const totalKusuka = records.filter(r => r.kusuka).length;
+
     // === Total Group: count UNIQUE group names (case-insensitive) ===
     const groupNamesGlobal = new Set<string>();
     const groupNamesByBusinessType: Record<string, Set<string>> = {};
@@ -464,6 +467,7 @@ export async function GET(request: NextRequest) {
         )])
       ),
       commodityPrices,
+      totalKusuka,
     });
   } catch (error) {
     console.error('Error fetching fish farm stats:', error);

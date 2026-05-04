@@ -43,6 +43,9 @@ export interface FishFarm {
   productionValue: number;
   latitude: number;
   longitude: number;
+  kusuka: boolean;
+  cpib: boolean;
+  cbib: boolean;
 }
 
 export interface FishFarmResponse {
@@ -89,6 +92,7 @@ export interface StatsResponse {
   trendByContainer: Record<string, Record<string, { pembesaran: number; pembenihan: number }>>;
   productionByKecamatanByFishType: Record<string, Record<string, { pembesaran: number; pembenihan: number }>>;
   productionByKecamatanByContainer: Record<string, Record<string, { pembesaran: number; pembenihan: number }>>;
+  totalKusuka: number;
 }
 
 export function useFishFarms(page: number = 1, pageSize: number = 20) {

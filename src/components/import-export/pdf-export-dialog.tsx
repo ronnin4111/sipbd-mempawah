@@ -471,11 +471,12 @@ export function PdfExportDialog({ open, onOpenChange }: PdfExportDialogProps) {
                 i + 1, r.year, r.kecamatan, r.desa, r.fishType, r.containerType,
                 r.businessType, fmtNum(r.productionQty), fmtCur(r.productionValue),
                 fmtNum(r.rtpCount), fmtNum(r.farmerCount),
+                r.kusuka ? 'Ya' : '-', r.cpib ? 'Ya' : '-', r.cbib ? 'Ya' : '-',
               ]);
 
               autoTable(doc, {
                 startY: currentY,
-                head: [['No', 'Tahun', 'Kecamatan', 'Desa', 'Jenis Ikan', 'Wadah', 'Usaha', 'Produksi', 'Nilai (Rp)', 'RTP', 'Pembudidaya']],
+                head: [['No', 'Tahun', 'Kecamatan', 'Desa', 'Jenis Ikan', 'Wadah', 'Usaha', 'Produksi', 'Nilai (Rp)', 'RTP', 'Pembudidaya', 'KUSUKA', 'CPIB', 'CBIB']],
                 body: rows,
                 theme: 'grid',
                 headStyles: { fillColor: [22, 101, 52], textColor: 255, fontStyle: 'bold', fontSize: 6 },

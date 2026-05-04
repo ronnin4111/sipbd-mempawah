@@ -92,6 +92,7 @@ export async function GET(request: NextRequest) {
     const totalRtp = records.reduce((s, r) => s + r.rtpCount, 0);
     const totalFarmer = records.reduce((s, r) => s + r.farmerCount, 0);
     const totalValue = records.reduce((s, r) => s + r.productionValue, 0);
+    const totalKusuka = records.filter(r => r.kusuka).length;
 
     // Unique group names (case-insensitive)
     const groupNamesGlobal = new Set<string>();
@@ -191,6 +192,7 @@ export async function GET(request: NextRequest) {
         ['Total RTP', formatNumber(totalRtp)],
         ['Total Pembudidaya', formatNumber(totalFarmer)],
         ['Total Kelompok', formatNumber(totalGroup)],
+        ['Jumlah KUSUKA', formatNumber(totalKusuka)],
       ],
       theme: 'grid',
       headStyles: { fillColor: [22, 101, 52], textColor: 255, fontStyle: 'bold', fontSize: 8 },

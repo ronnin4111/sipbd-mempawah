@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Fish, Users, MapPin } from 'lucide-react';
+import { Fish, Users, MapPin, Award } from 'lucide-react';
 import { useFishFarmStats } from '@/hooks/use-fish-farms';
 import { useMounted } from '@/hooks/use-mounted';
 import { useTheme } from 'next-themes';
@@ -146,41 +146,49 @@ export function HeroBanner() {
   const pembudidayaPembesaran = stats?.farmerByBusinessType?.['Pembesaran'] ?? 0;
   const pembudidayaPembenihan = stats?.farmerByBusinessType?.['Pembenihan'] ?? 0;
   const totalKecamatan = stats?.productionByKecamatan ? Object.keys(stats.productionByKecamatan).length : 0;
+  const totalKusuka = stats?.totalKusuka ?? 0;
 
   const statCards = [
     {
       label: 'Produksi Pembesaran',
       value: pembesaranProduction,
       unit: 'Kg',
-      icon: <Fish className="h-6 w-6" />,
+      icon: <Fish className="h-5 w-5 sm:h-6 sm:w-6" />,
       color: '#3B82F6',
     },
     {
       label: 'Produksi Pembenihan',
       value: pembenihanProduction,
       unit: 'Ekor',
-      icon: <Fish className="h-6 w-6" />,
+      icon: <Fish className="h-5 w-5 sm:h-6 sm:w-6" />,
       color: '#22C55E',
     },
     {
       label: 'Pembudidaya Pembesaran',
       value: pembudidayaPembesaran,
       unit: 'Orang',
-      icon: <Users className="h-6 w-6" />,
+      icon: <Users className="h-5 w-5 sm:h-6 sm:w-6" />,
       color: '#F59E0B',
     },
     {
       label: 'Pembudidaya Pembenihan',
       value: pembudidayaPembenihan,
       unit: 'Orang',
-      icon: <Users className="h-6 w-6" />,
+      icon: <Users className="h-5 w-5 sm:h-6 sm:w-6" />,
       color: '#A855F7',
+    },
+    {
+      label: 'Jumlah KUSUKA',
+      value: totalKusuka,
+      unit: 'Unit',
+      icon: <Award className="h-5 w-5 sm:h-6 sm:w-6" />,
+      color: '#10B981',
     },
     {
       label: 'Kecamatan',
       value: totalKecamatan,
       unit: 'Kecamatan',
-      icon: <MapPin className="h-6 w-6" />,
+      icon: <MapPin className="h-5 w-5 sm:h-6 sm:w-6" />,
       color: '#0EA5E9',
     },
   ];
@@ -279,11 +287,11 @@ export function HeroBanner() {
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.3 }}
-          className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 max-w-5xl mx-auto"
+          className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 max-w-6xl mx-auto"
         >
           {isLoading ? (
             // Loading skeletons
-            [0, 1, 2, 3, 4].map((i) => (
+            [0, 1, 2, 3, 4, 5].map((i) => (
               <div
                 key={i}
                 className="flex flex-col items-center p-3 sm:p-4 rounded-2xl animate-pulse"
@@ -330,17 +338,17 @@ export function HeroBanner() {
                 >
                   {card.icon}
                 </div>
-                <div className="w-full min-w-0">
+                <div className="w-full min-w-0 overflow-hidden">
                   <div className="flex items-baseline justify-center gap-1 flex-wrap">
                     <span
-                      className="text-sm sm:text-base lg:text-lg font-bold tabular-nums leading-tight"
+                      className="text-xs sm:text-sm lg:text-base font-bold tabular-nums leading-tight"
                       style={{ color: 'var(--foreground)' }}
                     >
                       <AnimatedNumber value={card.value} />
                     </span>
                     {card.unit && (
                       <span
-                        className="text-[10px] sm:text-xs font-semibold"
+                        className="text-[9px] sm:text-[10px] lg:text-xs font-semibold"
                         style={{ color: card.color }}
                       >
                         {card.unit}
@@ -348,8 +356,9 @@ export function HeroBanner() {
                     )}
                   </div>
                   <span
-                    className="text-[9px] sm:text-[11px] leading-tight block mt-0.5"
+                    className="text-[8px] sm:text-[10px] lg:text-[11px] leading-tight block mt-0.5 truncate"
                     style={{ color: 'var(--muted-foreground)' }}
+                    title={card.label}
                   >
                     {card.label}
                   </span>

@@ -45,6 +45,9 @@ export async function POST(request: NextRequest) {
         productionValue: Number(data.productionValue) || 0,
         latitude: Number(data.latitude) || 0,
         longitude: Number(data.longitude) || 0,
+        kusuka: typeof data.kusuka === 'boolean' ? data.kusuka : String(data.kusuka || '').toLowerCase() === 'ya',
+        cpib: typeof data.cpib === 'boolean' ? data.cpib : String(data.cpib || '').toLowerCase() === 'ya',
+        cbib: typeof data.cbib === 'boolean' ? data.cbib : String(data.cbib || '').toLowerCase() === 'ya',
       },
     });
 
