@@ -35,7 +35,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </p>
             </div>
             <p className="text-xs" style={{ color: '#06B6D4' }}>
-              Sistem Informasi Perikanan Budidaya (SIPBUDIK)
+              Sistem Informasi Perikanan Budidaya (SIPBD)
             </p>
           </div>
         </div>

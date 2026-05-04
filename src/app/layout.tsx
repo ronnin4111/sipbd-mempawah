@@ -15,7 +15,7 @@ const dmSans = DM_Sans({
 // with the --font-syne variable
 
 export const metadata: Metadata = {
-  title: "SIPBUDIK - Sistem Informasi Perikanan Budidaya",
+  title: "SIPBD - Sistem Informasi Perikanan Budidaya",
   description: "Sistem Informasi Perikanan Budidaya Dinas Perikanan Kabupaten Mempawah",
   icons: {
     icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐟</text></svg>",

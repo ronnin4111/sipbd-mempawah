@@ -181,7 +181,7 @@ export function PdfExportDialog({ open, onOpenChange }: PdfExportDialogProps) {
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(120, 120, 120);
         doc.text(
-          `Halaman ${pageNum} dari ${totalPages} | SIPBUDIK Kab. Mempawah`,
+          `Halaman ${pageNum} dari ${totalPages} | SIPBD Kab. Mempawah`,
           pageWidth / 2,
           pageHeight - 8,
           { align: 'center' }

@@ -286,18 +286,16 @@ export function HeroBanner() {
             [0, 1, 2, 3, 4].map((i) => (
               <div
                 key={i}
-                className="flex items-center gap-4 p-5 rounded-2xl animate-pulse"
+                className="flex flex-col items-center p-3 sm:p-4 rounded-2xl animate-pulse"
                 style={{
                   background: isDark ? 'rgba(13,27,46,0.6)' : 'rgba(255,255,255,0.7)',
                   border: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}`,
                   backdropFilter: 'blur(12px)',
                 }}
               >
-                <div className="w-12 h-12 rounded-xl bg-muted" />
-                <div className="flex-1">
-                  <div className="h-7 bg-muted rounded w-24 mb-2" />
-                  <div className="h-3 bg-muted rounded w-16" />
-                </div>
+                <div className="w-10 h-10 rounded-xl bg-muted mb-2" />
+                <div className="h-5 bg-muted rounded w-16 mb-1" />
+                <div className="h-3 bg-muted rounded w-12" />
               </div>
             ))
           ) : (
@@ -307,7 +305,7 @@ export function HeroBanner() {
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4, delay: 0.4 + i * 0.1 }}
-                className="flex flex-col sm:flex-row items-center sm:items-center gap-3 sm:gap-4 p-4 sm:p-5 rounded-2xl group transition-all duration-300 cursor-default"
+                className="flex flex-col items-center text-center p-3 sm:p-4 rounded-2xl group transition-all duration-300 cursor-default overflow-hidden"
                 style={{
                   background: isDark ? 'rgba(13,27,46,0.6)' : 'rgba(255,255,255,0.7)',
                   border: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}`,
@@ -323,7 +321,7 @@ export function HeroBanner() {
                 }}
               >
                 <div
-                  className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform duration-300 group-hover:scale-110"
+                  className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center flex-shrink-0 mb-2 transition-transform duration-300 group-hover:scale-110"
                   style={{
                     background: `${card.color}15`,
                     border: `1px solid ${card.color}30`,
@@ -332,25 +330,25 @@ export function HeroBanner() {
                 >
                   {card.icon}
                 </div>
-                <div className="text-center sm:text-left">
-                  <div className="flex items-baseline justify-center sm:justify-start gap-1.5">
+                <div className="w-full min-w-0">
+                  <div className="flex items-baseline justify-center gap-1 flex-wrap">
                     <span
-                      className="text-lg sm:text-2xl font-bold"
+                      className="text-sm sm:text-base lg:text-lg font-bold tabular-nums leading-tight"
                       style={{ color: 'var(--foreground)' }}
                     >
                       <AnimatedNumber value={card.value} />
                     </span>
                     {card.unit && (
                       <span
-                        className="text-[10px] sm:text-xs font-medium"
-                        style={{ color: 'var(--muted-foreground)' }}
+                        className="text-[10px] sm:text-xs font-semibold"
+                        style={{ color: card.color }}
                       >
                         {card.unit}
                       </span>
                     )}
                   </div>
                   <span
-                    className="text-[10px] sm:text-xs"
+                    className="text-[9px] sm:text-[11px] leading-tight block mt-0.5"
                     style={{ color: 'var(--muted-foreground)' }}
                   >
                     {card.label}

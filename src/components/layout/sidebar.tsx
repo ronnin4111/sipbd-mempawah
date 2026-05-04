@@ -79,7 +79,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
               />
               <div>
                 <div className="text-sm font-bold" style={{ fontFamily: 'Syne, sans-serif', color: 'var(--foreground)' }}>
-                  SIPBUDIK
+                  SIPBD
                 </div>
                 <div className="text-[10px]" style={{ color: '#06B6D4' }}>Perikanan Budidaya</div>
               </div>

@@ -85,7 +85,7 @@ export function Header({ onMenuClick }: HeaderProps) {
             </div>
             <div>
               <div className="font-bold text-sm leading-tight" style={{ fontFamily: 'Syne, sans-serif', color: 'var(--foreground)' }}>
-                SIPBUDIK
+                SIPBD
               </div>
               <div className="text-[10px] font-medium tracking-widest uppercase" style={{ color: '#06B6D4' }}>
                 Dinas Perikanan Kab. Mempawah
