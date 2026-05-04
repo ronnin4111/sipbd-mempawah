@@ -80,7 +80,7 @@ export default function MapInner() {
     if (!mapRef.current || mapInstanceRef.current) return;
 
     const map = L.map(mapRef.current, {
-      center: [0.08, 109.18],
+      center: [0.27, 109.08],
       zoom: 10,
       scrollWheelZoom: true,
       minZoom: 8,

@@ -102,15 +102,15 @@ export const YEARS = [2020, 2021, 2022, 2023, 2024, 2025];
 
 // Approximate coordinates for each kecamatan center in Kab. Mempawah
 export const KECAMATAN_COORDS: Record<string, { lat: number; lng: number }> = {
-  "Anjongan": { lat: 0.0833, lng: 109.2167 },
-  "Jongkat": { lat: 0.0667, lng: 109.1833 },
-  "Mempawah Hilir": { lat: 0.0500, lng: 109.1500 },
-  "Mempawah Timur": { lat: 0.0833, lng: 109.2000 },
-  "Sadaniang": { lat: 0.1167, lng: 109.2500 },
-  "Segedong": { lat: 0.1000, lng: 109.1667 },
-  "Sungai Kunyit": { lat: 0.0333, lng: 109.1167 },
-  "Sungai Pinyuh": { lat: 0.0167, lng: 109.1000 },
-  "Toho": { lat: 0.1333, lng: 109.2833 },
+  "Anjongan": { lat: 0.3561, lng: 109.1754 },
+  "Jongkat": { lat: 0.0698, lng: 109.1943 },
+  "Mempawah Hilir": { lat: 0.3674, lng: 108.9514 },
+  "Mempawah Timur": { lat: 0.3672, lng: 108.9778 },
+  "Sadaniang": { lat: 0.5277, lng: 109.1519 },
+  "Segedong": { lat: 0.1531, lng: 109.1871 },
+  "Sungai Kunyit": { lat: 0.4998, lng: 108.9112 },
+  "Sungai Pinyuh": { lat: 0.2758, lng: 109.0860 },
+  "Toho": { lat: 0.4149, lng: 109.2225 },
 };
 
 export const IMPORT_PASSWORD = "dkp2024";
