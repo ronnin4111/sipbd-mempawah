@@ -471,7 +471,7 @@ export function PdfExportDialog({ open, onOpenChange }: PdfExportDialogProps) {
                 i + 1, r.year, r.kecamatan, r.desa, r.fishType, r.containerType,
                 r.businessType, fmtNum(r.productionQty), fmtCur(r.productionValue),
                 fmtNum(r.rtpCount), fmtNum(r.farmerCount),
-                r.kusuka ? 'Ya' : '-', r.cpib ? 'Ya' : '-', r.cbib ? 'Ya' : '-',
+                r.kusuka || '-', r.cpib ? 'Ya' : '-', r.cbib ? 'Ya' : '-',
               ]);
 
               autoTable(doc, {

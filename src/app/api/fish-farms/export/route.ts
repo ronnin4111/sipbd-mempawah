@@ -84,7 +84,7 @@ export async function GET(request: NextRequest) {
       r.farmerName, r.groupName,
       r.productionQty, r.rtpCount, r.farmerCount, r.groupCount,
       r.targetQty, r.productionValue, r.latitude, r.longitude,
-      r.kusuka ? 'Ya' : 'Tidak', r.cpib ? 'Ya' : 'Tidak', r.cbib ? 'Ya' : 'Tidak',
+      r.kusuka || '', r.cpib ? 'Ya' : 'Tidak', r.cbib ? 'Ya' : 'Tidak',
     ]);
     const ws1 = XLSX.utils.aoa_to_sheet([dataProduksiHeaders, ...dataProduksiRows]);
 
@@ -105,7 +105,7 @@ export async function GET(request: NextRequest) {
       { wch: 18 }, // productionValue
       { wch: 12 }, // latitude
       { wch: 12 }, // longitude
-      { wch: 10 }, // kusuka
+      { wch: 20 }, // kusuka (16 digit)
       { wch: 10 }, // cpib
       { wch: 10 }, // cbib
     ];

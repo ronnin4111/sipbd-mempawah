@@ -92,7 +92,7 @@ export async function GET(request: NextRequest) {
     const totalRtp = records.reduce((s, r) => s + r.rtpCount, 0);
     const totalFarmer = records.reduce((s, r) => s + r.farmerCount, 0);
     const totalValue = records.reduce((s, r) => s + r.productionValue, 0);
-    const totalKusuka = records.filter(r => r.kusuka).length;
+    const totalKusuka = records.filter(r => /^\d{16}$/.test(String(r.kusuka || '').trim())).length;
 
     // Unique group names (case-insensitive)
     const groupNamesGlobal = new Set<string>();

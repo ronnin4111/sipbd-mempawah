@@ -43,7 +43,7 @@ export interface FishFarm {
   productionValue: number;
   latitude: number;
   longitude: number;
-  kusuka: boolean;
+  kusuka: string;
   cpib: boolean;
   cbib: boolean;
 }

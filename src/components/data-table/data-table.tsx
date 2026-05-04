@@ -194,7 +194,7 @@ export function DataTable({ page, pageSize, onPageChange, onPageSizeChange }: Da
       productionValue: row.productionValue,
       latitude: row.latitude,
       longitude: row.longitude,
-      kusuka: row.kusuka ?? false,
+      kusuka: row.kusuka ?? '',
       cpib: row.cpib ?? false,
       cbib: row.cbib ?? false,
     });
@@ -227,7 +227,7 @@ export function DataTable({ page, pageSize, onPageChange, onPageSizeChange }: Da
       productionValue: 0,
       latitude: 0,
       longitude: 0,
-      kusuka: false,
+      kusuka: '',
       cpib: false,
       cbib: false,
     });
@@ -437,13 +437,15 @@ export function DataTable({ page, pageSize, onPageChange, onPageSizeChange }: Da
       {
         accessorKey: 'kusuka',
         header: 'KUSUKA',
-        size: 70,
+        size: 140,
         cell: ({ row }) => {
-          const val = row.getValue('kusuka') as boolean;
-          return val ? (
-            <Badge className="text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 whitespace-nowrap">Ya</Badge>
+          const val = String(row.getValue('kusuka') || '').trim();
+          if (!val) return <span className="text-xs text-muted-foreground">-</span>;
+          const isValid = /^\d{16}$/.test(val);
+          return isValid ? (
+            <span className="text-[10px] font-mono bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 px-1.5 py-0.5 rounded whitespace-nowrap">{val}</span>
           ) : (
-            <span className="text-xs text-muted-foreground">-</span>
+            <span className="text-[10px] text-muted-foreground">{val}</span>
           );
         },
       },
@@ -1027,14 +1029,18 @@ export function DataTable({ page, pageSize, onPageChange, onPageSizeChange }: Da
             {/* Row 9: KUSUKA, CPIB, CBIB */}
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1.5">
-                <label className="text-xs font-medium flex items-center gap-2">
-                  <Checkbox
-                    checked={!!formData.kusuka}
-                    onCheckedChange={(checked) => setFormData({ ...formData, kusuka: !!checked })}
-                    className="h-4 w-4"
-                  />
-                  KUSUKA
-                </label>
+                <label className="text-xs font-medium">No. KUSUKA</label>
+                <Input
+                  type="text"
+                  placeholder="16 digit angka"
+                  maxLength={16}
+                  value={formData.kusuka || ''}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, ''); // hanya angka
+                    setFormData({ ...formData, kusuka: val });
+                  }}
+                  className="h-8 text-xs font-mono"
+                />
               </div>
               <div className="space-y-1.5">
                 <label className="text-xs font-medium flex items-center gap-2">

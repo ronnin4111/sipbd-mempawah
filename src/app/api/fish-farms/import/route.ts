@@ -19,7 +19,7 @@ interface ImportFishFarm {
   productionValue: number;
   latitude: number;
   longitude: number;
-  kusuka?: boolean | string;
+  kusuka?: string;
   cpib?: boolean | string;
   cbib?: boolean | string;
 }
@@ -168,7 +168,7 @@ export async function POST(request: NextRequest) {
       productionValue: Number(record.productionValue) || 0,
       latitude: Number(record.latitude) || 0,
       longitude: Number(record.longitude) || 0,
-      kusuka: typeof record.kusuka === 'boolean' ? record.kusuka : String(record.kusuka || '').toLowerCase() === 'ya',
+      kusuka: String(record.kusuka || '').trim(),
       cpib: typeof record.cpib === 'boolean' ? record.cpib : String(record.cpib || '').toLowerCase() === 'ya',
       cbib: typeof record.cbib === 'boolean' ? record.cbib : String(record.cbib || '').toLowerCase() === 'ya',
     }));

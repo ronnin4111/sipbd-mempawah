@@ -84,7 +84,8 @@ export async function GET(request: NextRequest) {
     const totalFarmer = records.reduce((sum, r) => sum + r.farmerCount, 0);
 
     // === KUSUKA count ===
-    const totalKusuka = records.filter(r => r.kusuka).length;
+    // KUSUKA berisi nomor 16 digit (seperti NIK), jika berisi 16 digit maka terhitung 1 kartu
+    const totalKusuka = records.filter(r => /^\d{16}$/.test(String(r.kusuka || '').trim())).length;
 
     // === Total Group: count UNIQUE group names (case-insensitive) ===
     const groupNamesGlobal = new Set<string>();
