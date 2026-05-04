@@ -169,3 +169,28 @@ Stage Summary:
 - XLSX parsing handles empty cells with defval option
 - Pagination properly resets when filters change
 - Export can now fetch up to 5000 records at once
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: Fix import to handle 483 rows (was only importing 172)
+
+Work Log:
+- Analyzed user's Excel file: 483 rows total, 304 had empty fishType, 7 had empty kecamatan/desa
+- Made fishType, kecamatan, desa auto-fill with defaults instead of skipping:
+  - fishType empty → "Lainnya"
+  - kecamatan empty → "Tidak Diketahui"
+  - desa empty → "Tidak Diketahui"
+- Discovered container type naming mismatches in Excel vs constants:
+  - "Kja" → "KJA", "Kolam" → "Kolam", "Bioflock" → "Bioflok", "Jaring Tancap" → "KJA", etc.
+- Added CONTAINER_TYPE_ALIASES normalization in both import route and import dialog
+- Added "Lainnya" to FISH_TYPES and "Kolam", "Kolam Terpal", "Sawah" to CONTAINER_TYPES in constants
+- Added price entries for new container types and "Lainnya" fish type
+- Updated import dialog UI to show auto-fill info (blue text) alongside skip info (amber text)
+- Simulated import: all 483 rows now valid (0 skipped)
+
+Stage Summary:
+- Import now handles 483/483 rows (previously 172/483)
+- Container types auto-normalized (e.g., "Kja" → "KJA", "Bioflock" → "Bioflok")
+- Empty fishType auto-filled as "Lainnya", empty kecamatan/desa as "Tidak Diketahui"
+- UI shows what was auto-filled so user knows which data needs manual correction later

@@ -24,6 +24,33 @@ interface ImportFishFarm {
   cbib?: boolean | string;
 }
 
+// Default values for empty required fields
+const DEFAULT_FISH_TYPE = 'Lainnya';
+const DEFAULT_KECAMATAN = 'Tidak Diketahui';
+const DEFAULT_DESA = 'Tidak Diketahui';
+
+// Normalize container type names from Excel to match system constants
+const CONTAINER_TYPE_ALIASES: Record<string, string> = {
+  'kja': 'KJA',
+  'kjt': 'KJT',
+  'kolam': 'Kolam',
+  'kolam air tenang': 'Kolam Air Tenang',
+  'kolam terpal': 'Kolam Terpal',
+  'bak semen': 'Bak Semen',
+  'bak terpal': 'Bak Terpal',
+  'tambak': 'Tambak',
+  'bioflok': 'Bioflok',
+  'bioflock': 'Bioflok',
+  'jaring tancap': 'KJA',
+  'keramba': 'KJA',
+  'sawah': 'Sawah',
+};
+
+function normalizeContainerType(value: string): string {
+  const lower = value.toLowerCase().trim();
+  return CONTAINER_TYPE_ALIASES[lower] || value.trim();
+}
+
 export const maxDuration = 60; // 60 seconds timeout for Vercel
 
 export async function POST(request: NextRequest) {
@@ -50,10 +77,13 @@ export async function POST(request: NextRequest) {
     let count = 0;
     let deletedCount = 0;
     const skippedReasons: string[] = [];
+    const autoFilledInfo: string[] = [];
 
-    // Validate each record and collect detailed skip reasons
+    // Validate and auto-fill each record
     const validRecords: ImportFishFarm[] = [];
-    const skippedIndexes: number[] = [];
+    let fishTypeAutoFilled = 0;
+    let kecamatanAutoFilled = 0;
+    let desaAutoFilled = 0;
 
     data.forEach((record, index) => {
       const missing: string[] = [];
@@ -64,26 +94,35 @@ export async function POST(request: NextRequest) {
         missing.push('Tahun');
       }
 
-      // Check string fields - must be non-empty after trimming
-      if (!String(record.kecamatan || '').trim()) {
-        missing.push('Kecamatan');
+      // Auto-fill empty fields with defaults instead of skipping
+      const kecamatan = String(record.kecamatan || '').trim();
+      const desa = String(record.desa || '').trim();
+      const fishType = String(record.fishType || '').trim();
+      const containerType = String(record.containerType || '').trim();
+      const businessType = String(record.businessType || '').trim();
+
+      if (!kecamatan) {
+        record.kecamatan = DEFAULT_KECAMATAN;
+        kecamatanAutoFilled++;
       }
-      if (!String(record.desa || '').trim()) {
-        missing.push('Desa');
+      if (!desa) {
+        record.desa = DEFAULT_DESA;
+        desaAutoFilled++;
       }
-      if (!String(record.fishType || '').trim()) {
-        missing.push('Jenis Ikan');
+      if (!fishType) {
+        record.fishType = DEFAULT_FISH_TYPE;
+        fishTypeAutoFilled++;
       }
-      if (!String(record.containerType || '').trim()) {
+
+      // containerType and businessType are still required (no sensible default)
+      if (!containerType) {
         missing.push('Jenis Wadah');
       }
-      if (!String(record.businessType || '').trim()) {
+      if (!businessType) {
         missing.push('Jenis Usaha');
       }
 
       if (missing.length > 0) {
-        skippedIndexes.push(index);
-        // Only store unique reason patterns (avoid flooding with 300+ identical reasons)
         const reason = `Baris ${index + 2}: ${missing.join(', ')} kosong`;
         if (skippedReasons.length < 20) {
           skippedReasons.push(reason);
@@ -93,6 +132,17 @@ export async function POST(request: NextRequest) {
       }
     });
 
+    // Collect auto-fill summary
+    if (fishTypeAutoFilled > 0) {
+      autoFilledInfo.push(`${fishTypeAutoFilled} baris "Jenis Ikan" diisi otomatis: "${DEFAULT_FISH_TYPE}"`);
+    }
+    if (kecamatanAutoFilled > 0) {
+      autoFilledInfo.push(`${kecamatanAutoFilled} baris "Kecamatan" diisi otomatis: "${DEFAULT_KECAMATAN}"`);
+    }
+    if (desaAutoFilled > 0) {
+      autoFilledInfo.push(`${desaAutoFilled} baris "Desa" diisi otomatis: "${DEFAULT_DESA}"`);
+    }
+
     if (validRecords.length === 0) {
       return NextResponse.json(
         { error: 'Tidak ada data valid untuk diimpor', skippedCount: data.length, skippedReasons },
@@ -100,14 +150,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Format records for bulk insert
+    // Format records for bulk insert (apply defaults and normalizations)
     const formattedRecords = validRecords.map((record) => ({
       year: Number(record.year),
-      kecamatan: String(record.kecamatan).trim(),
-      desa: String(record.desa).trim(),
-      fishType: String(record.fishType).trim(),
-      containerType: String(record.containerType).trim(),
-      businessType: String(record.businessType).trim(),
+      kecamatan: String(record.kecamatan || '').trim() || DEFAULT_KECAMATAN,
+      desa: String(record.desa || '').trim() || DEFAULT_DESA,
+      fishType: String(record.fishType || '').trim() || DEFAULT_FISH_TYPE,
+      containerType: normalizeContainerType(String(record.containerType || '')),
+      businessType: String(record.businessType || '').trim(),
       farmerName: String(record.farmerName || '').trim(),
       groupName: String(record.groupName || '').trim(),
       productionQty: Number(record.productionQty) || 0,
@@ -141,10 +191,10 @@ export async function POST(request: NextRequest) {
           await tx.fishFarm.deleteMany({
             where: {
               year: Number(record.year),
-              kecamatan: String(record.kecamatan).trim(),
-              desa: String(record.desa).trim(),
-              fishType: String(record.fishType).trim(),
-              containerType: String(record.containerType).trim(),
+              kecamatan: String(record.kecamatan || '').trim() || DEFAULT_KECAMATAN,
+              desa: String(record.desa || '').trim() || DEFAULT_DESA,
+              fishType: String(record.fishType || '').trim() || DEFAULT_FISH_TYPE,
+              containerType: normalizeContainerType(String(record.containerType || '')),
               businessType: String(record.businessType).trim(),
             },
           });
@@ -169,6 +219,7 @@ export async function POST(request: NextRequest) {
       deletedCount,
       skippedCount,
       skippedReasons: skippedCount > 0 ? skippedReasons : undefined,
+      autoFilledInfo: autoFilledInfo.length > 0 ? autoFilledInfo : undefined,
     });
   } catch (error) {
     console.error('Error importing fish farms:', error);

@@ -92,9 +92,9 @@ export const ALL_DESA = Object.entries(KECAMATAN_DESA).flatMap(([kec, desas]) =>
   desas.map(d => ({ kecamatan: kec, desa: d.desa, status: d.status }))
 );
 
-export const FISH_TYPES = ["Mas", "Nila", "Lele", "Patin", "Jelawat", "Bawal Air Tawar", "Gurame", "Vaname"];
+export const FISH_TYPES = ["Mas", "Nila", "Lele", "Patin", "Jelawat", "Bawal Air Tawar", "Gurame", "Vaname", "Lainnya"];
 
-export const CONTAINER_TYPES = ["KJA", "Kolam Air Tenang", "Tambak", "Bioflok", "KJT", "Bak Semen", "Bak Terpal"];
+export const CONTAINER_TYPES = ["KJA", "Kolam Air Tenang", "Tambak", "Bioflok", "KJT", "Bak Semen", "Bak Terpal", "Kolam", "Kolam Terpal", "Keramba", "Sawah"];
 
 export const BUSINESS_TYPES = ["Pembesaran", "Pembenihan"];
 
@@ -118,14 +118,15 @@ export const IMPORT_PASSWORD = "dkp2024";
 // Default commodity prices per fish type x container type (Pembesaran - Rp/Kg)
 // Pembenihan prices are flat per fish type (Rp/Ekor)
 export const DEFAULT_COMMODITY_PRICES: Record<string, Record<string, number>> = {
-  "Mas": { "KJA": 40000, "Kolam Air Tenang": 38000, "Tambak": 0, "Bioflok": 38000, "KJT": 38000, "Bak Semen": 38000, "Bak Terpal": 38000 },
-  "Nila": { "KJA": 32000, "Kolam Air Tenang": 30000, "Tambak": 30000, "Bioflok": 30000, "KJT": 30000, "Bak Semen": 30000, "Bak Terpal": 30000 },
-  "Lele": { "KJA": 27000, "Kolam Air Tenang": 25000, "Tambak": 0, "Bioflok": 25000, "KJT": 25000, "Bak Semen": 25000, "Bak Terpal": 25000 },
-  "Patin": { "KJA": 42000, "Kolam Air Tenang": 40000, "Tambak": 0, "Bioflok": 40000, "KJT": 40000, "Bak Semen": 40000, "Bak Terpal": 40000 },
-  "Jelawat": { "KJA": 52000, "Kolam Air Tenang": 50000, "Tambak": 0, "Bioflok": 50000, "KJT": 50000, "Bak Semen": 50000, "Bak Terpal": 50000 },
-  "Bawal Air Tawar": { "KJA": 37000, "Kolam Air Tenang": 35000, "Tambak": 0, "Bioflok": 35000, "KJT": 35000, "Bak Semen": 35000, "Bak Terpal": 35000 },
-  "Gurame": { "KJA": 85000, "Kolam Air Tenang": 80000, "Tambak": 0, "Bioflok": 80000, "KJT": 80000, "Bak Semen": 80000, "Bak Terpal": 80000 },
-  "Vaname": { "KJA": 0, "Kolam Air Tenang": 0, "Tambak": 75000, "Bioflok": 0, "KJT": 0, "Bak Semen": 0, "Bak Terpal": 0 },
+  "Mas": { "KJA": 40000, "Kolam Air Tenang": 38000, "Kolam": 38000, "Kolam Terpal": 38000, "Tambak": 0, "Bioflok": 38000, "KJT": 38000, "Bak Semen": 38000, "Bak Terpal": 38000, "Sawah": 38000 },
+  "Nila": { "KJA": 32000, "Kolam Air Tenang": 30000, "Kolam": 30000, "Kolam Terpal": 30000, "Tambak": 30000, "Bioflok": 30000, "KJT": 30000, "Bak Semen": 30000, "Bak Terpal": 30000, "Sawah": 30000 },
+  "Lele": { "KJA": 27000, "Kolam Air Tenang": 25000, "Kolam": 25000, "Kolam Terpal": 25000, "Tambak": 0, "Bioflok": 25000, "KJT": 25000, "Bak Semen": 25000, "Bak Terpal": 25000, "Sawah": 25000 },
+  "Patin": { "KJA": 42000, "Kolam Air Tenang": 40000, "Kolam": 40000, "Kolam Terpal": 40000, "Tambak": 0, "Bioflok": 40000, "KJT": 40000, "Bak Semen": 40000, "Bak Terpal": 40000, "Sawah": 40000 },
+  "Jelawat": { "KJA": 52000, "Kolam Air Tenang": 50000, "Kolam": 50000, "Kolam Terpal": 50000, "Tambak": 0, "Bioflok": 50000, "KJT": 50000, "Bak Semen": 50000, "Bak Terpal": 50000, "Sawah": 50000 },
+  "Bawal Air Tawar": { "KJA": 37000, "Kolam Air Tenang": 35000, "Kolam": 35000, "Kolam Terpal": 35000, "Tambak": 0, "Bioflok": 35000, "KJT": 35000, "Bak Semen": 35000, "Bak Terpal": 35000, "Sawah": 35000 },
+  "Gurame": { "KJA": 85000, "Kolam Air Tenang": 80000, "Kolam": 80000, "Kolam Terpal": 80000, "Tambak": 0, "Bioflok": 80000, "KJT": 80000, "Bak Semen": 80000, "Bak Terpal": 80000, "Sawah": 80000 },
+  "Vaname": { "KJA": 0, "Kolam Air Tenang": 0, "Kolam": 0, "Kolam Terpal": 0, "Tambak": 75000, "Bioflok": 0, "KJT": 0, "Bak Semen": 0, "Bak Terpal": 0, "Sawah": 0 },
+  "Lainnya": { "KJA": 30000, "Kolam Air Tenang": 28000, "Kolam": 28000, "Kolam Terpal": 28000, "Tambak": 28000, "Bioflok": 28000, "KJT": 28000, "Bak Semen": 28000, "Bak Terpal": 28000, "Sawah": 28000 },
 };
 
 // Default Pembenihan prices (Rp/Ekor) - flat per fish type
@@ -133,4 +134,5 @@ export const DEFAULT_PEMBENIHAN_PRICES: Record<string, number> = {
   "Mas": 350,
   "Nila": 350,
   "Lele": 350,
+  "Lainnya": 300,
 };

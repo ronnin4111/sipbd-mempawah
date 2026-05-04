@@ -63,6 +63,28 @@ const REQUIRED_HEADERS = [
 
 const OPTIONAL_HEADERS = ['kusuka', 'cpib', 'cbib'];
 
+// Normalize container type names from Excel to match system constants
+const CONTAINER_TYPE_ALIASES: Record<string, string> = {
+  'kja': 'KJA',
+  'kjt': 'KJT',
+  'kolam': 'Kolam',
+  'kolam air tenang': 'Kolam Air Tenang',
+  'kolam terpal': 'Kolam Terpal',
+  'bak semen': 'Bak Semen',
+  'bak terpal': 'Bak Terpal',
+  'tambak': 'Tambak',
+  'bioflok': 'Bioflok',
+  'bioflock': 'Bioflok',
+  'jaring tancap': 'KJA',
+  'keramba': 'KJA',
+  'sawah': 'Sawah',
+};
+
+function normalizeContainerType(value: string): string {
+  const lower = value.toLowerCase().trim();
+  return CONTAINER_TYPE_ALIASES[lower] || value.trim();
+}
+
 export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
   const queryClient = useQueryClient();
   const [password, setPassword] = useState('');
@@ -71,7 +93,7 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
   const [file, setFile] = useState<File | null>(null);
   const [previewData, setPreviewData] = useState<PreviewRow[]>([]);
   const [importing, setImporting] = useState(false);
-  const [importResult, setImportResult] = useState<{ success: boolean; count: number; deletedCount: number; skippedCount?: number; skippedReasons?: string[] } | null>(null);
+  const [importResult, setImportResult] = useState<{ success: boolean; count: number; deletedCount: number; skippedCount?: number; skippedReasons?: string[]; autoFilledInfo?: string[] } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [replaceAll, setReplaceAll] = useState(true);
   const [deleting, setDeleting] = useState(false);
@@ -143,10 +165,10 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
 
         const parsed = jsonData.map((row) => ({
           year: Number(row.year) || 0,
-          kecamatan: String(row.kecamatan || ''),
-          desa: String(row.desa || ''),
-          fishType: String(row.fishType || ''),
-          containerType: String(row.containerType || ''),
+          kecamatan: String(row.kecamatan || '').trim() || 'Tidak Diketahui',
+          desa: String(row.desa || '').trim() || 'Tidak Diketahui',
+          fishType: String(row.fishType || '').trim() || 'Lainnya',
+          containerType: normalizeContainerType(String(row.containerType || '')),
           businessType: String(row.businessType || ''),
           farmerName: String(row.farmerName || ''),
           groupName: String(row.groupName || ''),
@@ -222,12 +244,14 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
           deletedCount: result.deletedCount || 0,
           skippedCount: result.skippedCount || 0,
           skippedReasons: result.skippedReasons || [],
+          autoFilledInfo: result.autoFilledInfo || [],
         });
         const skippedInfo = result.skippedCount > 0 ? ` (${result.skippedCount} baris dilewati)` : '';
+        const autoFilledNote = result.autoFilledInfo?.length > 0 ? ' - kolom kosong diisi otomatis' : '';
         if (replaceAll && result.deletedCount > 0) {
-          toast.success(`Berhasil! ${result.deletedCount} data lama dihapus, ${result.count} data baru diimpor${skippedInfo}`);
+          toast.success(`Berhasil! ${result.deletedCount} data lama dihapus, ${result.count} data baru diimpor${skippedInfo}${autoFilledNote}`);
         } else {
-          toast.success(`Berhasil mengimpor ${result.count} data${skippedInfo}`);
+          toast.success(`Berhasil mengimpor ${result.count} data${skippedInfo}${autoFilledNote}`);
         }
         // CRITICAL: Invalidate all caches so new data appears immediately
         refreshAllData();
@@ -489,6 +513,18 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
                 <p className="text-xs text-emerald-600/70 dark:text-emerald-400/70 ml-6">
                   {importResult.deletedCount} data lama dihapus
                 </p>
+              )}
+              {importResult.autoFilledInfo && importResult.autoFilledInfo.length > 0 && (
+                <div className="ml-6 mt-1">
+                  <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">
+                    Kolom kosong diisi otomatis:
+                  </p>
+                  <ul className="text-xs text-blue-600/70 dark:text-blue-400/70 mt-1 ml-4 list-disc">
+                    {importResult.autoFilledInfo.map((info, i) => (
+                      <li key={i}>{info}</li>
+                    ))}
+                  </ul>
+                </div>
               )}
               {importResult.skippedCount && importResult.skippedCount > 0 && (
                 <div className="ml-6 mt-1">
