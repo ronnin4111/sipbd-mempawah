@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
         productionValue: Number(data.productionValue) || 0,
         latitude: Number(data.latitude) || 0,
         longitude: Number(data.longitude) || 0,
-        kusuka: String(data.kusuka || '').trim(),
+        kusuka: String(data.kusuka || '').trim().replace(/[^0-9]/g, ''),
         cpib: typeof data.cpib === 'boolean' ? data.cpib : String(data.cpib || '').toLowerCase() === 'ya',
         cbib: typeof data.cbib === 'boolean' ? data.cbib : String(data.cbib || '').toLowerCase() === 'ya',
       },

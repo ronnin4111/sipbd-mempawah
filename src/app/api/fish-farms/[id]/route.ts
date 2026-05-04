@@ -49,7 +49,7 @@ export async function PUT(
     if (data.productionValue !== undefined) updateData.productionValue = Number(data.productionValue) || 0;
     if (data.latitude !== undefined) updateData.latitude = Number(data.latitude) || 0;
     if (data.longitude !== undefined) updateData.longitude = Number(data.longitude) || 0;
-    if (data.kusuka !== undefined) updateData.kusuka = String(data.kusuka).trim();
+    if (data.kusuka !== undefined) updateData.kusuka = String(data.kusuka).trim().replace(/[^0-9]/g, '');
     if (data.cpib !== undefined) updateData.cpib = typeof data.cpib === 'boolean' ? data.cpib : String(data.cpib).toLowerCase() === 'ya';
     if (data.cbib !== undefined) updateData.cbib = typeof data.cbib === 'boolean' ? data.cbib : String(data.cbib).toLowerCase() === 'ya';
 

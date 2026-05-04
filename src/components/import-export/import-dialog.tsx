@@ -49,7 +49,7 @@ interface PreviewRow {
   productionValue: number;
   latitude: number;
   longitude: number;
-  kusuka: string;
+  kusuka: string | number;
   cpib: boolean;
   cbib: boolean;
 }
@@ -83,6 +83,37 @@ const CONTAINER_TYPE_ALIASES: Record<string, string> = {
 function normalizeContainerType(value: string): string {
   const lower = value.toLowerCase().trim();
   return CONTAINER_TYPE_ALIASES[lower] || value.trim();
+}
+
+/**
+ * Normalize KUSUKA value from Excel.
+ * Excel may store 16-digit numbers as:
+ * - Number type → JS reads as number, may lose precision or show scientific notation
+ * - Text type with apostrophe → JS reads as string "1234567890123456"
+ * - Scientific notation (e.g. 1.2345678901234E+15)
+ * This function converts all formats to a clean digit string.
+ */
+function normalizeKusuka(value: string | number | undefined | null): string {
+  if (value === undefined || value === null) return '';
+  
+  if (typeof value === 'number') {
+    if (Number.isInteger(value) && value >= 0 && value <= Number.MAX_SAFE_INTEGER) {
+      return String(value);
+    }
+    return String(value).replace(/[^0-9]/g, '');
+  }
+  
+  let str = String(value).trim();
+  if (/^\d{16}$/.test(str)) return str;
+  
+  if (/\d+\.?\d*[eE][+\-]?\d+/.test(str)) {
+    const num = Number(str);
+    if (!isNaN(num)) {
+      return num.toFixed(0);
+    }
+  }
+  
+  return str.replace(/[^0-9]/g, '');
 }
 
 export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
@@ -151,6 +182,51 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
         const ws = wb.Sheets[wb.SheetNames[0]];
         const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' });
 
+        // Fix KUSUKA column: Excel stores 16-digit numbers with precision loss in JS.
+        // Re-read the KUSUKA column from worksheet cells using formatted text to preserve all digits.
+        if (jsonData.length > 0 && Object.keys(jsonData[0]).includes('kusuka')) {
+          // Build a map of row data from the worksheet to preserve KUSUKA text
+          const headerRow: Record<string, number> = {};
+          const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+          // First, find KUSUKA column from header row
+          for (let c = range.s.c; c <= range.e.c; c++) {
+            const headerCell = ws[XLSX.utils.encode_cell({ r: range.s.r, c })];
+            if (headerCell && String(headerCell.v).trim().toLowerCase() === 'kusuka') {
+              headerRow.kusukaCol = c;
+              break;
+            }
+          }
+          if (headerRow.kusukaCol !== undefined) {
+            // Read KUSUKA values directly from cells as formatted text
+            const kusukaValues: string[] = [];
+            for (let r = range.s.r + 1; r <= range.e.r; r++) {
+              const cell = ws[XLSX.utils.encode_cell({ r, c: headerRow.kusukaCol })];
+              if (cell) {
+                // Use formatted text (w) to preserve all 16 digits, fallback to value (v)
+                const text = cell.w || String(cell.v || '');
+                kusukaValues.push(text.replace(/[^0-9]/g, ''));
+              } else {
+                kusukaValues.push('');
+              }
+            }
+            // Match kusukaValues to jsonData rows
+            // Since sheet_to_json skips completely empty rows, we need to match by a unique key
+            // Simple approach: if kusukaValues count matches jsonData count, apply directly
+            if (kusukaValues.length === jsonData.length) {
+              jsonData.forEach((row, i) => {
+                (row as Record<string, unknown>).kusuka = kusukaValues[i];
+              });
+            } else {
+              // Fallback: try to match by row position using another field
+              // Use normalizeKusuka as fallback for each row
+              jsonData.forEach((row) => {
+                const raw = row.kusuka;
+                (row as Record<string, unknown>).kusuka = normalizeKusuka(raw as string | number);
+              });
+            }
+          }
+        }
+
         if (jsonData.length === 0) {
           toast.error('File Excel kosong');
           return;
@@ -180,7 +256,7 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
           productionValue: Number(row.productionValue) || 0,
           latitude: Number(row.latitude) || 0,
           longitude: Number(row.longitude) || 0,
-          kusuka: String(row.kusuka || '').trim(),
+          kusuka: normalizeKusuka(row.kusuka),
           cpib: typeof row.cpib === 'boolean' ? row.cpib : String(row.cpib || '').toLowerCase() === 'ya',
           cbib: typeof row.cbib === 'boolean' ? row.cbib : String(row.cbib || '').toLowerCase() === 'ya',
         }));

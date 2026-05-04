@@ -19,7 +19,7 @@ interface ImportFishFarm {
   productionValue: number;
   latitude: number;
   longitude: number;
-  kusuka?: string;
+  kusuka?: string | number;
   cpib?: boolean | string;
   cbib?: boolean | string;
 }
@@ -49,6 +49,48 @@ const CONTAINER_TYPE_ALIASES: Record<string, string> = {
 function normalizeContainerType(value: string): string {
   const lower = value.toLowerCase().trim();
   return CONTAINER_TYPE_ALIASES[lower] || value.trim();
+}
+
+/**
+ * Normalize KUSUKA value from Excel.
+ * Excel may store 16-digit numbers as:
+ * - Number type (e.g. 1234567890123456) → JS reads as number, may lose precision
+ * - Text type with apostrophe ('1234567890123456) → JS reads as string "1234567890123456"
+ * - Scientific notation from number conversion (e.g. 1.2345678901234E+15)
+ * This function converts all formats to a clean digit string.
+ */
+function normalizeKusuka(value: string | number | undefined | null): string {
+  if (value === undefined || value === null) return '';
+  
+  // If it's a number, convert to string carefully
+  if (typeof value === 'number') {
+    // Check if it's a safe integer (no precision loss)
+    if (Number.isInteger(value) && value >= 0 && value <= Number.MAX_SAFE_INTEGER) {
+      return String(value);
+    }
+    // For unsafe numbers, try to convert and strip non-digits
+    return String(value).replace(/[^0-9]/g, '');
+  }
+  
+  let str = String(value).trim();
+  
+  // If already a clean 16-digit string, return as-is
+  if (/^\d{16}$/.test(str)) return str;
+  
+  // Handle scientific notation like "1.234567890123456E+15" or "1.2345678901234e+15"
+  if (/\d+\.?\d*[eE][+\-]?\d+/.test(str)) {
+    const num = Number(str);
+    if (!isNaN(num)) {
+      // Convert to fixed-point and strip decimals
+      // For 16-digit numbers, we need up to 0 decimal places
+      const fixed = num.toFixed(0);
+      return fixed;
+    }
+  }
+  
+  // Strip any non-digit characters (spaces, dashes, dots, apostrophes)
+  const digitsOnly = str.replace(/[^0-9]/g, '');
+  return digitsOnly;
 }
 
 export const maxDuration = 60; // 60 seconds timeout for Vercel
@@ -168,7 +210,7 @@ export async function POST(request: NextRequest) {
       productionValue: Number(record.productionValue) || 0,
       latitude: Number(record.latitude) || 0,
       longitude: Number(record.longitude) || 0,
-      kusuka: String(record.kusuka || '').trim(),
+      kusuka: normalizeKusuka(record.kusuka),
       cpib: typeof record.cpib === 'boolean' ? record.cpib : String(record.cpib || '').toLowerCase() === 'ya',
       cbib: typeof record.cbib === 'boolean' ? record.cbib : String(record.cbib || '').toLowerCase() === 'ya',
     }));
