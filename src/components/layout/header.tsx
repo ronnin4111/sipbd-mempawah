@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Menu, Moon, Sun } from 'lucide-react';
+import { Menu, Moon, Sun, DollarSign } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useFilterStore } from '@/store/filter-store';
 import { useMounted } from '@/hooks/use-mounted';
@@ -15,6 +15,7 @@ const NAV_TABS = [
   { id: 'data-produksi', label: 'Data Produksi' },
   { id: 'peta-lokasi', label: 'Peta Lokasi' },
   { id: 'tren-laporan', label: 'Tren & Laporan' },
+  { id: 'harga-komoditas', label: 'Harga Komoditas' },
   { id: 'import-export', label: 'Import / Export' },
 ];
 

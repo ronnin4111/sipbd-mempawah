@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { DEFAULT_COMMODITY_PRICES, FISH_TYPES, CONTAINER_TYPES, IMPORT_PASSWORD } from '@/lib/constants';
+import { DEFAULT_COMMODITY_PRICES, DEFAULT_PEMBENIHAN_PRICES, FISH_TYPES, CONTAINER_TYPES, IMPORT_PASSWORD } from '@/lib/constants';
 
 // GET /api/commodity-prices - Get all commodity prices in matrix format
 export async function GET() {
@@ -19,11 +19,76 @@ export async function GET() {
       }
     }
 
-    return NextResponse.json({ prices: priceMatrix });
+    // Include pembenihan prices
+    const pembenihanPrices: Record<string, number> = {};
+    for (const fish of FISH_TYPES) {
+      const dbPrice = prices.find(p => p.fishType === fish && p.containerType === 'Pembenihan');
+      pembenihanPrices[fish] = dbPrice ? dbPrice.price : (DEFAULT_PEMBENIHAN_PRICES[fish] ?? 0);
+    }
+
+    return NextResponse.json({ prices: priceMatrix, pembenihanPrices });
   } catch (error) {
     console.error('Error fetching commodity prices:', error);
     return NextResponse.json(
       { error: 'Gagal mengambil harga komoditas' },
+      { status: 500 }
+    );
+  }
+}
+
+// PUT /api/commodity-prices - Update commodity prices
+export async function PUT(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { password, data } = body as {
+      password: string;
+      data: { fishType: string; containerType: string; price: number }[];
+    };
+
+    // Verify password
+    if (password !== IMPORT_PASSWORD) {
+      return NextResponse.json(
+        { error: 'Password tidak valid' },
+        { status: 401 }
+      );
+    }
+
+    if (!Array.isArray(data) || data.length === 0) {
+      return NextResponse.json(
+        { error: 'Data tidak valid atau kosong' },
+        { status: 400 }
+      );
+    }
+
+    let upserted = 0;
+
+    await db.$transaction(async (tx) => {
+      for (const item of data) {
+        if (!item.fishType || !item.containerType) continue;
+
+        await tx.commodityPrice.upsert({
+          where: {
+            fishType_containerType: {
+              fishType: item.fishType,
+              containerType: item.containerType,
+            },
+          },
+          update: { price: Number(item.price) || 0 },
+          create: {
+            fishType: item.fishType,
+            containerType: item.containerType,
+            price: Number(item.price) || 0,
+          },
+        });
+        upserted++;
+      }
+    });
+
+    return NextResponse.json({ success: true, count: upserted });
+  } catch (error) {
+    console.error('Error updating commodity prices:', error);
+    return NextResponse.json(
+      { error: 'Gagal mengupdate harga komoditas' },
       { status: 500 }
     );
   }

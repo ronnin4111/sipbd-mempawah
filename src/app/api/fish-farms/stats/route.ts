@@ -351,6 +351,31 @@ export async function GET(request: NextRequest) {
     // Round all float values to 2 decimal places
     const round2 = (n: number) => Math.round(n * 100) / 100;
 
+    // === Commodity Prices (with try/catch - may not exist yet) ===
+    let commodityPrices: Record<string, Record<string, number>> | null = null;
+    try {
+      const priceRecords = await db.commodityPrice.findMany();
+      const { DEFAULT_COMMODITY_PRICES: DEFAULT_PRICES, DEFAULT_PEMBENIHAN_PRICES, FISH_TYPES: FISHES, CONTAINER_TYPES: CONTAINERS } = await import('@/lib/constants');
+      commodityPrices = {};
+      for (const fish of FISHES) {
+        commodityPrices[fish] = {};
+        for (const container of CONTAINERS) {
+          const dbPrice = priceRecords.find(p => p.fishType === fish && p.containerType === container);
+          commodityPrices[fish][container] = dbPrice ? dbPrice.price : (DEFAULT_PRICES[fish]?.[container] ?? 0);
+        }
+      }
+      // Add pembenihan prices as a special entry
+      const pembenihanPrices: Record<string, number> = {};
+      for (const fish of FISHES) {
+        const dbPrice = priceRecords.find(p => p.fishType === fish && p.containerType === 'Pembenihan');
+        pembenihanPrices[fish] = dbPrice ? dbPrice.price : (DEFAULT_PEMBENIHAN_PRICES[fish] ?? 0);
+      }
+      (commodityPrices as Record<string, Record<string, number>>)['Pembenihan'] = pembenihanPrices as unknown as Record<string, number> as Record<string, number>;
+    } catch (err) {
+      console.warn('CommodityPrice table not available, skipping...', err);
+      commodityPrices = null;
+    }
+
     return NextResponse.json({
       pembesaranProduction: round2(pembesaranProduction),
       pembenihanProduction: round2(pembenihanProduction),
@@ -438,6 +463,7 @@ export async function GET(request: NextRequest) {
           Object.entries(containers).map(([ct, v]) => [ct, { pembesaran: round2(v.pembesaran), pembenihan: round2(v.pembenihan) }])
         )])
       ),
+      commodityPrices,
     });
   } catch (error) {
     console.error('Error fetching fish farm stats:', error);

@@ -114,3 +114,23 @@ export const KECAMATAN_COORDS: Record<string, { lat: number; lng: number }> = {
 };
 
 export const IMPORT_PASSWORD = "dkp2024";
+
+// Default commodity prices per fish type x container type (Pembesaran - Rp/Kg)
+// Pembenihan prices are flat per fish type (Rp/Ekor)
+export const DEFAULT_COMMODITY_PRICES: Record<string, Record<string, number>> = {
+  "Mas": { "KJA": 40000, "Kolam Air Tenang": 38000, "Tambak": 0, "Bioflok": 38000, "KJT": 38000, "Bak Semen": 38000, "Bak Terpal": 38000 },
+  "Nila": { "KJA": 32000, "Kolam Air Tenang": 30000, "Tambak": 30000, "Bioflok": 30000, "KJT": 30000, "Bak Semen": 30000, "Bak Terpal": 30000 },
+  "Lele": { "KJA": 27000, "Kolam Air Tenang": 25000, "Tambak": 0, "Bioflok": 25000, "KJT": 25000, "Bak Semen": 25000, "Bak Terpal": 25000 },
+  "Patin": { "KJA": 42000, "Kolam Air Tenang": 40000, "Tambak": 0, "Bioflok": 40000, "KJT": 40000, "Bak Semen": 40000, "Bak Terpal": 40000 },
+  "Jelawat": { "KJA": 52000, "Kolam Air Tenang": 50000, "Tambak": 0, "Bioflok": 50000, "KJT": 50000, "Bak Semen": 50000, "Bak Terpal": 50000 },
+  "Bawal Air Tawar": { "KJA": 37000, "Kolam Air Tenang": 35000, "Tambak": 0, "Bioflok": 35000, "KJT": 35000, "Bak Semen": 35000, "Bak Terpal": 35000 },
+  "Gurame": { "KJA": 85000, "Kolam Air Tenang": 80000, "Tambak": 0, "Bioflok": 80000, "KJT": 80000, "Bak Semen": 80000, "Bak Terpal": 80000 },
+  "Vaname": { "KJA": 0, "Kolam Air Tenang": 0, "Tambak": 75000, "Bioflok": 0, "KJT": 0, "Bak Semen": 0, "Bak Terpal": 0 },
+};
+
+// Default Pembenihan prices (Rp/Ekor) - flat per fish type
+export const DEFAULT_PEMBENIHAN_PRICES: Record<string, number> = {
+  "Mas": 350,
+  "Nila": 350,
+  "Lele": 350,
+};

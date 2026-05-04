@@ -243,6 +243,53 @@ export async function GET(request: NextRequest) {
     ws5['!cols'] = [{ wch: 15 }, { wch: 10 }, { wch: 15 }, { wch: 12 }, { wch: 15 }, { wch: 10 }];
     XLSX.utils.book_append_sheet(wb, ws5, 'RTP & Pembudidaya');
 
+    // Sheet 6: Harga Komoditas
+    try {
+      const priceRecords = await db.commodityPrice.findMany();
+      const { DEFAULT_COMMODITY_PRICES: DEFAULT_PRICES, DEFAULT_PEMBENIHAN_PRICES, FISH_TYPES: FISHES, CONTAINER_TYPES: CONTAINERS } = await import('@/lib/constants');
+
+      // Pembesaran prices section
+      const pembesaranHeaders = ['Jenis Ikan', ...CONTAINERS];
+      const pembesaranRows = FISHES.map(fish =>
+        [fish, ...CONTAINERS.map(ct => {
+          const dbPrice = priceRecords.find(p => p.fishType === fish && p.containerType === ct);
+          return dbPrice ? dbPrice.price : (DEFAULT_PRICES[fish]?.[ct] ?? 0);
+        })]
+      );
+
+      // Pembenihan prices section
+      const pembenihanHeaders = ['Jenis Ikan', 'Harga per Ekor (Rp)'];
+      const pembenihanRows = FISHES.map(fish => {
+        const dbPrice = priceRecords.find(p => p.fishType === fish && p.containerType === 'Pembenihan');
+        return [fish, dbPrice ? dbPrice.price : (DEFAULT_PEMBENIHAN_PRICES[fish] ?? 0)];
+      });
+
+      // Combine both sections with a blank row separator
+      const commoditySheetData = [
+        ['HARGA PEMBESARAN (Rp/Kg)'],
+        pembesaranHeaders,
+        ...pembesaranRows,
+        [], // blank separator row
+        ['HARGA PEMBENIHAN (Rp/Ekor)'],
+        pembenihanHeaders,
+        ...pembenihanRows,
+      ];
+
+      const ws6 = XLSX.utils.aoa_to_sheet(commoditySheetData);
+
+      // Set column widths
+      const commodityCols = [
+        { wch: 20 }, // Jenis Ikan
+        ...CONTAINERS.map(() => ({ wch: 18 })), // Container columns
+      ];
+      ws6['!cols'] = commodityCols;
+
+      XLSX.utils.book_append_sheet(wb, ws6, 'Harga Komoditas');
+    } catch (err) {
+      console.warn('Could not add Harga Komoditas sheet:', err);
+      // Continue without the commodity prices sheet
+    }
+
     // Generate buffer
     const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
 

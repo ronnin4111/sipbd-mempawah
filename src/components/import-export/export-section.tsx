@@ -80,6 +80,10 @@ export function ExportSection() {
                 <span className="text-teal-600 mt-0.5">&#x2022;</span>
                 RTP & Pembudidaya
               </li>
+              <li className="flex items-start gap-1.5">
+                <span className="text-teal-600 mt-0.5">&#x2022;</span>
+                Harga Komoditas
+              </li>
             </ul>
             <p className="text-xs text-muted-foreground italic">
               * Export mengikuti filter yang aktif

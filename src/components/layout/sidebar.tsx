@@ -5,6 +5,7 @@ import {
   Database,
   Map,
   TrendingUp,
+  DollarSign,
   FileSpreadsheet,
   ChevronRight,
   X,
@@ -18,6 +19,7 @@ const menuItems = [
   { id: 'data-produksi', label: 'Data Produksi', icon: Database, description: 'Tabel data lengkap' },
   { id: 'peta-lokasi', label: 'Peta Lokasi', icon: Map, description: 'Sebaran lokasi budidaya' },
   { id: 'tren-laporan', label: 'Tren & Laporan', icon: TrendingUp, description: 'Analisis tren produksi' },
+  { id: 'harga-komoditas', label: 'Harga Komoditas', icon: DollarSign, description: 'Daftar harga ikan' },
   { id: 'import-export', label: 'Import / Export', icon: FileSpreadsheet, description: 'Kelola data Excel/PDF' },
 ];
 

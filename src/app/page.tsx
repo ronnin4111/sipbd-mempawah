@@ -12,6 +12,7 @@ import { ImportDialog } from '@/components/import-export/import-dialog';
 import { ExportSection } from '@/components/import-export/export-section';
 import { useFilterStore } from '@/store/filter-store';
 import { HeroBanner } from '@/components/layout/hero-banner';
+import { CommodityPricesTable } from '@/components/commodity-prices/commodity-prices-table';
 import { Button } from '@/components/ui/button';
 import { Upload } from 'lucide-react';
 
@@ -84,6 +85,14 @@ function TrenLaporanSection() {
   );
 }
 
+function HargaKomoditasSection() {
+  return (
+    <div className="space-y-4">
+      <CommodityPricesTable />
+    </div>
+  );
+}
+
 function ImportExportSection() {
   const [importOpen, setImportOpen] = useState(false);
 
@@ -123,6 +132,8 @@ export default function Home() {
         return <PetaLokasiSection />;
       case 'tren-laporan':
         return <TrenLaporanSection />;
+      case 'harga-komoditas':
+        return <HargaKomoditasSection />;
       case 'import-export':
         return <ImportExportSection />;
       default:
