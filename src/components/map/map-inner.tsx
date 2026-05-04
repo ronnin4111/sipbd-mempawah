@@ -16,16 +16,16 @@ function createClusterIcon(cluster: L.MarkerCluster) {
   const count = cluster.getChildCount();
   let size = 'small';
   let dimension = 40;
-  let color = '#0d9488';
+  let color = '#3b82f6';
 
   if (count >= 50) {
     size = 'large';
     dimension = 56;
-    color = '#065f46';
+    color = '#1e40af';
   } else if (count >= 20) {
     size = 'medium';
     dimension = 48;
-    color = '#047857';
+    color = '#2563eb';
   }
 
   return L.divIcon({
@@ -163,6 +163,27 @@ export default function MapInner() {
     clusterGroupRef.current = clusterGroup;
     map.addLayer(clusterGroup);
 
+    // Add legend
+    const legend = L.control({ position: 'bottomleft' });
+    legend.onAdd = () => {
+      const div = L.DomUtil.create('div', '');
+      div.innerHTML = `
+        <div style="background:white;padding:8px 12px;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,0.2);font-size:12px;line-height:1.6;">
+          <div style="font-weight:600;margin-bottom:4px;">Keterangan</div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <svg viewBox="0 0 100 60" width="24" height="15"><path d="M10,30 L0,10 C25,20 50,10 70,10 C85,10 95,20 95,30 C95,40 85,50 70,50 C50,50 25,40 0,50 Z" fill="#2563eb" stroke="#1d4ed8" stroke-width="2"/><circle cx="78" cy="26" r="5" fill="white"/><circle cx="79" cy="25" r="2.5" fill="#1e293b"/></svg>
+            <span>Koordinat pasti</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <svg viewBox="0 0 100 60" width="24" height="15"><path d="M10,30 L0,10 C25,20 50,10 70,10 C85,10 95,20 95,30 C95,40 85,50 70,50 C50,50 25,40 0,50 Z" fill="#eab308" stroke="#ca8a04" stroke-width="2"/><circle cx="78" cy="26" r="5" fill="white"/><circle cx="79" cy="25" r="2.5" fill="#1e293b"/></svg>
+            <span>Lokasi perkiraan</span>
+          </div>
+        </div>
+      `;
+      return div;
+    };
+    legend.addTo(map);
+
     return () => {
       map.remove();
       mapInstanceRef.current = null;
@@ -176,21 +197,31 @@ export default function MapInner() {
     const clusterGroup = clusterGroupRef.current;
     clusterGroup.clearLayers();
 
+    // Fish icon SVG generator
+    const fishIconSvg = (color: string, strokeColor: string) =>
+      `<svg viewBox="0 0 100 60" width="40" height="24" style="filter:drop-shadow(1px 2px 2px rgba(0,0,0,0.35))">` +
+      `<path d="M10,30 L0,10 C25,20 50,10 70,10 C85,10 95,20 95,30 C95,40 85,50 70,50 C50,50 25,40 0,50 Z" fill="${color}" stroke="${strokeColor}" stroke-width="2" stroke-linejoin="round"/>` +
+      `<path d="M55,10 Q58,2 65,4 Q60,8 58,10" fill="${color}" stroke="${strokeColor}" stroke-width="1.5"/>` +
+      `<circle cx="78" cy="26" r="5" fill="white"/>` +
+      `<circle cx="79" cy="25" r="2.5" fill="#1e293b"/>` +
+      `</svg>`;
+
+    // Blue fish icon for records with exact coordinates
     const fishFarmIcon = L.divIcon({
-      html: `<svg viewBox="0 0 24 24" width="24" height="24" fill="#0d9488"><path d="M12 2C6.48 2 2 6 2 10.5c0 2.5 1.5 4.8 3.8 6.2L4 22l4.5-3.2c1.1.3 2.3.5 3.5.5 5.52 0 10-4 10-8.5S17.52 2 12 2zm-1 14h-2v-2h2v2zm0-4h-2V6h2v6z"/></svg>`,
+      html: fishIconSvg('#2563eb', '#1d4ed8'),
       className: '',
-      iconSize: [24, 24],
-      iconAnchor: [12, 12],
-      popupAnchor: [0, -12],
+      iconSize: [40, 24],
+      iconAnchor: [20, 12],
+      popupAnchor: [0, -14],
     });
 
-    // Fallback icon (slightly different color for records without exact coords)
+    // Yellow fish icon for records with estimated coordinates (kecamatan fallback)
     const fallbackIcon = L.divIcon({
-      html: `<svg viewBox="0 0 24 24" width="24" height="24" fill="#f59e0b"><path d="M12 2C6.48 2 2 6 2 10.5c0 2.5 1.5 4.8 3.8 6.2L4 22l4.5-3.2c1.1.3 2.3.5 3.5.5 5.52 0 10-4 10-8.5S17.52 2 12 2zm-1 14h-2v-2h2v2zm0-4h-2V6h2v6z"/></svg>`,
+      html: fishIconSvg('#eab308', '#ca8a04'),
       className: '',
-      iconSize: [24, 24],
-      iconAnchor: [12, 12],
-      popupAnchor: [0, -12],
+      iconSize: [40, 24],
+      iconAnchor: [20, 12],
+      popupAnchor: [0, -14],
     });
 
     // Process ALL records - both with and without coordinates
@@ -250,7 +281,7 @@ export default function MapInner() {
         </tr>
       `).join('');
 
-      const coordLabel = loc.hasExactCoords ? '' : '<span style="font-size:9px;color:#f59e0b;">📍 Lokasi perkiraan (koordinat kecamatan)</span><br/>';
+      const coordLabel = loc.hasExactCoords ? '' : '<span style="font-size:9px;color:#ca8a04;">📍 Lokasi perkiraan (koordinat kecamatan)</span><br/>';
 
       const popupContent = `
         <div style="font-size:12px;min-width:240px;max-width:320px;color:#E2EDF5;">
