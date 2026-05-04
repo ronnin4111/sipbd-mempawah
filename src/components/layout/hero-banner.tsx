@@ -180,7 +180,7 @@ export function HeroBanner() {
     {
       label: 'Jumlah KUSUKA',
       value: totalKusuka,
-      unit: 'Unit',
+      unit: 'Kartu',
       icon: <Award className="h-5 w-5 sm:h-6 sm:w-6" />,
       color: '#10B981',
     },
