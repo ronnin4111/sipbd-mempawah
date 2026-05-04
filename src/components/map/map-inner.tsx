@@ -102,9 +102,46 @@ export default function MapInner() {
       maxZoom: 18,
     });
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    // === Base Layers ===
+    const streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-      maxZoom: 18,
+      maxZoom: 19,
+    });
+
+    const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      attribution: '&copy; Esri, Maxar, Earthstar Geographics',
+      maxZoom: 19,
+    });
+
+    const hybridLayer = L.layerGroup([
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 19,
+      }),
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        opacity: 0.4,
+      }),
+    ]);
+
+    const terrainLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://opentopomap.org">OpenTopoMap</a>',
+      maxZoom: 17,
+    });
+
+    const baseLayers: Record<string, L.TileLayer | L.LayerGroup> = {
+      '🗺️ Peta Jalan': streetLayer,
+      '🛰️ Satelit': satelliteLayer,
+      '🔄 Hybrid': hybridLayer,
+      '⛰️ Terrain': terrainLayer,
+    };
+
+    // Add default layer
+    streetLayer.addTo(map);
+
+    // Add layer control
+    L.control.layers(baseLayers, {}, {
+      position: 'topright',
+      collapsed: true,
     }).addTo(map);
 
     mapInstanceRef.current = map;
