@@ -75,7 +75,7 @@ export const KECAMATAN_DESA: Record<
     { desa: "Sungai Batang", status: "Desa" },
     { desa: "Sungai Purun Kecil", status: "Desa" },
     { desa: "Sungai Rasau", status: "Desa" },
-    { desa: "Sungai Rasau Besar Darat", status: "Desa" },
+    { desa: "Sungai Bakau Besar Darat", status: "Desa" },
   ],
   Toho: [
     { desa: "Benuang", status: "Desa" },
@@ -176,15 +176,15 @@ export const DESA_COORDS: Record<string, { lat: number; lng: number }> = {
   "Sungai Pinyuh|Galang": { lat: 0.3024278, lng: 109.1115429 },
 
   // === Siantan ===
-  "Siantan|Wajok Hilir": { lat: 0.1226973, lng: 109.2744658 },
-  "Siantan|Sungai Nipah": { lat: 0.0917707, lng: 109.1779802 },
-  "Siantan|Peniti Luar": { lat: 0.1222096, lng: 109.1618173 },
-  "Siantan|Wajok Hulu": { lat: 0.064768, lng: 109.3517677 },
-  "Siantan|Jungkat": { lat: 0.112891, lng: 109.2225083 },
+  "Jongkat|Wajok Hilir": { lat: 0.1226973, lng: 109.2744658 },
+  "Jongkat|Sungai Nipah": { lat: 0.0917707, lng: 109.1779802 },
+  "Jongkat|Peniti Luar": { lat: 0.1222096, lng: 109.1618173 },
+  "Jongkat|Wajok Hulu": { lat: 0.064768, lng: 109.3517677 },
+  "Jongkat|Jungkat": { lat: 0.112891, lng: 109.2225083 },
 
   // === Sungai Kunyit ===
   "Sungai Kunyit|Sungai Duri I": { lat: 0.5535261, lng: 108.9293018 },
-  "Sungai Kunyit|Sungai Duri Ii": { lat: 0.5374319, lng: 108.9384082 },
+  "Sungai Kunyit|Sungai Duri II": { lat: 0.5374319, lng: 108.9384082 },
   "Sungai Kunyit|Bukit Batu": { lat: 0.5468343, lng: 108.9952184 },
   "Sungai Kunyit|Sungai Bundung Laut": { lat: 0.5195909, lng: 108.9179666 },
   "Sungai Kunyit|Sungai Kunyit Laut": { lat: 0.4999022, lng: 108.8531132 },
@@ -201,7 +201,7 @@ export const DESA_COORDS: Record<string, { lat: number; lng: number }> = {
   "Segedong|Sungai Purun Besar": { lat: 0.2051583, lng: 109.156473 },
   "Segedong|Parit Bugis": { lat: 0.1610372, lng: 109.1908175 },
   "Segedong|Peniti Dalam I": { lat: 0.1641752, lng: 109.311152 },
-  "Segedong|Peniti Dalam Ii": { lat: 0.2170573, lng: 109.2619098 },
+  "Segedong|Peniti Dalam II": { lat: 0.2170573, lng: 109.2619098 },
   "Segedong|Sungai Burung": { lat: 0.1595769, lng: 109.1660022 },
 
   // === Anjongan ===
