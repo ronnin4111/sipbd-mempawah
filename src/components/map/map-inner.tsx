@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { useAllFishFarms } from '@/hooks/use-fish-farms';
-import { KECAMATAN_COORDS } from '@/lib/constants';
+import { KECAMATAN_COORDS, DESA_COORDS } from '@/lib/constants';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
@@ -11,7 +11,6 @@ import 'leaflet.markercluster';
 
 const formatNumber = (num: number) => new Intl.NumberFormat('id-ID').format(num);
 
-// Custom cluster icon factory - shows count with color coding
 function createClusterIcon(cluster: L.MarkerCluster) {
   const count = cluster.getChildCount();
   let size = 'small';
@@ -48,41 +47,39 @@ function createClusterIcon(cluster: L.MarkerCluster) {
   });
 }
 
-// Generate a deterministic offset for a string (for spreading markers within same area)
 function hashOffset(str: string, index: number): { latOff: number; lngOff: number } {
   let hash = 0;
   const s = str + String(index);
   for (let i = 0; i < s.length; i++) {
     const char = s.charCodeAt(i);
     hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32bit integer
+    hash = hash & hash;
   }
-  // Use hash to generate a deterministic spread within ~0.01 degrees (~1km)
-  const latOff = ((hash % 1000) / 1000 - 0.5) * 0.012;
-  const lngOff = (((hash >> 10) % 1000) / 1000 - 0.5) * 0.012;
+  const latOff = ((hash % 1000) / 1000 - 0.5) * 0.008;
+  const lngOff = (((hash >> 10) % 1000) / 1000 - 0.5) * 0.008;
   return { latOff, lngOff };
 }
 
-// Get coordinates for a record - use actual coords if available, otherwise fallback to kecamatan
 function getRecordCoords(
   farm: { latitude: number; longitude: number; kecamatan: string; desa: string },
   index: number
-): { lat: number; lng: number } | null {
-  // If record has valid coordinates, use them
+): { lat: number; lng: number; isExact: boolean } | null {
   if (farm.latitude && farm.longitude && farm.latitude !== 0 && farm.longitude !== 0) {
-    return { lat: farm.latitude, lng: farm.longitude };
+    return { lat: farm.latitude, lng: farm.longitude, isExact: true };
   }
 
-  // Fallback: use kecamatan coordinates with a small offset per desa
+  const desaKey = `${farm.kecamatan}|${farm.desa}`;
+  const desaCoords = DESA_COORDS[desaKey];
+  if (desaCoords) {
+    const { latOff, lngOff } = hashOffset(farm.desa + farm.kecamatan, index);
+    return { lat: desaCoords.lat + latOff, lng: desaCoords.lng + lngOff, isExact: false };
+  }
+
   const kecCoords = KECAMATAN_COORDS[farm.kecamatan];
   if (!kecCoords) return null;
 
-  // Generate offset based on desa name + index to spread markers
   const { latOff, lngOff } = hashOffset(farm.desa + farm.kecamatan, index);
-  return {
-    lat: kecCoords.lat + latOff,
-    lng: kecCoords.lng + lngOff,
-  };
+  return { lat: kecCoords.lat + latOff, lng: kecCoords.lng + lngOff, isExact: false };
 }
 
 export default function MapInner() {
@@ -95,14 +92,13 @@ export default function MapInner() {
     if (!mapRef.current || mapInstanceRef.current) return;
 
     const map = L.map(mapRef.current, {
-      center: [0.27, 109.08],
+      center: [0.36, 109.0],
       zoom: 10,
       scrollWheelZoom: true,
       minZoom: 8,
       maxZoom: 18,
     });
 
-    // === Base Layers ===
     const streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
       maxZoom: 19,
@@ -114,13 +110,8 @@ export default function MapInner() {
     });
 
     const hybridLayer = L.layerGroup([
-      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-        maxZoom: 19,
-      }),
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        opacity: 0.4,
-      }),
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 }),
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, opacity: 0.4 }),
     ]);
 
     const terrainLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
@@ -129,33 +120,25 @@ export default function MapInner() {
     });
 
     const baseLayers: Record<string, L.TileLayer | L.LayerGroup> = {
-      '🗺️ Peta Jalan': streetLayer,
-      '🛰️ Satelit': satelliteLayer,
-      '🔄 Hybrid': hybridLayer,
-      '⛰️ Terrain': terrainLayer,
+      'Peta Jalan': streetLayer,
+      'Satelit': satelliteLayer,
+      'Hybrid': hybridLayer,
+      'Terrain': terrainLayer,
     };
 
-    // Add default layer
     streetLayer.addTo(map);
 
-    // Add layer control
-    L.control.layers(baseLayers, {}, {
-      position: 'topright',
-      collapsed: true,
-    }).addTo(map);
+    L.control.layers(baseLayers, {}, { position: 'topright', collapsed: true }).addTo(map);
 
     mapInstanceRef.current = map;
 
-    // Create the main marker cluster group with custom options
     const clusterGroup = L.markerClusterGroup({
       maxClusterRadius: 60,
       spiderfyOnMaxZoom: true,
       showCoverageOnHover: true,
       zoomToBoundsOnClick: true,
       iconCreateFunction: createClusterIcon,
-      // Disable clustering at high zoom levels so individual markers show
       disableClusteringAtZoom: 15,
-      // Chunked loading for performance
       chunkedLoading: true,
       chunkInterval: 50,
     });
@@ -163,7 +146,7 @@ export default function MapInner() {
     clusterGroupRef.current = clusterGroup;
     map.addLayer(clusterGroup);
 
-    // Add legend
+    // Legend
     const legend = L.control({ position: 'bottomleft' });
     legend.onAdd = () => {
       const div = L.DomUtil.create('div', '');
@@ -176,7 +159,7 @@ export default function MapInner() {
           </div>
           <div style="display:flex;align-items:center;gap:6px;">
             <svg viewBox="0 0 100 60" width="24" height="15"><path d="M10,30 L0,10 C25,20 50,10 70,10 C85,10 95,20 95,30 C95,40 85,50 70,50 C50,50 25,40 0,50 Z" fill="#eab308" stroke="#ca8a04" stroke-width="2"/><circle cx="78" cy="26" r="5" fill="white"/><circle cx="79" cy="25" r="2.5" fill="#1e293b"/></svg>
-            <span>Lokasi perkiraan</span>
+            <span>Lokasi perkiraan (desa)</span>
           </div>
         </div>
       `;
@@ -197,7 +180,6 @@ export default function MapInner() {
     const clusterGroup = clusterGroupRef.current;
     clusterGroup.clearLayers();
 
-    // Fish icon SVG generator
     const fishIconSvg = (color: string, strokeColor: string) =>
       `<svg viewBox="0 0 100 60" width="40" height="24" style="filter:drop-shadow(1px 2px 2px rgba(0,0,0,0.35))">` +
       `<path d="M10,30 L0,10 C25,20 50,10 70,10 C85,10 95,20 95,30 C95,40 85,50 70,50 C50,50 25,40 0,50 Z" fill="${color}" stroke="${strokeColor}" stroke-width="2" stroke-linejoin="round"/>` +
@@ -206,7 +188,6 @@ export default function MapInner() {
       `<circle cx="79" cy="25" r="2.5" fill="#1e293b"/>` +
       `</svg>`;
 
-    // Blue fish icon for records with exact coordinates
     const fishFarmIcon = L.divIcon({
       html: fishIconSvg('#2563eb', '#1d4ed8'),
       className: '',
@@ -215,7 +196,6 @@ export default function MapInner() {
       popupAnchor: [0, -14],
     });
 
-    // Yellow fish icon for records with estimated coordinates (kecamatan fallback)
     const fallbackIcon = L.divIcon({
       html: fishIconSvg('#eab308', '#ca8a04'),
       className: '',
@@ -224,8 +204,6 @@ export default function MapInner() {
       popupAnchor: [0, -14],
     });
 
-    // Process ALL records - both with and without coordinates
-    // Group by location for popup info
     const locationMap = new Map<string, {
       lat: number;
       lng: number;
@@ -246,15 +224,12 @@ export default function MapInner() {
           lng: coords.lng,
           kecamatan: farm.kecamatan,
           desa: farm.desa,
-          hasExactCoords: farm.latitude !== 0 && farm.longitude !== 0,
+          hasExactCoords: coords.isExact,
           items: [],
         });
       }
       const loc = locationMap.get(key)!;
-      // If any record at this location has exact coords, mark as exact
-      if (farm.latitude !== 0 && farm.longitude !== 0) {
-        loc.hasExactCoords = true;
-      }
+      if (coords.isExact) loc.hasExactCoords = true;
       loc.items.push({
         fishType: farm.fishType,
         businessType: farm.businessType,
@@ -271,7 +246,6 @@ export default function MapInner() {
         icon: loc.hasExactCoords ? fishFarmIcon : fallbackIcon,
       });
 
-      // Build detailed popup content
       const itemsList = loc.items.slice(0, 10).map((i) => `
         <tr>
           <td style="padding:1px 4px;">${i.fishType}</td>
@@ -281,7 +255,7 @@ export default function MapInner() {
         </tr>
       `).join('');
 
-      const coordLabel = loc.hasExactCoords ? '' : '<span style="font-size:9px;color:#ca8a04;">📍 Lokasi perkiraan (koordinat kecamatan)</span><br/>';
+      const coordLabel = loc.hasExactCoords ? '' : '<span style="font-size:9px;color:#ca8a04;">Lokasi perkiraan (koordinat desa)</span><br/>';
 
       const popupContent = `
         <div style="font-size:12px;min-width:240px;max-width:320px;color:#E2EDF5;">
@@ -310,7 +284,6 @@ export default function MapInner() {
       clusterGroup.addLayer(marker);
     }
 
-    // Fit bounds if markers exist
     if (clusterGroup.getLayers().length > 0) {
       mapInstanceRef.current.fitBounds(clusterGroup.getBounds().pad(0.1));
     }
