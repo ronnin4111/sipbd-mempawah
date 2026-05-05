@@ -303,12 +303,13 @@ export default function MapInner() {
         icon: loc.hasExactCoords ? fishFarmIcon : fallbackIcon,
       });
 
-      const itemsList = loc.items.slice(0, 10).map((i) => `
+            const itemsList = loc.items.slice(0, 10).map((i) => `
         <tr>
           <td style="padding:1px 4px;">${i.fishType}</td>
           <td style="padding:1px 4px;">${i.businessType}</td>
           <td style="padding:1px 4px;text-align:right;">${formatNumber(i.productionQty)}</td>
           <td style="padding:1px 4px;">${i.farmerName || '-'}</td>
+          <td style="padding:1px 4px;">${i.groupName || '-'}</td>
         </tr>
       `).join('');
 
@@ -323,12 +324,13 @@ export default function MapInner() {
           <span>Jumlah Entry: <strong>${loc.items.length}</strong></span>
           ${loc.items.length > 0 ? `
             <table style="margin-top:6px;border-collapse:collapse;font-size:10px;width:100%;">
-              <thead>
+                            <thead>
                 <tr style="background:rgba(8,145,178,0.2);border-bottom:1px solid rgba(8,145,178,0.3);">
                   <th style="padding:2px 4px;text-align:left;">Ikan</th>
                   <th style="padding:2px 4px;text-align:left;">Usaha</th>
                   <th style="padding:2px 4px;text-align:right;">Produksi</th>
                   <th style="padding:2px 4px;text-align:left;">Pembudidaya</th>
+                  <th style="padding:2px 4px;text-align:left;">Kelompok</th>
                 </tr>
               </thead>
               <tbody>${itemsList}</tbody>
