@@ -11,6 +11,19 @@ import 'leaflet.markercluster';
 
 const formatNumber = (num: number) => new Intl.NumberFormat('id-ID').format(num);
 
+// Colors for each kecamatan boundary
+const KECAMATAN_COLORS: Record<string, string> = {
+  "Anjongan": "#2563eb",
+  "Jongkat": "#7c3aed",
+  "Mempawah Hilir": "#059669",
+  "Mempawah Timur": "#dc2626",
+  "Sadaniang": "#d97706",
+  "Segedong": "#0891b2",
+  "Sungai Kunyit": "#4f46e5",
+  "Sungai Pinyuh": "#be185d",
+  "Toho": "#65a30d",
+};
+
 function createClusterIcon(cluster: L.MarkerCluster) {
   const count = cluster.getChildCount();
   let size = 'small';
@@ -67,26 +80,37 @@ function getRecordCoords(
   if (farm.latitude && farm.longitude && farm.latitude !== 0 && farm.longitude !== 0) {
     return { lat: farm.latitude, lng: farm.longitude, isExact: true };
   }
-
   const desaKey = `${farm.kecamatan}|${farm.desa}`;
   const desaCoords = DESA_COORDS[desaKey];
   if (desaCoords) {
     const { latOff, lngOff } = hashOffset(farm.desa + farm.kecamatan, index);
     return { lat: desaCoords.lat + latOff, lng: desaCoords.lng + lngOff, isExact: false };
   }
-
   const kecCoords = KECAMATAN_COORDS[farm.kecamatan];
   if (!kecCoords) return null;
-
   const { latOff, lngOff } = hashOffset(farm.desa + farm.kecamatan, index);
   return { lat: kecCoords.lat + latOff, lng: kecCoords.lng + lngOff, isExact: false };
 }
+
+// List of GeoJSON files per kecamatan
+const GEOJSON_FILES = [
+  { file: '/geojson/id6104091_anjongan.geojson', kecamatan: 'Anjongan' },
+  { file: '/geojson/id6104080_jongkat.geojson', kecamatan: 'Jongkat' },
+  { file: '/geojson/id6104100_mempawah_hilir.geojson', kecamatan: 'Mempawah Hilir' },
+  { file: '/geojson/id6104101_mempawah_timur.geojson', kecamatan: 'Mempawah Timur' },
+  { file: '/geojson/id6104121_sadaniang.geojson', kecamatan: 'Sadaniang' },
+  { file: '/geojson/id6104081_segedong.geojson', kecamatan: 'Segedong' },
+  { file: '/geojson/id6104110_sungai_kunyit.geojson', kecamatan: 'Sungai Kunyit' },
+  { file: '/geojson/id6104090_sungai_pinyuh.geojson', kecamatan: 'Sungai Pinyuh' },
+  { file: '/geojson/id6104120_toho.geojson', kecamatan: 'Toho' },
+];
 
 export default function MapInner() {
   const { data } = useAllFishFarms();
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const clusterGroupRef = useRef<L.MarkerClusterGroup | null>(null);
+  const boundaryLayerRef = useRef<L.LayerGroup | null>(null);
 
   useEffect(() => {
     if (!mapRef.current || mapInstanceRef.current) return;
@@ -127,7 +151,6 @@ export default function MapInner() {
     };
 
     streetLayer.addTo(map);
-
     L.control.layers(baseLayers, {}, { position: 'topright', collapsed: true }).addTo(map);
 
     mapInstanceRef.current = map;
@@ -142,9 +165,49 @@ export default function MapInner() {
       chunkedLoading: true,
       chunkInterval: 50,
     });
-
     clusterGroupRef.current = clusterGroup;
     map.addLayer(clusterGroup);
+
+    // Boundary layer group (for desa polygons)
+    const boundaryLayer = L.layerGroup();
+    boundaryLayerRef.current = boundaryLayer;
+    map.addLayer(boundaryLayer);
+
+    // Add boundary toggle control
+    L.control.layers({}, { 'Batas Desa': boundaryLayer }, { position: 'topright', collapsed: true }).addTo(map);
+
+    // Load GeoJSON boundary files
+    GEOJSON_FILES.forEach(({ file, kecamatan }) => {
+      fetch(file)
+        .then(res => res.json())
+        .then(geojson => {
+          const color = KECAMATAN_COLORS[kecamatan] || '#6b7280';
+          L.geoJSON(geojson, {
+            style: (feature) => ({
+              color: color,
+              weight: 2,
+              opacity: 0.8,
+              fillColor: color,
+              fillOpacity: 0.08,
+              dashArray: feature?.properties?.village ? '0' : '4 4',
+            }),
+            onEachFeature: (feature, layer) => {
+              const village = feature.properties?.village || '';
+              const district = feature.properties?.district || kecamatan;
+              if (village) {
+                layer.bindTooltip(`${district} - ${village}`, {
+                  sticky: true,
+                  className: 'boundary-tooltip',
+                  direction: 'center',
+                });
+              }
+            },
+          }).addTo(boundaryLayer);
+        })
+        .catch(() => {
+          // Silently skip if file not found
+        });
+    });
 
     // Legend
     const legend = L.control({ position: 'bottomleft' });
@@ -216,25 +279,19 @@ export default function MapInner() {
     data.data.forEach((farm, index) => {
       const coords = getRecordCoords(farm, index);
       if (!coords) return;
-
       const key = `${coords.lat.toFixed(5)}-${coords.lng.toFixed(5)}`;
       if (!locationMap.has(key)) {
         locationMap.set(key, {
-          lat: coords.lat,
-          lng: coords.lng,
-          kecamatan: farm.kecamatan,
-          desa: farm.desa,
-          hasExactCoords: coords.isExact,
-          items: [],
+          lat: coords.lat, lng: coords.lng,
+          kecamatan: farm.kecamatan, desa: farm.desa,
+          hasExactCoords: coords.isExact, items: [],
         });
       }
       const loc = locationMap.get(key)!;
       if (coords.isExact) loc.hasExactCoords = true;
       loc.items.push({
-        fishType: farm.fishType,
-        businessType: farm.businessType,
-        productionQty: farm.productionQty,
-        farmerName: farm.farmerName,
+        fishType: farm.fishType, businessType: farm.businessType,
+        productionQty: farm.productionQty, farmerName: farm.farmerName,
         groupName: farm.groupName,
       });
     });
@@ -290,10 +347,27 @@ export default function MapInner() {
   }, [data]);
 
   return (
-    <div
-      ref={mapRef}
-      className="w-full h-[400px] sm:h-[500px] lg:h-[600px] rounded-lg border"
-      style={{ zIndex: 0 }}
-    />
+    <>
+      <style>{`
+        .boundary-tooltip {
+          background: rgba(255,255,255,0.92) !important;
+          border: 1px solid #94a3b8 !important;
+          border-radius: 6px !important;
+          padding: 3px 8px !important;
+          font-size: 11px !important;
+          font-weight: 600 !important;
+          color: #1e293b !important;
+          box-shadow: 0 1px 4px rgba(0,0,0,0.15) !important;
+        }
+        .boundary-tooltip::before {
+          border-top-color: rgba(255,255,255,0.92) !important;
+        }
+      `}</style>
+      <div
+        ref={mapRef}
+        className="w-full h-[400px] sm:h-[500px] lg:h-[600px] rounded-lg border"
+        style={{ zIndex: 0 }}
+      />
+    </>
   );
 }
