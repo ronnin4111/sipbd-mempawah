@@ -116,82 +116,90 @@ export const KECAMATAN_COORDS: Record<string, { lat: number; lng: number }> = {
 // Approximate coordinates for each desa in Kab. Mempawah (from OpenStreetMap Nominatim)
 // Key format: "kecamatan|desa" to avoid name collisions across kecamatan
 export const DESA_COORDS: Record<string, { lat: number; lng: number }> = {
-  // Anjongan
-  "Anjongan|Anjungan Melancar": { lat: 0.3606, lng: 109.1653 },
-  "Anjongan|Anjungan Dalam": { lat: 0.3500, lng: 109.1559 },
-  "Anjongan|Dema": { lat: 0.3360, lng: 109.2179 },
-  "Anjongan|Kepayang": { lat: 0.3376, lng: 109.1870 },
-  "Anjongan|Pak Bulu": { lat: 0.3384, lng: 109.2134 },
-  // Jongkat
-  "Jongkat|Jungkat": { lat: 0.0718, lng: 109.1929 },
-  "Jongkat|Peniti Luar": { lat: 0.1258, lng: 109.1557 },
-  "Jongkat|Sungai Nipah": { lat: 0.0948, lng: 109.1723 },
-  "Jongkat|Wajok Hilir": { lat: 0.0567, lng: 109.2142 },
-  "Jongkat|Wajok Hulu": { lat: 0.0267, lng: 109.2579 },
-  // Mempawah Hilir
-  "Mempawah Hilir|Tanjung": { lat: 0.3361, lng: 108.9348 },
-  "Mempawah Hilir|Tengah": { lat: 0.3485, lng: 108.9630 },
-  "Mempawah Hilir|Terusan": { lat: 0.3671, lng: 108.9510 },
-  "Mempawah Hilir|Kuala Secapah": { lat: 0.3278, lng: 108.9665 },
-  "Mempawah Hilir|Malikian": { lat: 0.4480, lng: 108.9424 },
-  "Mempawah Hilir|Pasir": { lat: 0.4046, lng: 108.9473 },
-  "Mempawah Hilir|Penibung": { lat: 0.4185, lng: 108.9469 },
-  "Mempawah Hilir|Sengkubang": { lat: 0.4362, lng: 108.9453 },
-  // Mempawah Timur
-  "Mempawah Timur|Pasir Wan Salim": { lat: 0.3228, lng: 108.9706 },
-  "Mempawah Timur|Pulau Pedalaman": { lat: 0.3706, lng: 108.9615 },
-  "Mempawah Timur|Antibar": { lat: 0.3598, lng: 108.9691 },
-  "Mempawah Timur|Parit Banjar": { lat: 0.3045, lng: 109.0188 },
-  "Mempawah Timur|Pasir Palembang": { lat: 0.3452, lng: 108.9742 },
-  "Mempawah Timur|Pasir Panjang": { lat: 0.3309, lng: 108.9751 },
-  "Mempawah Timur|Sejegi": { lat: 0.3735, lng: 108.9678 },
-  "Mempawah Timur|Sungai Bakau Kecil": { lat: 0.3115, lng: 109.0097 },
-  // Sadaniang
-  "Sadaniang|Amawang": { lat: 0.5545, lng: 109.1396 },
-  "Sadaniang|Ansiap": { lat: 0.5797, lng: 109.2350 },
-  "Sadaniang|Bum-bun": { lat: 0.5457, lng: 109.1019 },
-  "Sadaniang|Pentek": { lat: 0.5163, lng: 109.1548 },
-  "Sadaniang|Sekabuk": { lat: 0.5000, lng: 109.1293 },
-  "Sadaniang|Suak Barangan": { lat: 0.6585, lng: 109.2011 },
-  // Segedong
-  "Segedong|Parit Bugis": { lat: 0.1543, lng: 109.1916 },
-  "Segedong|Peniti Besar": { lat: 0.1595, lng: 109.2006 },
-  "Segedong|Peniti Dalam I": { lat: 0.1558, lng: 109.1974 },
-  "Segedong|Peniti Dalam II": { lat: 0.1712, lng: 109.2159 },
-  "Segedong|Sungai Burung": { lat: 0.1574, lng: 109.1598 },
-  "Segedong|Sungai Purun Besar": { lat: 0.1993, lng: 109.1502 },
-  // Sungai Kunyit
-  "Sungai Kunyit|Bukit Batu": { lat: 0.5232, lng: 108.9477 },
-  "Sungai Kunyit|Mendalok": { lat: 0.4621, lng: 108.9331 },
-  "Sungai Kunyit|Semparong Parit Raden": { lat: 0.4621, lng: 108.9694 },
-  "Sungai Kunyit|Semudun": { lat: 0.4530, lng: 108.9379 },
-  "Sungai Kunyit|Sungai Bundung Laut": { lat: 0.5161, lng: 108.9239 },
-  "Sungai Kunyit|Sungai Dungun": { lat: 0.4707, lng: 108.9276 },
-  "Sungai Kunyit|Sungai Duri I": { lat: 0.5381, lng: 108.9497 },
-  "Sungai Kunyit|Sungai Duri II": { lat: 0.5518, lng: 108.9239 },
-  "Sungai Kunyit|Sungai Kunyit Dalam": { lat: 0.4953, lng: 108.9350 },
-  "Sungai Kunyit|Sungai Kunyit Hulu": { lat: 0.4914, lng: 108.9581 },
-  "Sungai Kunyit|Sungai Kunyit Laut": { lat: 0.4962, lng: 108.9111 },
-  "Sungai Kunyit|Sungai Limau": { lat: 0.4856, lng: 108.9149 },
-  // Sungai Pinyuh
-  "Sungai Pinyuh|Sungai Pinyuh": { lat: 0.1896, lng: 109.1499 },
-  "Sungai Pinyuh|Galang": { lat: 0.2895, lng: 109.0994 },
-  "Sungai Pinyuh|Nusapati": { lat: 0.2570, lng: 109.0915 },
-  "Sungai Pinyuh|Peniraman": { lat: 0.2328, lng: 109.1145 },
-  "Sungai Pinyuh|Sungai Bakau Besar Laut": { lat: 0.2957, lng: 109.0372 },
-  "Sungai Pinyuh|Sungai Batang": { lat: 0.2883, lng: 109.0541 },
-  "Sungai Pinyuh|Sungai Purun Kecil": { lat: 0.2148, lng: 109.1435 },
-  "Sungai Pinyuh|Sungai Rasau": { lat: 0.3038, lng: 109.0859 },
-  "Sungai Pinyuh|Sungai Rasau Besar Darat": { lat: 0.2700, lng: 109.0700 },
-  // Toho
-  "Toho|Benuang": { lat: 0.3920, lng: 109.2845 },
-  "Toho|Kecurit": { lat: 0.3797, lng: 109.1701 },
-  "Toho|Pak Laheng": { lat: 0.4167, lng: 109.2238 },
-  "Toho|Pak Utan": { lat: 0.4233, lng: 109.2729 },
-  "Toho|Sambora": { lat: 0.3465, lng: 109.2812 },
-  "Toho|Sepang": { lat: 0.4299, lng: 109.2685 },
-  "Toho|Terap": { lat: 0.3990, lng: 109.2025 },
-  "Toho|Toho Hilir": { lat: 0.3950, lng: 109.2000 },
+  // === Mempawah Hilir ===
+  "Mempawah Hilir|Tanjung": { lat: 0.3350679, lng: 108.9225225 },
+  "Mempawah Hilir|Tengah": { lat: 0.3551577, lng: 108.9528248 },
+  "Mempawah Hilir|Terusan": { lat: 0.3685238, lng: 108.9548570 },
+  "Mempawah Hilir|Sengkubang": { lat: 0.4362985, lng: 109.0184538 },
+  "Mempawah Hilir|Penibung": { lat: 0.4093555, lng: 108.9541312 },
+  "Mempawah Hilir|Pasir": { lat: 0.3983000, lng: 109.0228972 },
+  "Mempawah Hilir|Kuala Secapah": { lat: 0.3262700, lng: 108.9600539 },
+  "Mempawah Hilir|Malikian": { lat: 0.4811539, lng: 109.0295869 },
+
+  // === Toho ===
+  "Toho|Toho Ilir": { lat: 0.4495852, lng: 109.1553266 },
+  "Toho|Pak Laheng": { lat: 0.3842078, lng: 109.2433855 },
+  "Toho|Kecurit": { lat: 0.3840147, lng: 109.1561959 },
+  "Toho|Terap": { lat: 0.3796883, lng: 109.2064482 },
+  "Toho|Sepang": { lat: 0.4571084, lng: 109.2503616 },
+  "Toho|Pak Utan": { lat: 0.4046276, lng: 109.2958682 },
+  "Toho|Benuang": { lat: 0.3737860, lng: 109.2900588 },
+  "Toho|Sambora": { lat: 0.3469655, lng: 109.2744519 },
+
+  // === Sungai Pinyuh ===
+  "Sungai Pinyuh|Sungai Pinyuh": { lat: 0.2716799, lng: 109.0732995 },
+  "Sungai Pinyuh|Sungai Rasau": { lat: 0.3063136, lng: 109.0970638 },
+  "Sungai Pinyuh|Sungai Bakau Besar Darat": { lat: 0.3281197, lng: 109.0575592 },
+  "Sungai Pinyuh|Sungai Purun Kecil": { lat: 0.2392654, lng: 109.1635631 },
+  "Sungai Pinyuh|Sungai Bakau Besar Laut": { lat: 0.2910035, lng: 109.0300342 },
+  "Sungai Pinyuh|Sungai Batang": { lat: 0.2828653, lng: 109.0515112 },
+  "Sungai Pinyuh|Peniraman": { lat: 0.2338335, lng: 109.1201941 },
+  "Sungai Pinyuh|Nusapati": { lat: 0.2611532, lng: 109.0973216 },
+  "Sungai Pinyuh|Galang": { lat: 0.3024278, lng: 109.1115429 },
+
+  // === Siantan ===
+  "Siantan|Wajok Hilir": { lat: 0.1226973, lng: 109.2744658 },
+  "Siantan|Sungai Nipah": { lat: 0.0917707, lng: 109.1779802 },
+  "Siantan|Peniti Luar": { lat: 0.1222096, lng: 109.1618173 },
+  "Siantan|Wajok Hulu": { lat: 0.0647680, lng: 109.3517677 },
+  "Siantan|Jungkat": { lat: 0.1128910, lng: 109.2225083 },
+
+  // === Sungai Kunyit ===
+  "Sungai Kunyit|Sungai Duri I": { lat: 0.5535261, lng: 108.9293018 },
+  "Sungai Kunyit|Sungai Duri Ii": { lat: 0.5374319, lng: 108.9384082 },
+  "Sungai Kunyit|Bukit Batu": { lat: 0.5468343, lng: 108.9952184 },
+  "Sungai Kunyit|Sungai Bundung Laut": { lat: 0.5195909, lng: 108.9179666 },
+  "Sungai Kunyit|Sungai Kunyit Laut": { lat: 0.4999022, lng: 108.8531132 },
+  "Sungai Kunyit|Sungai Kunyit Dalam": { lat: 0.4934595, lng: 108.9342925 },
+  "Sungai Kunyit|Sungai Kunyit Hulu": { lat: 0.5266283, lng: 109.0427131 },
+  "Sungai Kunyit|Sungai Limau": { lat: 0.4869215, lng: 108.9102536 },
+  "Sungai Kunyit|Sungai Dungun": { lat: 0.4731510, lng: 108.9145450 },
+  "Sungai Kunyit|Mendalok": { lat: 0.4629973, lng: 108.9349356 },
+  "Sungai Kunyit|Semparong Parit Raden": { lat: 0.5125408, lng: 109.0496694 },
+  "Sungai Kunyit|Semudun": { lat: 0.4868910, lng: 109.0365551 },
+
+  // === Segedong ===
+  "Segedong|Peniti Besar": { lat: 0.2136608, lng: 109.2260677 },
+  "Segedong|Sungai Purun Besar": { lat: 0.2051583, lng: 109.1564730 },
+  "Segedong|Parit Bugis": { lat: 0.1610372, lng: 109.1908175 },
+  "Segedong|Peniti Dalam I": { lat: 0.1641752, lng: 109.3111520 },
+  "Segedong|Peniti Dalam Ii": { lat: 0.2170573, lng: 109.2619098 },
+  "Segedong|Sungai Burung": { lat: 0.1595769, lng: 109.1660022 },
+
+  // === Anjongan ===
+  "Anjongan|Anjungan Melancar": { lat: 0.3339006, lng: 109.1468858 },
+  "Anjongan|Anjungan Dalam": { lat: 0.3646276, lng: 109.1337613 },
+  "Anjongan|Kepayang": { lat: 0.3164432, lng: 109.1819993 },
+  "Anjongan|Pak Bulu": { lat: 0.3313688, lng: 109.2188413 },
+  "Anjongan|Dema": { lat: 0.3563806, lng: 109.2220690 },
+
+  // === Sadaniang ===
+  "Sadaniang|Sekabuk": { lat: 0.4848116, lng: 109.1842370 },
+  "Sadaniang|Pentek": { lat: 0.5315034, lng: 109.2226887 },
+  "Sadaniang|Bum-bun": { lat: 0.5686013, lng: 109.0722414 },
+  "Sadaniang|Amawang": { lat: 0.6064996, lng: 109.1216345 },
+  "Sadaniang|Ansiap": { lat: 0.6116806, lng: 109.2535517 },
+  "Sadaniang|Suak Barangan": { lat: 0.6448930, lng: 109.1520129 },
+
+  // === Mempawah Timur ===
+  "Mempawah Timur|Pulau Pedalaman": { lat: 0.3706955, lng: 108.9623442 },
+  "Mempawah Timur|Pasir Wan Salim": { lat: 0.3125949, lng: 108.9805330 },
+  "Mempawah Timur|Antibar": { lat: 0.3622155, lng: 108.9917907 },
+  "Mempawah Timur|Sejegi": { lat: 0.4024172, lng: 109.0457811 },
+  "Mempawah Timur|Pasir Palembang": { lat: 0.3460746, lng: 108.9711663 },
+  "Mempawah Timur|Pasir Panjang": { lat: 0.3344164, lng: 108.9716923 },
+  "Mempawah Timur|Sungai Bakau Kecil": { lat: 0.3100092, lng: 109.0046945 },
+  "Mempawah Timur|Parit Banjar": { lat: 0.3049102, lng: 109.0205707 },
 };
 
 export const IMPORT_PASSWORD = "dkp2024";
