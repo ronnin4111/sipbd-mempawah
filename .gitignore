@@ -50,5 +50,20 @@ test
 prompt
 
 server.log
+
+# Dev tools
+.next-dev.pid
+start-persistent.sh
+daemon.js
+server-wrapper.js
+run-dev.js
+keep-alive.sh
+auto-restart.sh
+worklog.md
+agent-ctx/
+
+# Env example (keep this file)
+!.env.example
+
 # Skills directory
 /skills/
