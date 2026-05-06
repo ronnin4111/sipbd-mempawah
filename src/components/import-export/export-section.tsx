@@ -1,5 +1,6 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { Download, FileSpreadsheet, FileText } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,7 +8,12 @@ import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { useFilterStore } from '@/store/filter-store';
 import { useState } from 'react';
-import { PdfExportDialog } from './pdf-export-dialog';
+
+// Dynamic import with ssr:false to prevent html2canvas-pro from crashing SSR on Vercel
+const PdfExportDialog = dynamic(
+  () => import('./pdf-export-dialog').then((m) => ({ default: m.PdfExportDialog })),
+  { ssr: false }
+);
 
 function buildFilterString() {
   const state = useFilterStore.getState();

@@ -2,7 +2,6 @@
 
 import { useState, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import * as XLSX from 'xlsx';
 import { Upload, FileSpreadsheet, Lock, CheckCircle2, Eye, Trash2, AlertTriangle, RefreshCw, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -170,10 +169,12 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
 
   const parseExcelFile = useCallback((f: File) => {
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
         const result = e.target?.result;
         if (!result) return;
+        // Dynamic import to avoid bundling xlsx in SSR (crashes on Vercel)
+        const XLSX = await import('xlsx');
         const wb = XLSX.read(result, { type: 'binary' });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' });

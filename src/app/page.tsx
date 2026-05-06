@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useMemo, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import { AnimatePresence, motion } from 'framer-motion';
 import { AppShell } from '@/components/layout/app-shell';
-import { DashboardCharts, PdfDashboardCharts } from '@/components/dashboard/charts';
+import { DashboardCharts } from '@/components/dashboard/charts';
 import { FilterBar } from '@/components/data-table/filter-bar';
 import { DataTable } from '@/components/data-table/data-table';
 import { MapView } from '@/components/map/map-view';
@@ -15,6 +16,12 @@ import { HeroBanner } from '@/components/layout/hero-banner';
 import { CommodityPricesTable } from '@/components/commodity-prices/commodity-prices-table';
 import { Button } from '@/components/ui/button';
 import { Upload } from 'lucide-react';
+
+// Dynamic import PdfDashboardCharts with ssr:false to avoid recharts SSR crash on Vercel
+const PdfDashboardCharts = dynamic(
+  () => import('@/components/dashboard/charts').then((m) => ({ default: m.PdfDashboardCharts })),
+  { ssr: false }
+);
 
 function DashboardSection() {
   return (
