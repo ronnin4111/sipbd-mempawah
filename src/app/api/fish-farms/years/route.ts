@@ -12,6 +12,7 @@ export async function GET() {
     return NextResponse.json({ years });
   } catch (error) {
     console.error('Error fetching years:', error);
-    return NextResponse.json({ error: 'Failed to fetch years' }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json({ error: 'Failed to fetch years', details: message }, { status: 500 });
   }
 }
