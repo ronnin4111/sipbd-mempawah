@@ -5,27 +5,38 @@ const globalForPrisma = globalThis as unknown as {
 }
 
 function createPrismaClient() {
+  const databaseUrl = process.env.DATABASE_URL || ''
+  const tursoAuthToken = process.env.TURSO_AUTH_TOKEN
+
+  // Auto-detect database type from DATABASE_URL:
+  // - "libsql://" or "https://" → Turso (remote) - requires TURSO_AUTH_TOKEN
+  // - "file:" → Local SQLite (development)
+  const isTursoUrl = databaseUrl.startsWith('libsql://') || databaseUrl.startsWith('https://')
+
+  // Also check TURSO_DATABASE_URL as fallback (for explicit Turso config)
   const tursoUrl = process.env.TURSO_DATABASE_URL
-  const tursoToken = process.env.TURSO_AUTH_TOKEN
+  const useTurso = isTursoUrl || (tursoUrl && tursoUrl.startsWith('libsql://'))
 
-  // Auto-detect Turso usage:
-  // 1. If USE_TURSO=true is explicitly set
-  // 2. OR if we're in production (Vercel) and Turso credentials are available
-  //    (Vercel can't use local SQLite files, so Turso is required)
-  const isVercel = !!process.env.VERCEL
-  const useTurso =
-    process.env.USE_TURSO === 'true' ||
-    (isVercel && !!tursoUrl && !!tursoToken) ||
-    (process.env.NODE_ENV === 'production' && !!tursoUrl && !!tursoToken)
-
-  if (useTurso && tursoUrl && tursoToken) {
-    // Dynamic import to avoid bundling issues on local dev without Turso packages
-    const { PrismaLibSql } = require('@prisma/adapter-libsql')
-    const adapter = new PrismaLibSql({ url: tursoUrl, authToken: tursoToken })
-    return new PrismaClient({
-      adapter,
-      log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
-    })
+  if (useTurso) {
+    const url = isTursoUrl ? databaseUrl : tursoUrl!
+    if (url && tursoAuthToken) {
+      try {
+        const { PrismaLibSql } = require('@prisma/adapter-libsql')
+        const adapter = new PrismaLibSql({ url, authToken: tursoAuthToken })
+        return new PrismaClient({
+          adapter,
+          log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
+        })
+      } catch (err) {
+        console.error('Failed to initialize Turso adapter:', err)
+        throw new Error(
+          'Turso adapter initialization failed. Make sure @prisma/adapter-libsql is installed.'
+        )
+      }
+    } else if (!tursoAuthToken) {
+      console.error('TURSO_AUTH_TOKEN is required when using Turso database URL')
+      throw new Error('Missing TURSO_AUTH_TOKEN environment variable')
+    }
   }
 
   // Default: use local SQLite (for local development)
