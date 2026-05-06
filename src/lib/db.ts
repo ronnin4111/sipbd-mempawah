@@ -7,14 +7,14 @@ const globalForPrisma = globalThis as unknown as {
 function createPrismaClient() {
   const databaseUrl = process.env.DATABASE_URL || ''
   const tursoAuthToken = process.env.TURSO_AUTH_TOKEN
+  const tursoUrl = process.env.TURSO_DATABASE_URL
 
   // Auto-detect database type from DATABASE_URL:
-  // - "libsql://" or "https://" → Turso (remote) - requires TURSO_AUTH_TOKEN
   // - "file:" → Local SQLite (development)
+  // - "libsql://" or "https://" → Turso (remote) - requires TURSO_AUTH_TOKEN
   const isTursoUrl = databaseUrl.startsWith('libsql://') || databaseUrl.startsWith('https://')
 
-  // Also check TURSO_DATABASE_URL as fallback (for explicit Turso config)
-  const tursoUrl = process.env.TURSO_DATABASE_URL
+  // Use Turso when DATABASE_URL points to Turso OR TURSO_DATABASE_URL is set
   const useTurso = isTursoUrl || (tursoUrl && tursoUrl.startsWith('libsql://'))
 
   if (useTurso) {
