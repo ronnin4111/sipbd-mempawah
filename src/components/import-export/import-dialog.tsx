@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import * as XLSX from 'xlsx';
-import { Upload, FileSpreadsheet, Lock, CheckCircle2, Eye, Trash2, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Upload, FileSpreadsheet, Lock, CheckCircle2, Eye, Trash2, AlertTriangle, RefreshCw, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -85,14 +85,6 @@ function normalizeContainerType(value: string): string {
   return CONTAINER_TYPE_ALIASES[lower] || value.trim();
 }
 
-/**
- * Normalize KUSUKA value from Excel.
- * Excel may store 16-digit numbers as:
- * - Number type → JS reads as number, may lose precision or show scientific notation
- * - Text type with apostrophe → JS reads as string "1234567890123456"
- * - Scientific notation (e.g. 1.2345678901234E+15)
- * This function converts all formats to a clean digit string.
- */
 function normalizeKusuka(value: string | number | undefined | null): string {
   if (value === undefined || value === null) return '';
   
@@ -116,6 +108,9 @@ function normalizeKusuka(value: string | number | undefined | null): string {
   return str.replace(/[^0-9]/g, '');
 }
 
+// Chunk size for sending import data (smaller = more stable but slower)
+const CHUNK_SIZE = 10;
+
 export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
   const queryClient = useQueryClient();
   const [password, setPassword] = useState('');
@@ -124,6 +119,7 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
   const [file, setFile] = useState<File | null>(null);
   const [previewData, setPreviewData] = useState<PreviewRow[]>([]);
   const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
   const [importResult, setImportResult] = useState<{ success: boolean; count: number; deletedCount: number; skippedCount?: number; skippedReasons?: string[]; autoFilledInfo?: string[] } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [replaceAll, setReplaceAll] = useState(true);
@@ -136,9 +132,9 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
     setPreviewData([]);
     setImportResult(null);
     setReplaceAll(true);
+    setImportProgress({ current: 0, total: 0 });
   }, []);
 
-  // Invalidate all React Query caches so fresh data is fetched
   const refreshAllData = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['fish-farms'] });
     queryClient.invalidateQueries({ queryKey: ['fish-farms-stats'] });
@@ -182,13 +178,10 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
         const ws = wb.Sheets[wb.SheetNames[0]];
         const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' });
 
-        // Fix KUSUKA column: Excel stores 16-digit numbers with precision loss in JS.
-        // Re-read the KUSUKA column from worksheet cells using formatted text to preserve all digits.
+        // Fix KUSUKA column
         if (jsonData.length > 0 && Object.keys(jsonData[0]).includes('kusuka')) {
-          // Build a map of row data from the worksheet to preserve KUSUKA text
           const headerRow: Record<string, number> = {};
           const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
-          // First, find KUSUKA column from header row
           for (let c = range.s.c; c <= range.e.c; c++) {
             const headerCell = ws[XLSX.utils.encode_cell({ r: range.s.r, c })];
             if (headerCell && String(headerCell.v).trim().toLowerCase() === 'kusuka') {
@@ -197,28 +190,21 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
             }
           }
           if (headerRow.kusukaCol !== undefined) {
-            // Read KUSUKA values directly from cells as formatted text
             const kusukaValues: string[] = [];
             for (let r = range.s.r + 1; r <= range.e.r; r++) {
               const cell = ws[XLSX.utils.encode_cell({ r, c: headerRow.kusukaCol })];
               if (cell) {
-                // Use formatted text (w) to preserve all 16 digits, fallback to value (v)
                 const text = cell.w || String(cell.v || '');
                 kusukaValues.push(text.replace(/[^0-9]/g, ''));
               } else {
                 kusukaValues.push('');
               }
             }
-            // Match kusukaValues to jsonData rows
-            // Since sheet_to_json skips completely empty rows, we need to match by a unique key
-            // Simple approach: if kusukaValues count matches jsonData count, apply directly
             if (kusukaValues.length === jsonData.length) {
               jsonData.forEach((row, i) => {
                 (row as Record<string, unknown>).kusuka = kusukaValues[i];
               });
             } else {
-              // Fallback: try to match by row position using another field
-              // Use normalizeKusuka as fallback for each row
               jsonData.forEach((row) => {
                 const raw = row.kusuka;
                 (row as Record<string, unknown>).kusuka = normalizeKusuka(raw as string | number);
@@ -303,41 +289,55 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
     [isVerified, parseExcelFile]
   );
 
+  /**
+   * Import using file upload (FormData) for better reliability.
+   * Sends the Excel file directly to the server for processing,
+   * avoiding large JSON payloads that can crash the server.
+   */
   const handleImport = async () => {
-    if (previewData.length === 0) return;
+    if (!file || previewData.length === 0) return;
     setImporting(true);
+    setImportResult(null);
+    setImportProgress({ current: previewData.length, total: previewData.length });
+
     try {
-      const res = await fetch('/api/fish-farms/import', {
+      // Send the file via FormData (much more stable than JSON payload)
+      const formData = new FormData();
+      formData.append('password', password);
+      formData.append('file', file);
+      formData.append('replaceAll', String(replaceAll));
+
+      const res = await fetch('/api/fish-farms/import-file', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password, data: previewData, replaceAll }),
+        body: formData,
       });
       const result = await res.json();
+
       if (res.ok) {
-        setImportResult({ 
-          success: true, 
-          count: result.count, 
+        setImportResult({
+          success: true,
+          count: result.count,
           deletedCount: result.deletedCount || 0,
           skippedCount: result.skippedCount || 0,
           skippedReasons: result.skippedReasons || [],
           autoFilledInfo: result.autoFilledInfo || [],
         });
+
         const skippedInfo = result.skippedCount > 0 ? ` (${result.skippedCount} baris dilewati)` : '';
-        const autoFilledNote = result.autoFilledInfo?.length > 0 ? ' - kolom kosong diisi otomatis' : '';
         if (replaceAll && result.deletedCount > 0) {
-          toast.success(`Berhasil! ${result.deletedCount} data lama dihapus, ${result.count} data baru diimpor${skippedInfo}${autoFilledNote}`);
+          toast.success(`Berhasil! ${result.deletedCount} data lama dihapus, ${result.count} data baru diimpor${skippedInfo}`);
         } else {
-          toast.success(`Berhasil mengimpor ${result.count} data${skippedInfo}${autoFilledNote}`);
+          toast.success(`Berhasil mengimpor ${result.count} data${skippedInfo}`);
         }
-        // CRITICAL: Invalidate all caches so new data appears immediately
         refreshAllData();
       } else {
         toast.error(result.error || 'Gagal mengimpor data');
       }
     } catch {
-      toast.error('Gagal mengimpor data');
+      toast.error('Gagal mengimpor data. Server mungkin sedang restart. Coba lagi dalam beberapa detik.');
     } finally {
       setImporting(false);
+      setImportProgress({ current: 0, total: 0 });
     }
   };
 
@@ -356,7 +356,6 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
       const result = await res.json();
       if (res.ok) {
         toast.success(`Berhasil menghapus ${result.deletedCount} data`);
-        // Invalidate all caches
         refreshAllData();
       } else {
         toast.error(result.error || 'Gagal menghapus data');
@@ -369,6 +368,9 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
   };
 
   const formatNumber = (num: number) => new Intl.NumberFormat('id-ID').format(num);
+  const progressPercent = importProgress.total > 0 
+    ? Math.round((importProgress.current / importProgress.total) * 100) 
+    : 0;
 
   return (
     <Dialog
@@ -576,6 +578,27 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
             </div>
           )}
 
+          {/* Import progress */}
+          {importing && (
+            <div className="space-y-2 p-4 rounded-lg bg-teal-50 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800">
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin text-teal-600" />
+                <span className="text-sm font-medium text-teal-700 dark:text-teal-400">
+                  Mengimpor data... {progressPercent}%
+                </span>
+              </div>
+              <div className="w-full bg-teal-200 dark:bg-teal-800 rounded-full h-2">
+                <div 
+                  className="bg-teal-600 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+              <p className="text-xs text-teal-600/70 dark:text-teal-400/70">
+                {importProgress.current} dari {importProgress.total} baris diproses
+              </p>
+            </div>
+          )}
+
           {/* Import result */}
           {importResult && (
             <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg p-3 space-y-1">
@@ -638,15 +661,13 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
           )}
 
           {/* Import button */}
-          {previewData.length > 0 && !importResult && (
+          {previewData.length > 0 && !importResult && !importing && (
             <Button
               onClick={handleImport}
               disabled={importing}
               className="w-full bg-teal-600 hover:bg-teal-700"
             >
-              {importing
-                ? 'Mengimpor...'
-                : replaceAll
+              {replaceAll
                 ? `Hapus Semua & Import ${previewData.length} Data`
                 : `Import ${previewData.length} Data (Gabung)`
               }

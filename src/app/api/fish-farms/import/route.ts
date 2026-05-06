@@ -62,35 +62,24 @@ function normalizeContainerType(value: string): string {
 function normalizeKusuka(value: string | number | undefined | null): string {
   if (value === undefined || value === null) return '';
   
-  // If it's a number, convert to string carefully
   if (typeof value === 'number') {
-    // Check if it's a safe integer (no precision loss)
     if (Number.isInteger(value) && value >= 0 && value <= Number.MAX_SAFE_INTEGER) {
       return String(value);
     }
-    // For unsafe numbers, try to convert and strip non-digits
     return String(value).replace(/[^0-9]/g, '');
   }
   
   let str = String(value).trim();
-  
-  // If already a clean 16-digit string, return as-is
   if (/^\d{16}$/.test(str)) return str;
   
-  // Handle scientific notation like "1.234567890123456E+15" or "1.2345678901234e+15"
   if (/\d+\.?\d*[eE][+\-]?\d+/.test(str)) {
     const num = Number(str);
     if (!isNaN(num)) {
-      // Convert to fixed-point and strip decimals
-      // For 16-digit numbers, we need up to 0 decimal places
-      const fixed = num.toFixed(0);
-      return fixed;
+      return num.toFixed(0);
     }
   }
   
-  // Strip any non-digit characters (spaces, dashes, dots, apostrophes)
-  const digitsOnly = str.replace(/[^0-9]/g, '');
-  return digitsOnly;
+  return str.replace(/[^0-9]/g, '');
 }
 
 export const maxDuration = 60; // 60 seconds timeout for Vercel
@@ -130,13 +119,11 @@ export async function POST(request: NextRequest) {
     data.forEach((record, index) => {
       const missing: string[] = [];
 
-      // Check year - must be a valid number > 0
       const year = Number(record.year);
       if (!year || year <= 0 || isNaN(year)) {
         missing.push('Tahun');
       }
 
-      // Auto-fill empty fields with defaults instead of skipping
       const kecamatan = String(record.kecamatan || '').trim();
       const desa = String(record.desa || '').trim();
       const fishType = String(record.fishType || '').trim();
@@ -156,7 +143,6 @@ export async function POST(request: NextRequest) {
         fishTypeAutoFilled++;
       }
 
-      // containerType and businessType are still required (no sensible default)
       if (!containerType) {
         missing.push('Jenis Wadah');
       }
@@ -174,7 +160,6 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    // Collect auto-fill summary
     if (fishTypeAutoFilled > 0) {
       autoFilledInfo.push(`${fishTypeAutoFilled} baris "Jenis Ikan" diisi otomatis: "${DEFAULT_FISH_TYPE}"`);
     }
@@ -192,7 +177,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Format records for bulk insert (apply defaults and normalizations)
+    // Format records for bulk insert
     const formattedRecords = validRecords.map((record) => ({
       year: Number(record.year),
       kecamatan: String(record.kecamatan || '').trim() || DEFAULT_KECAMATAN,
@@ -215,44 +200,42 @@ export async function POST(request: NextRequest) {
       cbib: typeof record.cbib === 'boolean' ? record.cbib : String(record.cbib || '').toLowerCase() === 'ya',
     }));
 
-    await db.$transaction(async (tx) => {
-      // If replaceAll mode, delete ALL existing data first
-      if (replaceAll) {
-        const deleteResult = await tx.fishFarm.deleteMany({});
-        deletedCount = deleteResult.count;
-      } else {
-        // Delete existing records with same composite keys - batch by unique composite keys
-        const compositeKeys = new Map<string, ImportFishFarm>();
-        for (const record of validRecords) {
-          const key = `${record.year}|${record.kecamatan}|${record.desa}|${record.fishType}|${record.containerType}|${record.businessType}`;
-          if (!compositeKeys.has(key)) {
-            compositeKeys.set(key, record);
-          }
-        }
-        for (const record of compositeKeys.values()) {
-          await tx.fishFarm.deleteMany({
-            where: {
-              year: Number(record.year),
-              kecamatan: String(record.kecamatan || '').trim() || DEFAULT_KECAMATAN,
-              desa: String(record.desa || '').trim() || DEFAULT_DESA,
-              fishType: String(record.fishType || '').trim() || DEFAULT_FISH_TYPE,
-              containerType: normalizeContainerType(String(record.containerType || '')),
-              businessType: String(record.businessType).trim(),
-            },
-          });
+    // Step 1: Delete existing data (outside transaction to reduce memory pressure)
+    if (replaceAll) {
+      const deleteResult = await db.fishFarm.deleteMany({});
+      deletedCount = deleteResult.count;
+    } else {
+      // Delete existing records with same composite keys
+      const compositeKeys = new Map<string, ImportFishFarm>();
+      for (const record of validRecords) {
+        const key = `${record.year}|${record.kecamatan}|${record.desa}|${record.fishType}|${record.containerType}|${record.businessType}`;
+        if (!compositeKeys.has(key)) {
+          compositeKeys.set(key, record);
         }
       }
-
-      // Bulk insert in batches of 50 to avoid timeout
-      const BATCH_SIZE = 50;
-      for (let i = 0; i < formattedRecords.length; i += BATCH_SIZE) {
-        const batch = formattedRecords.slice(i, i + BATCH_SIZE);
-        await tx.fishFarm.createMany({
-          data: batch,
+      for (const record of compositeKeys.values()) {
+        await db.fishFarm.deleteMany({
+          where: {
+            year: Number(record.year),
+            kecamatan: String(record.kecamatan || '').trim() || DEFAULT_KECAMATAN,
+            desa: String(record.desa || '').trim() || DEFAULT_DESA,
+            fishType: String(record.fishType || '').trim() || DEFAULT_FISH_TYPE,
+            containerType: normalizeContainerType(String(record.containerType || '')),
+            businessType: String(record.businessType).trim(),
+          },
         });
-        count += batch.length;
       }
-    });
+    }
+
+    // Step 2: Insert in small batches (outside transaction for stability)
+    const BATCH_SIZE = 10;
+    for (let i = 0; i < formattedRecords.length; i += BATCH_SIZE) {
+      const batch = formattedRecords.slice(i, i + BATCH_SIZE);
+      await db.fishFarm.createMany({
+        data: batch,
+      });
+      count += batch.length;
+    }
 
     const skippedCount = data.length - validRecords.length;
     return NextResponse.json({

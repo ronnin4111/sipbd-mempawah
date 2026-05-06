@@ -5,11 +5,13 @@ const globalForPrisma = globalThis as unknown as {
 }
 
 function createPrismaClient() {
-  // If Turso credentials are available, use Turso (for Vercel/production)
+  // Use Turso ONLY when USE_TURSO=true is set (for Vercel/production)
+  // This prevents the Turso adapter from causing crashes in the dev sandbox
+  const useTurso = process.env.USE_TURSO === 'true'
   const tursoUrl = process.env.TURSO_DATABASE_URL
   const tursoToken = process.env.TURSO_AUTH_TOKEN
 
-  if (tursoUrl && tursoToken) {
+  if (useTurso && tursoUrl && tursoToken) {
     // Dynamic import to avoid bundling issues on local dev without Turso packages
     const { PrismaLibSql } = require('@prisma/adapter-libsql')
     const adapter = new PrismaLibSql({ url: tursoUrl, authToken: tursoToken })
@@ -19,7 +21,7 @@ function createPrismaClient() {
     })
   }
 
-  // Otherwise, use local SQLite (for local development)
+  // Default: use local SQLite (for local development)
   return new PrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
   })
