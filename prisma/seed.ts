@@ -1,7 +1,20 @@
 import { PrismaClient } from '@prisma/client';
+import { PrismaLibSql } from '@prisma/adapter-libsql';
 import { KECAMATAN_DESA, FISH_TYPES, CONTAINER_TYPES, BUSINESS_TYPES, YEARS, KECAMATAN_COORDS } from '../src/lib/constants';
 
-const prisma = new PrismaClient();
+function createPrismaClient() {
+  const url = process.env.TURSO_DATABASE_URL;
+  const authToken = process.env.TURSO_AUTH_TOKEN;
+
+  if (!url || !authToken) {
+    throw new Error('TURSO_DATABASE_URL and TURSO_AUTH_TOKEN must be set');
+  }
+
+  const adapter = new PrismaLibSql({ url, authToken });
+  return new PrismaClient({ adapter });
+}
+
+const prisma = createPrismaClient();
 
 function seededRandom(seed: number): () => number {
   let s = seed;
@@ -19,7 +32,7 @@ async function main() {
 
   // Generate diverse combinations across kecamatan/desa
   const kecamatanList = Object.keys(KECAMATAN_DESA);
-  
+
   // Generate 150 records with good distribution
   for (let i = 0; i < 150; i++) {
     const kecIdx = Math.floor(rand() * kecamatanList.length);
@@ -68,7 +81,7 @@ async function main() {
 
     const productionQty = Math.round(baseProd * 100) / 100;
     const targetQty = Math.round((productionQty * (0.85 + rand() * 0.35)) * 100) / 100;
-    
+
     // Price per kg varies by fish type
     const pricePerKg: Record<string, number> = {
       "Mas": 28000, "Nila": 22000, "Lele": 18000, "Patin": 25000,
