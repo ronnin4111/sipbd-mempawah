@@ -5,11 +5,18 @@ const globalForPrisma = globalThis as unknown as {
 }
 
 function createPrismaClient() {
-  // Use Turso ONLY when USE_TURSO=true is set (for Vercel/production)
-  // This prevents the Turso adapter from causing crashes in the dev sandbox
-  const useTurso = process.env.USE_TURSO === 'true'
   const tursoUrl = process.env.TURSO_DATABASE_URL
   const tursoToken = process.env.TURSO_AUTH_TOKEN
+
+  // Auto-detect Turso usage:
+  // 1. If USE_TURSO=true is explicitly set
+  // 2. OR if we're in production (Vercel) and Turso credentials are available
+  //    (Vercel can't use local SQLite files, so Turso is required)
+  const isVercel = !!process.env.VERCEL
+  const useTurso =
+    process.env.USE_TURSO === 'true' ||
+    (isVercel && !!tursoUrl && !!tursoToken) ||
+    (process.env.NODE_ENV === 'production' && !!tursoUrl && !!tursoToken)
 
   if (useTurso && tursoUrl && tursoToken) {
     // Dynamic import to avoid bundling issues on local dev without Turso packages

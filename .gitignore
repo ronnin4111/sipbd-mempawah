@@ -32,6 +32,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -52,3 +53,16 @@ prompt
 server.log
 # Skills directory
 /skills/
+# Dev sandbox artifacts
+.next-dev.pid
+auto-restart.sh
+keep-alive-daemon.js
+keep-alive.sh
+daemon.js
+dev.log
+dev.out.log
+agent-ctx/
+.zscripts/
+upload/
+src_new/
+worklog.md
