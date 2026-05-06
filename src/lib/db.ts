@@ -1,30 +1,13 @@
 import { PrismaClient } from '@prisma/client'
-import { PrismaLibSql } from '@prisma/adapter-libsql'
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
 }
 
-function createPrismaClient() {
-  const url = process.env.TURSO_DATABASE_URL
-  const authToken = process.env.TURSO_AUTH_TOKEN
-
-  if (!url) {
-    throw new Error('TURSO_DATABASE_URL environment variable is not set')
-  }
-
-  if (!authToken) {
-    throw new Error('TURSO_AUTH_TOKEN environment variable is not set')
-  }
-
-  const adapter = new PrismaLibSql({ url, authToken })
-
-  return new PrismaClient({
-    adapter,
+export const db =
+  globalForPrisma.prisma ??
+  new PrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
   })
-}
-
-export const db = globalForPrisma.prisma ?? createPrismaClient()
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db
