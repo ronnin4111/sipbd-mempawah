@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { IMPORT_PASSWORD } from '@/lib/constants';
+import { generateFarmerId } from '@/lib/farmer-id';
 import * as XLSX from 'xlsx';
 
 const DEFAULT_FISH_TYPE = 'Lainnya';
@@ -120,15 +121,21 @@ export async function POST(request: NextRequest) {
       if (!desa) desaAutoFilled++;
       if (!fishType) fishTypeAutoFilled++;
 
+      const farmerName = String(row.farmerName || '').trim();
+      const groupName = String(row.groupName || '').trim();
+      const kec = kecamatan || DEFAULT_KECAMATAN;
+      const des = desa || DEFAULT_DESA;
+
       formattedRecords.push({
         year,
-        kecamatan: kecamatan || DEFAULT_KECAMATAN,
-        desa: desa || DEFAULT_DESA,
+        farmerId: generateFarmerId({ farmerName, groupName, kecamatan: kec, desa: des }),
+        kecamatan: kec,
+        desa: des,
         fishType: fishType || DEFAULT_FISH_TYPE,
         containerType: normalizeContainerType(containerType),
         businessType,
-        farmerName: String(row.farmerName || '').trim(),
-        groupName: String(row.groupName || '').trim(),
+        farmerName,
+        groupName,
         productionQty: Number(row.productionQty) || 0,
         rtpCount: Number(row.rtpCount) || 0,
         farmerCount: Number(row.farmerCount) || 0,

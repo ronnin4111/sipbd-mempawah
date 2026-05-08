@@ -27,6 +27,7 @@ function buildFilterParams(
 
 export interface FishFarm {
   id: string;
+  farmerId: string;
   year: number;
   kecamatan: string;
   desa: string;

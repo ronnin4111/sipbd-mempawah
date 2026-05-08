@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react';
 import { useAllFishFarms } from '@/hooks/use-fish-farms';
 import { KECAMATAN_COORDS, DESA_COORDS } from '@/lib/constants';
+import { generateFarmerId } from '@/lib/farmer-id';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
@@ -248,18 +249,21 @@ export default function MapInner() {
     clusterGroup.clearLayers();
 
     // === DEDUPLICATION: avoid double markers when multi-year data exists ===
-    // Same farmer at same location should only appear once.
-    // Strategy: group by unique key (kecamatan+desa+farmerName+groupName+fishType+containerType+businessType)
-    // and keep only the LATEST year's record for each key.
-    const uniqueMap = new Map<string, typeof data.data[0]>();
+    // Use farmerId to identify unique farmers. Keep only the latest year's record per farmer.
+    const farmerMap = new Map<string, typeof data.data[0]>();
     for (const farm of data.data) {
-      const key = `${farm.kecamatan}|${farm.desa}|${farm.farmerName}|${farm.groupName}|${farm.fishType}|${farm.containerType}|${farm.businessType}`;
-      const existing = uniqueMap.get(key);
+      const fid = farm.farmerId || generateFarmerId({
+        farmerName: farm.farmerName || '',
+        groupName: farm.groupName || '',
+        kecamatan: farm.kecamatan || '',
+        desa: farm.desa || '',
+      });
+      const existing = farmerMap.get(fid);
       if (!existing || farm.year > existing.year) {
-        uniqueMap.set(key, farm);
+        farmerMap.set(fid, farm);
       }
     }
-    const dedupedData = Array.from(uniqueMap.values());
+    const dedupedData = Array.from(farmerMap.values());
 
     // Simple round dot icon — one color for all markers
     const dotIcon = L.divIcon({

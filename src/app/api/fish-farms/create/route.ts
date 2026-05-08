@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { IMPORT_PASSWORD } from '@/lib/constants';
+import { generateFarmerId } from '@/lib/farmer-id';
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,16 +28,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const farmerName = String(data.farmerName || '').trim();
+    const groupName = String(data.groupName || '').trim();
+    const kecamatan = String(data.kecamatan);
+    const desa = String(data.desa);
+
     const record = await db.fishFarm.create({
       data: {
         year: Number(data.year),
-        kecamatan: String(data.kecamatan),
-        desa: String(data.desa),
+        farmerId: generateFarmerId({ farmerName, groupName, kecamatan, desa }),
+        kecamatan,
+        desa,
         fishType: String(data.fishType),
         containerType: String(data.containerType),
         businessType: String(data.businessType),
-        farmerName: String(data.farmerName || ''),
-        groupName: String(data.groupName || ''),
+        farmerName,
+        groupName,
         productionQty: Number(data.productionQty) || 0,
         rtpCount: Number(data.rtpCount) || 0,
         farmerCount: Number(data.farmerCount) || 0,

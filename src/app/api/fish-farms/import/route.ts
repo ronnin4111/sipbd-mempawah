@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { IMPORT_PASSWORD } from '@/lib/constants';
+import { generateFarmerId } from '@/lib/farmer-id';
 
 interface ImportFishFarm {
   year: number;
@@ -178,27 +179,35 @@ export async function POST(request: NextRequest) {
     }
 
     // Format records for bulk insert
-    const formattedRecords = validRecords.map((record) => ({
-      year: Number(record.year),
-      kecamatan: String(record.kecamatan || '').trim() || DEFAULT_KECAMATAN,
-      desa: String(record.desa || '').trim() || DEFAULT_DESA,
-      fishType: String(record.fishType || '').trim() || DEFAULT_FISH_TYPE,
-      containerType: normalizeContainerType(String(record.containerType || '')),
-      businessType: String(record.businessType || '').trim(),
-      farmerName: String(record.farmerName || '').trim(),
-      groupName: String(record.groupName || '').trim(),
-      productionQty: Number(record.productionQty) || 0,
-      rtpCount: Number(record.rtpCount) || 0,
-      farmerCount: Number(record.farmerCount) || 0,
-      groupCount: Number(record.groupCount) || 0,
-      targetQty: Number(record.targetQty) || 0,
-      productionValue: Number(record.productionValue) || 0,
-      latitude: Number(record.latitude) || 0,
-      longitude: Number(record.longitude) || 0,
-      kusuka: normalizeKusuka(record.kusuka),
-      cpib: typeof record.cpib === 'boolean' ? record.cpib : String(record.cpib || '').toLowerCase() === 'ya',
-      cbib: typeof record.cbib === 'boolean' ? record.cbib : String(record.cbib || '').toLowerCase() === 'ya',
-    }));
+    const formattedRecords = validRecords.map((record) => {
+      const kec = String(record.kecamatan || '').trim() || DEFAULT_KECAMATAN;
+      const des = String(record.desa || '').trim() || DEFAULT_DESA;
+      const farmerName = String(record.farmerName || '').trim();
+      const groupName = String(record.groupName || '').trim();
+
+      return {
+        year: Number(record.year),
+        farmerId: generateFarmerId({ farmerName, groupName, kecamatan: kec, desa: des }),
+        kecamatan: kec,
+        desa: des,
+        fishType: String(record.fishType || '').trim() || DEFAULT_FISH_TYPE,
+        containerType: normalizeContainerType(String(record.containerType || '')),
+        businessType: String(record.businessType || '').trim(),
+        farmerName,
+        groupName,
+        productionQty: Number(record.productionQty) || 0,
+        rtpCount: Number(record.rtpCount) || 0,
+        farmerCount: Number(record.farmerCount) || 0,
+        groupCount: Number(record.groupCount) || 0,
+        targetQty: Number(record.targetQty) || 0,
+        productionValue: Number(record.productionValue) || 0,
+        latitude: Number(record.latitude) || 0,
+        longitude: Number(record.longitude) || 0,
+        kusuka: normalizeKusuka(record.kusuka),
+        cpib: typeof record.cpib === 'boolean' ? record.cpib : String(record.cpib || '').toLowerCase() === 'ya',
+        cbib: typeof record.cbib === 'boolean' ? record.cbib : String(record.cbib || '').toLowerCase() === 'ya',
+      };
+    });
 
     // Step 1: Delete existing data based on mode
     if (replaceAll) {

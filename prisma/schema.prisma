@@ -9,6 +9,7 @@ datasource db {
 
 model FishFarm {
   id              String   @id @default(cuid())
+  farmerId        String   @default("")
   year            Int
   kecamatan       String
   desa            String

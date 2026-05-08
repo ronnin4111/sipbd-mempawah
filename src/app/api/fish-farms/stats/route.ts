@@ -1,5 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { generateFarmerId } from '@/lib/farmer-id';
+
+// Helper to generate farmerId from a database record (fallback for old records without farmerId)
+function generateFarmerIdFromRecord(r: { farmerName: string; groupName: string; kecamatan: string; desa: string }): string {
+  return generateFarmerId({
+    farmerName: r.farmerName || '',
+    groupName: r.groupName || '',
+    kecamatan: r.kecamatan || '',
+    desa: r.desa || '',
+  });
+}
 
 // Case-insensitive contains filter
 const ciContains = (value: string) => {
@@ -80,19 +91,35 @@ export async function GET(request: NextRequest) {
       .reduce((sum, r) => sum + r.productionQty, 0);
 
     // === Totals (RTP, Farmer) ===
-    // IMPORTANT: farmerCount and rtpCount should NOT be summed across years
-    // because the same farmers exist in multiple years. Use the LATEST year's data only.
+    // Use farmerId to count unique farmers across all years.
+    // For farmer/rtp counts, take the value from the LATEST year for each unique farmerId.
     const allYears = [...new Set(records.map(r => r.year))].sort((a, b) => b - a);
     const latestYear = allYears.length > 0 ? allYears[0] : null;
-    const latestYearRecords = latestYear ? records.filter(r => r.year === latestYear) : records;
 
-    const totalRtp = latestYearRecords.reduce((sum, r) => sum + r.rtpCount, 0);
-    const totalFarmer = latestYearRecords.reduce((sum, r) => sum + r.farmerCount, 0);
+    // Build a map: farmerId → record from latest year
+    const farmerLatestRecord = new Map<string, typeof records[0]>();
+    // Sort records by year desc so latest year comes first
+    const sortedByYearDesc = [...records].sort((a, b) => b.year - a.year);
+    for (const r of sortedByYearDesc) {
+      const fid = r.farmerId || generateFarmerIdFromRecord(r);
+      if (!farmerLatestRecord.has(fid)) {
+        farmerLatestRecord.set(fid, r);
+      }
+    }
+
+    // Sum farmer/rtp counts from unique farmers only
+    const uniqueFarmerRecords = Array.from(farmerLatestRecord.values());
+    const totalRtp = uniqueFarmerRecords.reduce((sum, r) => sum + r.rtpCount, 0);
+    const totalFarmer = uniqueFarmerRecords.reduce((sum, r) => sum + r.farmerCount, 0);
 
     // === KUSUKA count ===
-    // KUSUKA berisi nomor 16 digit (seperti NIK), jika berisi 16 digit maka terhitung 1 kartu
-    // Use latest year to avoid double-counting across years
-    const totalKusuka = latestYearRecords.filter(r => /^\d{16}$/.test(String(r.kusuka || '').trim())).length;
+    // KUSUKA berisi nomor 16 digit (seperti NIK), count unique across all years
+    const kusukaSet = new Set<string>();
+    uniqueFarmerRecords.forEach(r => {
+      const k = String(r.kusuka || '').trim();
+      if (/^\d{16}$/.test(k)) kusukaSet.add(k);
+    });
+    const totalKusuka = kusukaSet.size;
 
     // === Total Group: count UNIQUE group names (case-insensitive) ===
     const groupNamesGlobal = new Set<string>();
@@ -175,15 +202,15 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // === RTP by business type (use latest year to avoid double-counting) ===
+    // === RTP by business type (use unique farmerId records to avoid double-counting) ===
     const rtpByBusinessType: Record<string, number> = {};
-    latestYearRecords.forEach(r => {
+    uniqueFarmerRecords.forEach(r => {
       rtpByBusinessType[r.businessType] = (rtpByBusinessType[r.businessType] || 0) + r.rtpCount;
     });
 
-    // === Farmer by business type (use latest year to avoid double-counting) ===
+    // === Farmer by business type (use unique farmerId records to avoid double-counting) ===
     const farmerByBusinessType: Record<string, number> = {};
-    latestYearRecords.forEach(r => {
+    uniqueFarmerRecords.forEach(r => {
       farmerByBusinessType[r.businessType] = (farmerByBusinessType[r.businessType] || 0) + r.farmerCount;
     });
 
@@ -294,7 +321,7 @@ export async function GET(request: NextRequest) {
     });
 
     // === Production by kecamatan detail - separated by business type ===
-    // Production is summed across years, but farmer/rtp counts use latest year only
+    // Production is summed across years, but farmer/rtp counts use unique farmerId records
     const productionByKecamatanDetail: Record<string, {
       pembesaranProduction: number;
       pembenihanProduction: number;
@@ -317,8 +344,8 @@ export async function GET(request: NextRequest) {
       }
       productionByKecamatanDetail[r.kecamatan].value += r.productionValue;
     });
-    // Calculate farmer/rtp from latest year records only (avoid double-counting)
-    latestYearRecords.forEach(r => {
+    // Calculate farmer/rtp from unique farmer records only (avoid double-counting)
+    uniqueFarmerRecords.forEach(r => {
       if (productionByKecamatanDetail[r.kecamatan]) {
         productionByKecamatanDetail[r.kecamatan].rtp += r.rtpCount;
         productionByKecamatanDetail[r.kecamatan].farmer += r.farmerCount;
@@ -331,7 +358,7 @@ export async function GET(request: NextRequest) {
     });
 
     // === Production by Fish Type detail (with value, rtp, farmer, group) ===
-    // Production is summed across years, but farmer/rtp counts use latest year only
+    // Production is summed across years, but farmer/rtp counts use unique farmerId records
     const productionByFishTypeDetail: Record<string, {
       pembesaranProduction: number;
       pembenihanProduction: number;
@@ -359,8 +386,8 @@ export async function GET(request: NextRequest) {
         groupNamesByFishType[r.fishType].add(r.groupName.trim().toLowerCase());
       }
     });
-    // Calculate farmer/rtp from latest year records only (avoid double-counting)
-    latestYearRecords.forEach(r => {
+    // Calculate farmer/rtp from unique farmer records only (avoid double-counting)
+    uniqueFarmerRecords.forEach(r => {
       if (productionByFishTypeDetail[r.fishType]) {
         productionByFishTypeDetail[r.fishType].rtp += r.rtpCount;
         productionByFishTypeDetail[r.fishType].farmer += r.farmerCount;
