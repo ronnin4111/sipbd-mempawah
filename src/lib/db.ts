@@ -11,7 +11,7 @@ const TURSO_CONFIG = {
   authToken: process.env.TURSO_AUTH_TOKEN || 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJleHAiOjE3ODA2NTI0MDIsImlhdCI6MTc3ODA2MDQwMiwiaWQiOiIwMTlkZmNhNy0wYTAxLTc2NTYtODhhZC0zMjBiNTVjM2ZmYjYiLCJyaWQiOiIyYWI1NjA2ZC1kMzJhLTQ0MmItYTU5MC0xNWQzYjljOTc1YmIifQ.zGrpac_GfYS-ZPaCaU4T-vG2LeKdci0CVGZ52JMoYWkJLJB0oC5ELPDksVbPAS8Ca07vcWu0tA9WXT2kp5cvCQ',
 }
 
-function createPrismaClient() {
+function createPrismaClient(): PrismaClient {
   const databaseUrl = process.env.DATABASE_URL || ''
 
   // Auto-detect database type from DATABASE_URL:
@@ -35,12 +35,18 @@ function createPrismaClient() {
 
   if (url && authToken) {
     try {
-      const { PrismaLibSql } = require('@prisma/adapter-libsql')
-      const adapter = new PrismaLibSql({ url, authToken })
-      return new PrismaClient({
-        adapter,
-        log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
-      })
+      // Dynamic require to handle export name differences across package versions
+      // Some versions export PrismaLibSQL (uppercase SQL), others PrismaLibSql (lowercase ql)
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const adapterModule = require('@prisma/adapter-libsql')
+      const PrismaLibSqlAdapter = adapterModule.PrismaLibSQL || adapterModule.PrismaLibSql
+      if (PrismaLibSqlAdapter) {
+        const adapter = new PrismaLibSqlAdapter({ url, authToken })
+        return new PrismaClient({
+          adapter,
+          log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
+        })
+      }
     } catch (err) {
       console.error('Failed to initialize Turso adapter:', err)
       throw new Error(
