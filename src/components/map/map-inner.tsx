@@ -247,6 +247,20 @@ export default function MapInner() {
     const clusterGroup = clusterGroupRef.current;
     clusterGroup.clearLayers();
 
+    // === DEDUPLICATION: avoid double markers when multi-year data exists ===
+    // Same farmer at same location should only appear once.
+    // Strategy: group by unique key (kecamatan+desa+farmerName+groupName+fishType+containerType+businessType)
+    // and keep only the LATEST year's record for each key.
+    const uniqueMap = new Map<string, typeof data.data[0]>();
+    for (const farm of data.data) {
+      const key = `${farm.kecamatan}|${farm.desa}|${farm.farmerName}|${farm.groupName}|${farm.fishType}|${farm.containerType}|${farm.businessType}`;
+      const existing = uniqueMap.get(key);
+      if (!existing || farm.year > existing.year) {
+        uniqueMap.set(key, farm);
+      }
+    }
+    const dedupedData = Array.from(uniqueMap.values());
+
     // Simple round dot icon — one color for all markers
     const dotIcon = L.divIcon({
       html: `<div style="
@@ -295,7 +309,7 @@ export default function MapInner() {
       popupAnchor: [0, -9],
     });
 
-            function createPopup(farm: typeof data.data[0], coordLabel: string) {
+            function createPopup(farm: typeof dedupedData[0], coordLabel: string) {
       return `
         <div style="font-size:13px;min-width:220px;max-width:300px;color:#1e293b;background:#ffffff;padding:10px 12px;border-radius:8px;">
           <strong style="font-size:15px;color:#0d9488;display:block;margin-bottom:6px;">${farm.kecamatan} - ${farm.desa}</strong>
@@ -312,11 +326,11 @@ export default function MapInner() {
       `;
     }
 
-    // Group farms by groupName
-    const groupMap = new Map<string, typeof data.data>();
-    const noGroup: typeof data.data = [];
+    // Group farms by groupName (using deduped data)
+    const groupMap = new Map<string, typeof dedupedData[0][]>();
+    const noGroup: typeof dedupedData[0][] = [];
 
-    data.data.forEach((farm) => {
+    dedupedData.forEach((farm) => {
       const gn = farm.groupName?.trim();
       if (gn) {
         if (!groupMap.has(gn)) groupMap.set(gn, []);
