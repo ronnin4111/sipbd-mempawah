@@ -325,10 +325,11 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
         });
 
         const skippedInfo = result.skippedCount > 0 ? ` (${result.skippedCount} baris dilewati)` : '';
+        const yearInfo = result.affectedYears ? ` (Tahun: ${result.affectedYears.join(', ')})` : '';
         if (replaceAll && result.deletedCount > 0) {
-          toast.success(`Berhasil! ${result.deletedCount} data lama dihapus, ${result.count} data baru diimpor${skippedInfo}`);
+          toast.success(`Berhasil! ${result.deletedCount} data lama${yearInfo} dihapus, ${result.count} data baru diimpor${skippedInfo}`);
         } else {
-          toast.success(`Berhasil mengimpor ${result.count} data${skippedInfo}`);
+          toast.success(`Berhasil mengimpor ${result.count} data${yearInfo}${skippedInfo}`);
         }
         refreshAllData();
       } else {
@@ -522,11 +523,11 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
                 className="h-4 w-4"
               />
               <label htmlFor="replace-all" className="text-sm cursor-pointer">
-                <span className="font-medium">Ganti semua data</span>
+                <span className="font-medium">Ganti data per tahun</span>
                 <span className="text-xs text-muted-foreground block mt-0.5">
                   {replaceAll
-                    ? 'Semua data lama akan dihapus dan diganti dengan data baru'
-                    : 'Hanya data dengan key yang sama yang akan ditimpa (data lama lainnya tetap ada)'}
+                    ? 'Data lama untuk tahun yang sama akan dihapus dan diganti dengan data baru. Data tahun lain tetap ada.'
+                    : 'Hanya data dengan key yang sama (tahun+kecamatan+desa+ikan+wadah+usaha) yang akan ditimpa, data lain tetap ada'}
                 </span>
               </label>
             </div>
@@ -669,7 +670,7 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
               className="w-full bg-teal-600 hover:bg-teal-700"
             >
               {replaceAll
-                ? `Hapus Semua & Import ${previewData.length} Data`
+                ? `Ganti Data Tahun Sama & Import ${previewData.length} Data`
                 : `Import ${previewData.length} Data (Gabung)`
               }
             </Button>

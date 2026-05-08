@@ -147,11 +147,38 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Tidak ada data valid', skippedCount, skippedReasons }, { status: 400 });
     }
 
-    // Delete first
+    // Delete existing data based on mode
     let deletedCount = 0;
     if (replaceAll) {
-      const r = await db.fishFarm.deleteMany({});
+      // ONLY delete records for the years present in the import data
+      // This way importing 2023 data won't wipe out 2022 data
+      const importYears = [...new Set(formattedRecords.map(r => Number(r.year)))];
+      const r = await db.fishFarm.deleteMany({
+        where: { year: { in: importYears } }
+      });
       deletedCount = r.count;
+    } else {
+      // Delete records matching composite keys (year+kecamatan+desa+fishType+containerType+businessType)
+      const compositeKeys = new Map<string, Record<string, unknown>>();
+      for (const record of formattedRecords) {
+        const key = `${record.year}|${record.kecamatan}|${record.desa}|${record.fishType}|${record.containerType}|${record.businessType}`;
+        if (!compositeKeys.has(key)) {
+          compositeKeys.set(key, record);
+        }
+      }
+      for (const record of compositeKeys.values()) {
+        const result = await db.fishFarm.deleteMany({
+          where: {
+            year: Number(record.year),
+            kecamatan: String(record.kecamatan),
+            desa: String(record.desa),
+            fishType: String(record.fishType),
+            containerType: String(record.containerType),
+            businessType: String(record.businessType),
+          },
+        });
+        deletedCount += result.count;
+      }
     }
 
     // Insert in tiny batches for stability
@@ -166,10 +193,14 @@ export async function POST(request: NextRequest) {
     if (kecamatanAutoFilled > 0) autoFilledInfo.push(`${kecamatanAutoFilled} baris "Kecamatan" diisi otomatis: "${DEFAULT_KECAMATAN}"`);
     if (desaAutoFilled > 0) autoFilledInfo.push(`${desaAutoFilled} baris "Desa" diisi otomatis: "${DEFAULT_DESA}"`);
 
+    // Include which years were affected
+    const affectedYears = [...new Set(formattedRecords.map(r => Number(r.year)))];
+
     return NextResponse.json({
       success: true, count, deletedCount, skippedCount,
       skippedReasons: skippedCount > 0 ? skippedReasons : undefined,
       autoFilledInfo: autoFilledInfo.length > 0 ? autoFilledInfo : undefined,
+      affectedYears,
     });
   } catch (error) {
     console.error('Error importing:', error);

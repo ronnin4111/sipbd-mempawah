@@ -133,7 +133,7 @@ export function StatsCards() {
         .slice(0, 3),
     },
     {
-      label: 'Pembudidaya Pembesaran',
+      label: stats.latestYear ? `Pembudidaya Pembesaran (${stats.latestYear})` : 'Pembudidaya Pembesaran',
       value: stats.farmerByBusinessType['Pembesaran'] || 0,
       unit: 'Orang',
       icon: <Users className="h-5 w-5" style={{ color: '#F59E0B' }} />,
@@ -145,7 +145,7 @@ export function StatsCards() {
       ],
     },
     {
-      label: 'Pembudidaya Pembenihan',
+      label: stats.latestYear ? `Pembudidaya Pembenihan (${stats.latestYear})` : 'Pembudidaya Pembenihan',
       value: stats.farmerByBusinessType['Pembenihan'] || 0,
       unit: 'Orang',
       icon: <UserCheck className="h-5 w-5" style={{ color: '#A855F7' }} />,

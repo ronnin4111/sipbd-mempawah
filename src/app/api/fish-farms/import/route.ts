@@ -200,9 +200,14 @@ export async function POST(request: NextRequest) {
       cbib: typeof record.cbib === 'boolean' ? record.cbib : String(record.cbib || '').toLowerCase() === 'ya',
     }));
 
-    // Step 1: Delete existing data (outside transaction to reduce memory pressure)
+    // Step 1: Delete existing data based on mode
     if (replaceAll) {
-      const deleteResult = await db.fishFarm.deleteMany({});
+      // ONLY delete records for the years present in the import data
+      // This way importing 2023 data won't wipe out 2022 data
+      const importYears = [...new Set(formattedRecords.map(r => r.year))];
+      const deleteResult = await db.fishFarm.deleteMany({
+        where: { year: { in: importYears } }
+      });
       deletedCount = deleteResult.count;
     } else {
       // Delete existing records with same composite keys
@@ -237,6 +242,9 @@ export async function POST(request: NextRequest) {
       count += batch.length;
     }
 
+    // Include which years were affected
+    const affectedYears = [...new Set(formattedRecords.map(r => r.year))];
+
     const skippedCount = data.length - validRecords.length;
     return NextResponse.json({
       success: true,
@@ -245,6 +253,7 @@ export async function POST(request: NextRequest) {
       skippedCount,
       skippedReasons: skippedCount > 0 ? skippedReasons : undefined,
       autoFilledInfo: autoFilledInfo.length > 0 ? autoFilledInfo : undefined,
+      affectedYears,
     });
   } catch (error) {
     console.error('Error importing fish farms:', error);

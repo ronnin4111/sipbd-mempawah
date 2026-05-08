@@ -61,6 +61,7 @@ export interface StatsResponse {
   totalRtp: number;
   totalFarmer: number;
   totalGroup: number;
+  latestYear: number | null;
   rtpByBusinessType: Record<string, number>;
   farmerByBusinessType: Record<string, number>;
   groupByBusinessType: Record<string, number>;
