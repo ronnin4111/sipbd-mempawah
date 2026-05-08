@@ -62,18 +62,20 @@ export async function PUT(request: NextRequest) {
 
     let upserted = 0;
 
-    await db.$transaction(async (tx) => {
-      for (const item of data) {
-        if (!item.fishType || !item.containerType) continue;
+    // Use sequential upserts instead of $transaction
+    // Turso/libSQL does not support Prisma interactive transactions
+    for (const item of data) {
+      if (!item.fishType || !item.containerType) continue;
 
-        await tx.commodityPrice.upsert({
+      try {
+        await db.commodityPrice.upsert({
           where: {
             fishType_containerType: {
               fishType: item.fishType,
               containerType: item.containerType,
             },
           },
-          update: { price: Number(item.price) || 0 },
+          update: { price: Number(item.price) || 0, updatedAt: new Date() },
           create: {
             fishType: item.fishType,
             containerType: item.containerType,
@@ -81,8 +83,11 @@ export async function PUT(request: NextRequest) {
           },
         });
         upserted++;
+      } catch (itemErr) {
+        console.error(`Failed to upsert ${item.fishType}/${item.containerType}:`, itemErr);
+        // Continue with other items even if one fails
       }
-    });
+    }
 
     return NextResponse.json({ success: true, count: upserted });
   } catch (error) {
@@ -120,18 +125,19 @@ export async function POST(request: NextRequest) {
 
     let upserted = 0;
 
-    await db.$transaction(async (tx) => {
-      for (const item of data) {
-        if (!item.fishType || !item.containerType) continue;
+    // Use sequential upserts instead of $transaction
+    for (const item of data) {
+      if (!item.fishType || !item.containerType) continue;
 
-        await tx.commodityPrice.upsert({
+      try {
+        await db.commodityPrice.upsert({
           where: {
             fishType_containerType: {
               fishType: item.fishType,
               containerType: item.containerType,
             },
           },
-          update: { price: Number(item.price) || 0 },
+          update: { price: Number(item.price) || 0, updatedAt: new Date() },
           create: {
             fishType: item.fishType,
             containerType: item.containerType,
@@ -139,8 +145,10 @@ export async function POST(request: NextRequest) {
           },
         });
         upserted++;
+      } catch (itemErr) {
+        console.error(`Failed to upsert ${item.fishType}/${item.containerType}:`, itemErr);
       }
-    });
+    }
 
     return NextResponse.json({ success: true, count: upserted });
   } catch (error) {
