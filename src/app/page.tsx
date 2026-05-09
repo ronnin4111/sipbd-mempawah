@@ -14,6 +14,7 @@ import { ExportSection } from '@/components/import-export/export-section';
 import { useFilterStore } from '@/store/filter-store';
 import { HeroBanner } from '@/components/layout/hero-banner';
 import { CommodityPricesTable } from '@/components/commodity-prices/commodity-prices-table';
+import { ExternalIframe } from '@/components/external-iframe';
 import { Button } from '@/components/ui/button';
 import { Upload } from 'lucide-react';
 
@@ -97,6 +98,16 @@ function TrenLaporanSection() {
   );
 }
 
+function TrenV2Section() {
+  return (
+    <ExternalIframe
+      src="https://sipbd-mempawah-v2.vercel.app/"
+      title="Tren & Laporan V2"
+      badge="V2 — Triwulan"
+    />
+  );
+}
+
 function HargaKomoditasSection() {
   return (
     <div className="space-y-4">
@@ -144,6 +155,8 @@ export default function Home() {
         return <PetaLokasiSection />;
       case 'tren-laporan':
         return <TrenLaporanSection />;
+      case 'tren-v2':
+        return <TrenV2Section />;
       case 'harga-komoditas':
         return <HargaKomoditasSection />;
       case 'import-export':

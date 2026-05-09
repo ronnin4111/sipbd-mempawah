@@ -7,6 +7,7 @@ import {
   TrendingUp,
   DollarSign,
   FileSpreadsheet,
+  ExternalLink,
   ChevronRight,
   X,
 } from 'lucide-react';
@@ -19,6 +20,7 @@ const menuItems = [
   { id: 'data-produksi', label: 'Data Produksi', icon: Database, description: 'Tabel data lengkap' },
   { id: 'peta-lokasi', label: 'Peta Lokasi', icon: Map, description: 'Sebaran lokasi budidaya' },
   { id: 'tren-laporan', label: 'Tren & Laporan', icon: TrendingUp, description: 'Analisis tren produksi' },
+  { id: 'tren-v2', label: 'Tren V2 (Triwulan)', icon: ExternalLink, description: 'Data tren versi triwulan' },
   { id: 'harga-komoditas', label: 'Harga Komoditas', icon: DollarSign, description: 'Daftar harga ikan' },
   { id: 'import-export', label: 'Import / Export', icon: FileSpreadsheet, description: 'Kelola data Excel/PDF' },
 ];
