@@ -15,6 +15,7 @@ const NAV_TABS = [
   { id: 'data-produksi', label: 'Data Produksi' },
   { id: 'peta-lokasi', label: 'Peta Lokasi' },
   { id: 'tren-laporan', label: 'Tren & Laporan' },
+  { id: 'tren-v2', label: 'Tren V2' },
   { id: 'harga-komoditas', label: 'Harga Komoditas' },
   { id: 'import-export', label: 'Import / Export' },
 ];
