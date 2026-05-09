@@ -101,7 +101,7 @@ function TrenLaporanSection() {
 function TrenV2Section() {
   return (
     <ExternalIframe
-      src="https://sipbd-mempawah-v2.vercel.app/"
+      src="https://sipbd-mempawah-v2.vercel.app/?section=tren-laporan&embedded=true"
       title="Tren & Laporan V2"
       badge="V2 — Triwulan"
     />
