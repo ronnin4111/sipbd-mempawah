@@ -80,6 +80,12 @@ export interface StatsResponse {
     rtp: number;
     farmer: number;
     group: number;
+    pembesaranFarmer: number;
+    pembenihanFarmer: number;
+    pembesaranRtp: number;
+    pembenihanRtp: number;
+    pembesaranGroup: number;
+    pembenihanGroup: number;
   }>;
   productionByFishTypeDetail: Record<string, {
     pembesaranProduction: number;

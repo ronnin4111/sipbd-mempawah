@@ -156,6 +156,38 @@ const renderBarLabelPdf = (props: Record<string, unknown>) => {
   );
 };
 
+// Label renderer for horizontal stacked bar segments (dark theme)
+const renderHorizontalBarLabel = (props: Record<string, unknown>) => {
+  const x = props.x as number;
+  const y = props.y as number;
+  const width = props.width as number;
+  const height = props.height as number;
+  const value = props.value as number;
+  if (!value || value === 0 || width < 25) return <g />;
+  const formatted = value >= 1000 ? `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}k` : value.toFixed(0);
+  return (
+    <text x={x + width / 2} y={y + height / 2 + 4} fill="#fff" textAnchor="middle" fontSize={9} fontWeight={600} opacity={0.9}>
+      {formatted}
+    </text>
+  );
+};
+
+// Label renderer for horizontal stacked bar segments (PDF/light theme)
+const renderHorizontalBarLabelPdf = (props: Record<string, unknown>) => {
+  const x = props.x as number;
+  const y = props.y as number;
+  const width = props.width as number;
+  const height = props.height as number;
+  const value = props.value as number;
+  if (!value || value === 0 || width < 25) return <g />;
+  const formatted = value >= 1000 ? `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}k` : value.toFixed(0);
+  return (
+    <text x={x + width / 2} y={y + height / 2 + 4} fill="#fff" textAnchor="middle" fontSize={9} fontWeight={600} opacity={0.9}>
+      {formatted}
+    </text>
+  );
+};
+
 // === HELPER: Get produksi data from stats ===
 
 function getProduksiData(
@@ -530,28 +562,32 @@ function ProduksiKecamatanChart() {
       return row;
     });
   } else if (viewBy === 'pelaku-usaha') {
-    // RTP (Pelaku Usaha) per kecamatan
+    // Pelaku Usaha per kecamatan split by Pembesaran & Pembenihan
     data = allKecamatan.map(kec => {
       const val = stats.productionByKecamatanDetail[kec];
       return {
         name: kec,
-        'Pembudidaya': val.farmer,
+        'Pembesaran': val.pembesaranFarmer,
+        'Pembenihan': val.pembenihanFarmer,
       };
     });
     series = [
-      { key: 'Pembudidaya', color: '#F59E0B', name: 'Pembudidaya' },
+      { key: 'Pembesaran', color: '#3B82F6', name: 'Pelaku Pembesaran' },
+      { key: 'Pembenihan', color: '#22C55E', name: 'Pelaku Pembenihan' },
     ];
   } else if (viewBy === 'kelompok') {
-    // Kelompok per kecamatan
+    // Kelompok per kecamatan split by Pembesaran & Pembenihan
     data = allKecamatan.map(kec => {
       const val = stats.productionByKecamatanDetail[kec];
       return {
         name: kec,
-        'Kelompok': val.group,
+        'Pembesaran': val.pembesaranGroup,
+        'Pembenihan': val.pembenihanGroup,
       };
     });
     series = [
-      { key: 'Kelompok', color: '#A855F7', name: 'Kelompok' },
+      { key: 'Pembesaran', color: '#3B82F6', name: 'Kelompok Pembesaran' },
+      { key: 'Pembenihan', color: '#22C55E', name: 'Kelompok Pembenihan' },
     ];
   }
 
@@ -599,7 +635,7 @@ function ProduksiKecamatanChart() {
               />
               <Legend wrapperStyle={{ fontSize: 10 }} />
               {series.map(s => (
-                <Bar key={s.key} dataKey={s.key} fill={s.color} stackId="a" name={s.name} />
+                <Bar key={s.key} dataKey={s.key} fill={s.color} stackId="a" name={s.name} label={renderHorizontalBarLabel} />
               ))}
             </BarChart>
           </ResponsiveContainer>
@@ -722,15 +758,21 @@ export function PdfDashboardCharts() {
   } else if (kecamatanViewBy === 'pelaku-usaha') {
     kecData = allKecForPdf.map(kec => {
       const val = stats.productionByKecamatanDetail[kec];
-      return { name: kec, 'Pembudidaya': val.farmer };
+      return { name: kec, 'Pembesaran': val.pembesaranFarmer, 'Pembenihan': val.pembenihanFarmer };
     });
-    kecSeries = [{ key: 'Pembudidaya', color: '#F59E0B', name: 'Pembudidaya' }];
+    kecSeries = [
+      { key: 'Pembesaran', color: '#3B82F6', name: 'Pelaku Pembesaran' },
+      { key: 'Pembenihan', color: '#22C55E', name: 'Pelaku Pembenihan' },
+    ];
   } else if (kecamatanViewBy === 'kelompok') {
     kecData = allKecForPdf.map(kec => {
       const val = stats.productionByKecamatanDetail[kec];
-      return { name: kec, 'Kelompok': val.group };
+      return { name: kec, 'Pembesaran': val.pembesaranGroup, 'Pembenihan': val.pembenihanGroup };
     });
-    kecSeries = [{ key: 'Kelompok', color: '#A855F7', name: 'Kelompok' }];
+    kecSeries = [
+      { key: 'Pembesaran', color: '#3B82F6', name: 'Kelompok Pembesaran' },
+      { key: 'Pembenihan', color: '#22C55E', name: 'Kelompok Pembenihan' },
+    ];
   }
 
   const kecTitle = 'Produksi per Kecamatan';
@@ -833,7 +875,7 @@ export function PdfDashboardCharts() {
               formatter={(value: number) => new Intl.NumberFormat('id-ID').format(value)} />
             <Legend wrapperStyle={{ fontSize: 10, color: '#333' }} />
             {kecSeries.map(s => (
-              <Bar key={s.key} dataKey={s.key} fill={s.color} stackId="a" name={s.name} />
+              <Bar key={s.key} dataKey={s.key} fill={s.color} stackId="a" name={s.name} label={renderHorizontalBarLabelPdf} />
             ))}
           </BarChart>
         </ResponsiveContainer>

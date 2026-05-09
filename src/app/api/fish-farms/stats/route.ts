@@ -329,12 +329,21 @@ export async function GET(request: NextRequest) {
       rtp: number;
       farmer: number;
       group: number;
+      pembesaranFarmer: number;
+      pembenihanFarmer: number;
+      pembesaranRtp: number;
+      pembenihanRtp: number;
+      pembesaranGroup: number;
+      pembenihanGroup: number;
     }> = {};
     records.forEach(r => {
       if (!productionByKecamatanDetail[r.kecamatan]) {
         productionByKecamatanDetail[r.kecamatan] = {
           pembesaranProduction: 0, pembenihanProduction: 0,
           value: 0, rtp: 0, farmer: 0, group: 0,
+          pembesaranFarmer: 0, pembenihanFarmer: 0,
+          pembesaranRtp: 0, pembenihanRtp: 0,
+          pembesaranGroup: 0, pembenihanGroup: 0,
         };
       }
       if (r.businessType === 'Pembesaran') {
@@ -349,12 +358,35 @@ export async function GET(request: NextRequest) {
       if (productionByKecamatanDetail[r.kecamatan]) {
         productionByKecamatanDetail[r.kecamatan].rtp += r.rtpCount;
         productionByKecamatanDetail[r.kecamatan].farmer += r.farmerCount;
+        // Split by business type
+        if (r.businessType === 'Pembesaran') {
+          productionByKecamatanDetail[r.kecamatan].pembesaranFarmer += r.farmerCount;
+          productionByKecamatanDetail[r.kecamatan].pembesaranRtp += r.rtpCount;
+        } else {
+          productionByKecamatanDetail[r.kecamatan].pembenihanFarmer += r.farmerCount;
+          productionByKecamatanDetail[r.kecamatan].pembenihanRtp += r.rtpCount;
+        }
       }
     });
 
-    // Set group counts using unique group names
+    // Set group counts using unique group names (split by business type)
+    const groupNamesByKecamatanBusinessType: Record<string, Record<string, Set<string>>> = {};
+    records.forEach(r => {
+      if (r.groupName && r.groupName.trim()) {
+        const normalized = r.groupName.trim().toLowerCase();
+        if (!groupNamesByKecamatanBusinessType[r.kecamatan]) {
+          groupNamesByKecamatanBusinessType[r.kecamatan] = {};
+        }
+        if (!groupNamesByKecamatanBusinessType[r.kecamatan][r.businessType]) {
+          groupNamesByKecamatanBusinessType[r.kecamatan][r.businessType] = new Set();
+        }
+        groupNamesByKecamatanBusinessType[r.kecamatan][r.businessType].add(normalized);
+      }
+    });
     Object.keys(productionByKecamatanDetail).forEach(kec => {
       productionByKecamatanDetail[kec].group = groupNamesByKecamatan[kec]?.size || 0;
+      productionByKecamatanDetail[kec].pembesaranGroup = groupNamesByKecamatanBusinessType[kec]?.['Pembesaran']?.size || 0;
+      productionByKecamatanDetail[kec].pembenihanGroup = groupNamesByKecamatanBusinessType[kec]?.['Pembenihan']?.size || 0;
     });
 
     // === Production by Fish Type detail (with value, rtp, farmer, group) ===
@@ -476,6 +508,12 @@ export async function GET(request: NextRequest) {
           rtp: v.rtp,
           farmer: v.farmer,
           group: v.group,
+          pembesaranFarmer: v.pembesaranFarmer,
+          pembenihanFarmer: v.pembenihanFarmer,
+          pembesaranRtp: v.pembesaranRtp,
+          pembenihanRtp: v.pembenihanRtp,
+          pembesaranGroup: v.pembesaranGroup,
+          pembenihanGroup: v.pembenihanGroup,
         }])
       ),
       productionByFishTypeDetail: Object.fromEntries(
