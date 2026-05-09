@@ -467,31 +467,59 @@ export function PdfExportDialog({ open, onOpenChange }: PdfExportDialogProps) {
               }
               currentY = addSectionTitle(section.label, currentY);
 
-              const rows: any[][] = records.map((r: any, i: number) => [
-                i + 1, r.year, r.kecamatan, r.desa, r.fishType, r.containerType,
-                r.businessType, fmtNum(r.productionQty), fmtCur(r.productionValue),
-                fmtNum(r.rtpCount), fmtNum(r.farmerCount),
-                r.kusuka || '-', r.cpib ? 'Ya' : '-', r.cbib ? 'Ya' : '-',
-              ]);
+              // Read column visibility from localStorage (same key as DataTable)
+              let colVis: Record<string, boolean> = {};
+              try {
+                const saved = localStorage.getItem('fishFarm_columnVisibility');
+                if (saved) colVis = JSON.parse(saved);
+              } catch {}
+
+              // Define all possible columns with their accessorKey, header, and data extractor
+              const allPdfCols: { key: string; header: string; extract: (r: any, i: number) => any; align?: 'left' | 'center' | 'right'; width?: number }[] = [
+                { key: 'no', header: 'No', extract: (_r: any, i: number) => i + 1, align: 'center', width: 8 },
+                { key: 'year', header: 'Tahun', extract: (r: any) => r.year, align: 'center', width: 12 },
+                { key: 'kecamatan', header: 'Kecamatan', extract: (r: any) => r.kecamatan },
+                { key: 'desa', header: 'Desa', extract: (r: any) => r.desa },
+                { key: 'fishType', header: 'Jenis Ikan', extract: (r: any) => r.fishType },
+                { key: 'containerType', header: 'Wadah', extract: (r: any) => r.containerType, width: 22 },
+                { key: 'businessType', header: 'Usaha', extract: (r: any) => r.businessType, width: 20 },
+                { key: 'farmerName', header: 'Nama Pembudidaya', extract: (r: any) => r.farmerName || '-' },
+                { key: 'groupName', header: 'Nama Kelompok', extract: (r: any) => r.groupName || '-' },
+                { key: 'productionQty', header: 'Produksi', extract: (r: any) => fmtNum(r.productionQty), align: 'right' },
+                { key: 'targetQty', header: 'Target', extract: (r: any) => fmtNum(r.targetQty || 0), align: 'right' },
+                { key: 'productionValue', header: 'Nilai (Rp)', extract: (r: any) => fmtCur(r.productionValue), align: 'right' },
+                { key: 'rtpCount', header: 'RTP', extract: (r: any) => fmtNum(r.rtpCount), align: 'right' },
+                { key: 'farmerCount', header: 'Pembudidaya', extract: (r: any) => fmtNum(r.farmerCount), align: 'right' },
+                { key: 'groupCount', header: 'Kelompok', extract: (r: any) => fmtNum(r.groupCount || 0), align: 'right' },
+                { key: 'kusuka', header: 'KUSUKA', extract: (r: any) => r.kusuka || '-' },
+                { key: 'cpib', header: 'CPIB', extract: (r: any) => r.cpib ? 'Ya' : '-' },
+                { key: 'cbib', header: 'CBIB', extract: (r: any) => r.cbib ? 'Ya' : '-' },
+              ];
+
+              // Filter columns based on visibility (colVis[key] === false means hidden)
+              const visibleCols = allPdfCols.filter(col => colVis[col.key] !== false);
+
+              const headRow = [visibleCols.map(c => c.header)];
+              const bodyRows: any[][] = records.map((r: any, i: number) =>
+                visibleCols.map(c => c.extract(r, i))
+              );
+
+              // Build columnStyles dynamically based on visible columns
+              const colStyles: Record<number, any> = {};
+              visibleCols.forEach((col, idx) => {
+                if (col.align) colStyles[idx] = { halign: col.align };
+                if (col.width) colStyles[idx] = { ...colStyles[idx], cellWidth: col.width };
+              });
 
               autoTable(doc, {
                 startY: currentY,
-                head: [['No', 'Tahun', 'Kecamatan', 'Desa', 'Jenis Ikan', 'Wadah', 'Usaha', 'Produksi', 'Nilai (Rp)', 'RTP', 'Pembudidaya', 'KUSUKA', 'CPIB', 'CBIB']],
-                body: rows,
+                head: headRow,
+                body: bodyRows,
                 theme: 'grid',
                 headStyles: { fillColor: [22, 101, 52], textColor: 255, fontStyle: 'bold', fontSize: 6 },
                 styles: { fontSize: 6, cellPadding: 1.5 },
                 margin: { left: margin, right: margin },
-                columnStyles: {
-                  0: { halign: 'center', cellWidth: 8 },
-                  1: { halign: 'center', cellWidth: 12 },
-                  5: { cellWidth: 22 },
-                  6: { cellWidth: 20 },
-                  7: { halign: 'right' },
-                  8: { halign: 'right' },
-                  9: { halign: 'right' },
-                  10: { halign: 'right' },
-                },
+                columnStyles: colStyles,
               });
               break;
             }
