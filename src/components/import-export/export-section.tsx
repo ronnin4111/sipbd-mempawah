@@ -1,13 +1,22 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { Download, FileSpreadsheet, FileText } from 'lucide-react';
+import { Download, FileSpreadsheet, FileText, Lock, CheckCircle2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { useFilterStore } from '@/store/filter-store';
 import { useState } from 'react';
+
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 
 // Dynamic import with ssr:false to prevent html2canvas-pro from crashing SSR on Vercel
 const PdfExportDialog = dynamic(
@@ -31,6 +40,56 @@ function buildFilterString() {
 
 export function ExportSection() {
   const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
+
+  // Password verification for export
+  const [exportPassword, setExportPassword] = useState('');
+  const [exportVerified, setExportVerified] = useState(false);
+  const [exportVerifying, setExportVerifying] = useState(false);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [pendingExportType, setPendingExportType] = useState<'excel' | 'pdf' | null>(null);
+
+  const handleVerifyExportPassword = async () => {
+    if (!exportPassword.trim()) {
+      toast.error('Masukkan sandi terlebih dahulu');
+      return;
+    }
+    setExportVerifying(true);
+    try {
+      const res = await fetch('/api/auth/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: exportPassword }),
+      });
+      const data = await res.json();
+      if (data.valid) {
+        setExportVerified(true);
+        toast.success('Sandi benar');
+        setTimeout(() => {
+          if (pendingExportType === 'excel') handleExportExcel();
+          else if (pendingExportType === 'pdf') setPdfDialogOpen(true);
+          setExportDialogOpen(false);
+          resetExportPassword();
+        }, 300);
+      } else {
+        toast.error('Sandi salah');
+      }
+    } catch {
+      toast.error('Gagal memverifikasi sandi');
+    } finally {
+      setExportVerifying(false);
+    }
+  };
+
+  const resetExportPassword = () => {
+    setExportPassword('');
+    setExportVerified(false);
+    setPendingExportType(null);
+  };
+
+  const requestExport = (type: 'excel' | 'pdf') => {
+    setPendingExportType(type);
+    setExportDialogOpen(true);
+  };
 
   const handleExportExcel = () => {
     const queryStr = buildFilterString();
@@ -95,7 +154,7 @@ export function ExportSection() {
               * Export mengikuti filter yang aktif
             </p>
             <Button
-              onClick={handleExportExcel}
+              onClick={() => requestExport('excel')}
               className="w-full bg-emerald-600 hover:bg-emerald-700 gap-2"
             >
               <Download className="h-4 w-4" />
@@ -146,7 +205,7 @@ export function ExportSection() {
               * Laporan mengikuti filter yang aktif
             </p>
             <Button
-              onClick={() => setPdfDialogOpen(true)}
+              onClick={() => requestExport('pdf')}
               className="w-full bg-teal-600 hover:bg-teal-700 gap-2"
             >
               <Download className="h-4 w-4" />
@@ -155,6 +214,54 @@ export function ExportSection() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Password Verification Dialog for Export */}
+      <Dialog
+        open={exportDialogOpen}
+        onOpenChange={(v) => {
+          if (!v) resetExportPassword();
+          setExportDialogOpen(v);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Lock className="h-5 w-5 text-emerald-600" />
+              Verifikasi Sandi Export
+            </DialogTitle>
+            <DialogDescription>
+              Masukkan sandi admin untuk melanjutkan export data.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <form onSubmit={(e) => { e.preventDefault(); handleVerifyExportPassword(); }} className="flex gap-2">
+              <Input
+                type="password"
+                placeholder="Masukkan sandi admin..."
+                value={exportPassword}
+                onChange={(e) => setExportPassword(e.target.value)}
+                disabled={exportVerified}
+                className="text-sm"
+                autoComplete="current-password"
+                autoFocus
+              />
+              <Button
+                type="submit"
+                disabled={exportVerified || exportVerifying}
+                size="sm"
+                className="bg-emerald-600 hover:bg-emerald-700 shrink-0"
+              >
+                {exportVerified ? 'Terverifikasi' : exportVerifying ? 'Memverifikasi...' : 'Verifikasi'}
+              </Button>
+            </form>
+            {exportVerified && (
+              <p className="text-xs text-emerald-600 flex items-center gap-1">
+                <CheckCircle2 className="h-3 w-3" /> Sandi telah diverifikasi, memulai export...
+              </p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <PdfExportDialog open={pdfDialogOpen} onOpenChange={setPdfDialogOpen} />
     </motion.div>

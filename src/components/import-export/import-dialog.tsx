@@ -143,7 +143,7 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
 
   const handleVerifyPassword = async () => {
     if (!password.trim()) {
-      toast.error('Masukkan password terlebih dahulu');
+      toast.error('Masukkan sandi terlebih dahulu');
       return;
     }
     setVerifying(true);
@@ -156,12 +156,12 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
       const data = await res.json();
       if (data.valid) {
         setIsVerified(true);
-        toast.success('Password benar');
+        toast.success('Sandi benar');
       } else {
-        toast.error('Password salah');
+        toast.error('Sandi salah');
       }
     } catch {
-      toast.error('Gagal memverifikasi password');
+      toast.error('Gagal memverifikasi sandi');
     } finally {
       setVerifying(false);
     }
@@ -263,7 +263,7 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
       e.preventDefault();
       setIsDragging(false);
       if (!isVerified) {
-        toast.error('Verifikasi password terlebih dahulu');
+        toast.error('Verifikasi sandi terlebih dahulu');
         return;
       }
       const droppedFile = e.dataTransfer.files[0];
@@ -279,7 +279,7 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
   const handleFileInput = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       if (!isVerified) {
-        toast.error('Verifikasi password terlebih dahulu');
+        toast.error('Verifikasi sandi terlebih dahulu');
         return;
       }
       const selectedFile = e.target.files?.[0];
@@ -345,7 +345,7 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
 
   const handleDeleteAll = async () => {
     if (!isVerified) {
-      toast.error('Verifikasi password terlebih dahulu');
+      toast.error('Verifikasi sandi terlebih dahulu');
       return;
     }
     setDeleting(true);
@@ -389,7 +389,7 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
             Import Data Excel
           </DialogTitle>
           <DialogDescription>
-            Import data perikanan budidaya dari file Excel. Memerlukan password untuk keamanan.
+            Import data perikanan budidaya dari file Excel. Memerlukan sandi untuk keamanan.
           </DialogDescription>
         </DialogHeader>
 
@@ -398,12 +398,12 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
           <div className="space-y-2">
             <label className="text-sm font-medium flex items-center gap-2">
               <Lock className="h-4 w-4" />
-              1. Verifikasi Password
+              1. Verifikasi Sandi
             </label>
             <div className="flex gap-2">
               <Input
                 type="password"
-                placeholder="Masukkan password admin..."
+                placeholder="Masukkan sandi admin..."
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleVerifyPassword()}
@@ -421,7 +421,7 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
             </div>
             {isVerified && (
               <p className="text-xs text-emerald-600 flex items-center gap-1">
-                <CheckCircle2 className="h-3 w-3" /> Password telah diverifikasi
+                <CheckCircle2 className="h-3 w-3" /> Sandi telah diverifikasi
               </p>
             )}
           </div>

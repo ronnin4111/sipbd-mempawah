@@ -230,7 +230,7 @@ export const DESA_COORDS: Record<string, { lat: number; lng: number }> = {
   "Mempawah Timur|Parit Banjar": { lat: 0.3049102, lng: 109.0205707 },
 };
 
-export const IMPORT_PASSWORD = "dkp2024";
+export const IMPORT_PASSWORD = "diskan2026";
 
 // Default commodity prices per fish type x container type (Pembesaran - Rp/Kg)
 // Pembenihan prices are flat per fish type (Rp/Ekor)

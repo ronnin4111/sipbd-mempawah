@@ -73,7 +73,7 @@ export function CommodityPricesTable() {
   };
 
   const handlePasswordSubmit = () => {
-    if (password === 'dkp2024') {
+    if (password === 'diskan2026') {
       setEditing(true);
       setPasswordDialog(false);
       toast.success('Mode edit diaktifkan');
@@ -107,7 +107,7 @@ export function CommodityPricesTable() {
       const res = await fetch('/api/commodity-prices', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: 'dkp2024', data: updates }),
+        body: JSON.stringify({ password: 'diskan2026', data: updates }),
       });
 
       if (!res.ok) {
