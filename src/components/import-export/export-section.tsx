@@ -87,8 +87,14 @@ export function ExportSection() {
   };
 
   const requestExport = (type: 'excel' | 'pdf') => {
-    setPendingExportType(type);
-    setExportDialogOpen(true);
+    if (type === 'pdf') {
+      // PDF export tidak perlu sandi, langsung buka dialog
+      setPdfDialogOpen(true);
+    } else {
+      // Excel export perlu verifikasi sandi
+      setPendingExportType(type);
+      setExportDialogOpen(true);
+    }
   };
 
   const handleExportExcel = () => {
@@ -227,10 +233,10 @@ export function ExportSection() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Lock className="h-5 w-5 text-emerald-600" />
-              Verifikasi Sandi Export
+              Verifikasi Sandi Export Excel
             </DialogTitle>
             <DialogDescription>
-              Masukkan sandi admin untuk melanjutkan export data.
+              Masukkan sandi admin untuk melanjutkan export Excel.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
