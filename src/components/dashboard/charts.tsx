@@ -40,7 +40,7 @@ const tooltipStyleSmall = {
 
 type TrendViewBy = 'jenis-usaha' | 'jenis-ikan' | 'kecamatan' | 'wadah';
 type ProduksiViewBy = 'jenis-ikan' | 'kecamatan' | 'wadah';
-type KecamatanViewBy = 'jenis-usaha' | 'jenis-ikan' | 'wadah';
+type KecamatanViewBy = 'produksi' | 'jenis-usaha' | 'jenis-ikan' | 'wadah' | 'pelaku-usaha' | 'kelompok';
 type ChartType = 'bar' | 'line' | 'pie';
 
 const TREND_VIEWS: { id: TrendViewBy; label: string }[] = [
@@ -57,9 +57,12 @@ const PRODUKSI_VIEWS: { id: ProduksiViewBy; label: string }[] = [
 ];
 
 const KECAMATAN_VIEWS: { id: KecamatanViewBy; label: string }[] = [
+  { id: 'produksi', label: 'Produksi' },
   { id: 'jenis-usaha', label: 'Jenis Usaha' },
   { id: 'jenis-ikan', label: 'Jenis Ikan' },
-  { id: 'wadah', label: 'Wadah Budidaya' },
+  { id: 'wadah', label: 'Wadah' },
+  { id: 'pelaku-usaha', label: 'Pelaku Usaha' },
+  { id: 'kelompok', label: 'Kelompok' },
 ];
 
 const CHART_TYPES: { id: ChartType; label: string; icon: React.ReactNode }[] = [
@@ -443,36 +446,53 @@ function ProduksiChart() {
   );
 }
 
-// === 3. PRODUKSI KECAMATAN CHART ===
+// === 3. PRODUKSI KECAMATAN CHART (Stacked Horizontal Bar) ===
 
 function ProduksiKecamatanChart() {
   const { data: stats } = useFishFarmStats();
-  const [viewBy, setViewBy] = useState<KecamatanViewBy>('jenis-usaha');
-  const [chartType, setChartType] = useState<ChartType>('bar');
+  const [viewBy, setViewBy] = useState<KecamatanViewBy>('produksi');
 
   if (!stats) return null;
 
-  const title = `Produksi per Kecamatan (by ${KECAMATAN_VIEWS.find(v => v.id === viewBy)?.label ?? ''})`;
+  const title = 'Produksi per Kecamatan';
 
-  // Build data based on viewBy
+  // Build data based on viewBy - stacked horizontal bar chart
   let data: Record<string, unknown>[] = [];
   let series: { key: string; color: string; name: string }[] = [];
 
-  if (viewBy === 'jenis-usaha') {
-    // Show Pembesaran vs Pembenihan per kecamatan
-    data = Object.entries(stats.productionByKecamatan)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([kec, val]) => ({
+  // Get all kecamatan sorted
+  const allKecamatan = Object.keys(stats.productionByKecamatanDetail).sort();
+
+  if (viewBy === 'produksi') {
+    // Total production (pembesaran + pembenihan volume) per kecamatan
+    data = allKecamatan.map(kec => {
+      const val = stats.productionByKecamatanDetail[kec];
+      return {
         name: kec,
-        'Pembesaran (Kg)': val.pembesaran,
-        'Pembenihan (Ekor)': val.pembenihan,
-      }));
+        'Pembesaran': val.pembesaranProduction,
+        'Pembenihan': val.pembenihanProduction,
+      };
+    });
     series = [
-      { key: 'Pembesaran (Kg)', color: PEMBESARAN_COLOR, name: 'Pembesaran (Kg)' },
-      { key: 'Pembenihan (Ekor)', color: PEMBENIHAN_COLOR, name: 'Pembenihan (Ekor)' },
+      { key: 'Pembesaran', color: '#3B82F6', name: 'Pembesaran (Kg)' },
+      { key: 'Pembenihan', color: '#22C55E', name: 'Pembenihan (Ekor)' },
+    ];
+  } else if (viewBy === 'jenis-usaha') {
+    // Same as produksi but labeled differently
+    data = allKecamatan.map(kec => {
+      const val = stats.productionByKecamatanDetail[kec];
+      return {
+        name: kec,
+        'Pembesaran': val.pembesaranProduction,
+        'Pembenihan': val.pembenihanProduction,
+      };
+    });
+    series = [
+      { key: 'Pembesaran', color: '#3B82F6', name: 'Pembesaran' },
+      { key: 'Pembenihan', color: '#22C55E', name: 'Pembenihan' },
     ];
   } else if (viewBy === 'jenis-ikan') {
-    // Cross-tab: Kecamatan × FishType
+    // Cross-tab: Kecamatan x FishType (stacked)
     const crossData = stats.productionByKecamatanByFishType;
     const allFishTypes = new Set<string>();
     Object.values(crossData).forEach(ft => Object.keys(ft).forEach(f => allFishTypes.add(f)));
@@ -482,18 +502,16 @@ function ProduksiKecamatanChart() {
       color: CHART_COLORS[i % CHART_COLORS.length],
       name: ft,
     }));
-    data = Object.entries(crossData)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([kec, fishTypes]) => {
-        const row: Record<string, unknown> = { name: kec };
-        sortedFishTypes.forEach(ft => {
-          const val = fishTypes[ft];
-          row[ft] = val ? val.pembesaran + val.pembenihan : 0;
-        });
-        return row;
+    data = allKecamatan.map(kec => {
+      const row: Record<string, unknown> = { name: kec };
+      sortedFishTypes.forEach(ft => {
+        const val = crossData[kec]?.[ft];
+        row[ft] = val ? val.pembesaran + val.pembenihan : 0;
       });
-  } else {
-    // Cross-tab: Kecamatan × ContainerType
+      return row;
+    });
+  } else if (viewBy === 'wadah') {
+    // Cross-tab: Kecamatan x ContainerType (stacked)
     const crossData = stats.productionByKecamatanByContainer;
     const allContainers = new Set<string>();
     Object.values(crossData).forEach(ct => Object.keys(ct).forEach(c => allContainers.add(c)));
@@ -503,157 +521,89 @@ function ProduksiKecamatanChart() {
       color: CHART_COLORS[i % CHART_COLORS.length],
       name: ct,
     }));
-    data = Object.entries(crossData)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([kec, containers]) => {
-        const row: Record<string, unknown> = { name: kec };
-        sortedContainers.forEach(ct => {
-          const val = containers[ct];
-          row[ct] = val ? val.pembesaran + val.pembenihan : 0;
-        });
-        return row;
+    data = allKecamatan.map(kec => {
+      const row: Record<string, unknown> = { name: kec };
+      sortedContainers.forEach(ct => {
+        const val = crossData[kec]?.[ct];
+        row[ct] = val ? val.pembesaran + val.pembenihan : 0;
       });
+      return row;
+    });
+  } else if (viewBy === 'pelaku-usaha') {
+    // RTP (Pelaku Usaha) per kecamatan
+    data = allKecamatan.map(kec => {
+      const val = stats.productionByKecamatanDetail[kec];
+      return {
+        name: kec,
+        'Pembudidaya': val.farmer,
+      };
+    });
+    series = [
+      { key: 'Pembudidaya', color: '#F59E0B', name: 'Pembudidaya' },
+    ];
+  } else if (viewBy === 'kelompok') {
+    // Kelompok per kecamatan
+    data = allKecamatan.map(kec => {
+      const val = stats.productionByKecamatanDetail[kec];
+      return {
+        name: kec,
+        'Kelompok': val.group,
+      };
+    });
+    series = [
+      { key: 'Kelompok', color: '#A855F7', name: 'Kelompok' },
+    ];
   }
 
-  // Pie chart data
-  const pieData = viewBy === 'jenis-usaha'
-    ? [
-        {
-          label: 'Pembesaran (Kg)',
-          items: data.filter(d => (d['Pembesaran (Kg)'] as number) > 0).map(d => ({ name: d.name as string, value: d['Pembesaran (Kg)'] as number })),
-          unit: 'Kg',
-        },
-        {
-          label: 'Pembenihan (Ekor)',
-          items: data.filter(d => (d['Pembenihan (Ekor)'] as number) > 0).map(d => ({ name: d.name as string, value: d['Pembenihan (Ekor)'] as number })),
-          unit: 'Ekor',
-        },
-      ]
-    : series.map(s => ({
-        label: s.name,
-        items: data.filter(d => (d[s.key] as number) > 0).map(d => ({ name: d.name as string, value: d[s.key] as number })),
-        unit: '',
-      }));
+  // Sort data by total descending for better visual
+  data.sort((a, b) => {
+    const totalA = series.reduce((s, ser) => s + ((a[ser.key] as number) || 0), 0);
+    const totalB = series.reduce((s, ser) => s + ((b[ser.key] as number) || 0), 0);
+    return totalB - totalA;
+  });
 
-  const renderChart = () => {
-    if (chartType === 'pie') {
-      return (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {pieData.slice(0, 4).map((pd, idx) => (
-            <div key={idx}>
-              <p className="text-xs text-center font-medium text-muted-foreground mb-1">{pd.label}{pd.unit ? ` (${pd.unit})` : ''}</p>
-              <div className="h-56 sm:h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={pd.items}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={30}
-                      outerRadius={65}
-                      paddingAngle={2}
-                      dataKey="value"
-                      label={({ name, percent }: { name: string; percent: number }) =>
-                        `${name} (${(percent * 100).toFixed(0)}%)`
-                      }
-                      labelLine={{ strokeWidth: 1 }}
-                    >
-                      {pd.items.map((_, index) => (
-                        <Cell key={`cell-kc-${idx}-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      formatter={(value: number) => formatNumber(value) + (pd.unit ? ` ${pd.unit}` : '')}
-                      contentStyle={tooltipStyleSmall}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          ))}
-        </div>
-      );
-    }
+  // Determine max value for x-axis
+  const maxVal = Math.max(...data.map(d => 
+    series.reduce((s, ser) => s + ((d[ser.key] as number) || 0), 0)
+  ), 1);
 
-    if (chartType === 'line') {
-      return (
-        <div className="h-72 sm:h-80">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data} margin={{ top: 5, right: 10, left: 0, bottom: 30 }}>
-              <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-              <XAxis dataKey="name" tick={{ fontSize: 9 }} angle={-35} textAnchor="end" interval={0} height={60} />
-              <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
-              <Tooltip
-                formatter={(value: number, name: string) => {
-                  const unit = viewBy === 'jenis-usaha' && name.includes('Pembesaran') ? ' Kg' : viewBy === 'jenis-usaha' && name.includes('Pembenihan') ? ' Ekor' : '';
-                  return formatNumber(value) + unit;
-                }}
-                contentStyle={tooltipStyle}
-              />
-              <Legend wrapperStyle={{ fontSize: 10 }} />
-              {series.map(s => (
-                <Line key={s.key} type="monotone" dataKey={s.key} stroke={s.color} strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} name={s.name} />
-              ))}
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      );
-    }
-
-    // Default: bar
-    return (
-      <div className="h-72 sm:h-80">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 20, right: 10, left: 0, bottom: 30 }}>
-            <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-            <XAxis dataKey="name" tick={{ fontSize: 9 }} angle={-35} textAnchor="end" interval={0} height={60} />
-            <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
-            <Tooltip
-              formatter={(value: number, name: string) => {
-                const unit = viewBy === 'jenis-usaha' && name.includes('Pembesaran') ? ' Kg' : viewBy === 'jenis-usaha' && name.includes('Pembenihan') ? ' Ekor' : '';
-                return formatNumber(value) + unit;
-              }}
-              contentStyle={tooltipStyle}
-            />
-            <Legend wrapperStyle={{ fontSize: 10 }} />
-            {series.map(s => (
-              <Bar key={s.key} dataKey={s.key} fill={s.color} radius={[4, 4, 0, 0]} label={renderBarLabel} name={s.name} />
-            ))}
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-    );
+  const formatXAxis = (v: number) => {
+    if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+    if (v >= 1_000) return `${(v / 1_000).toFixed(0)}k`;
+    return v.toFixed(0);
   };
 
   return (
     <ChartCard title={title} index={2}>
       <div id="chart-produksi-kecamatan">
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
-          {/* Dimension selector */}
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: '#06B6D4' }}>
-              Tampilkan berdasarkan
-            </p>
-            <SelectorButton
-              options={KECAMATAN_VIEWS}
-              value={viewBy}
-              onChange={(v) => setViewBy(v as KecamatanViewBy)}
-            />
-          </div>
-          {/* Chart type selector */}
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: '#06B6D4' }}>
-              Tipe Grafik
-            </p>
-            <SelectorButton
-              options={CHART_TYPES}
-              value={chartType}
-              onChange={(v) => setChartType(v as ChartType)}
-            />
-          </div>
+        <div className="mb-4">
+          <p className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: '#06B6D4' }}>
+            Segmen
+          </p>
+          <SelectorButton
+            options={KECAMATAN_VIEWS}
+            value={viewBy}
+            onChange={(v) => setViewBy(v as KecamatanViewBy)}
+          />
         </div>
 
-        {renderChart()}
+        <div className="h-80 sm:h-96">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={data} layout="vertical" margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" className="opacity-30" horizontal={false} />
+              <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={formatXAxis} />
+              <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={110} />
+              <Tooltip
+                formatter={(value: number, name: string) => formatNumber(value)}
+                contentStyle={tooltipStyle}
+              />
+              <Legend wrapperStyle={{ fontSize: 10 }} />
+              {series.map(s => (
+                <Bar key={s.key} dataKey={s.key} fill={s.color} stackId="a" name={s.name} />
+              ))}
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
       </div>
     </ChartCard>
   );
@@ -680,8 +630,7 @@ export function PdfDashboardCharts() {
   const [trendViewBy, setTrendViewBy] = useState<TrendViewBy>('jenis-usaha');
   const [produksiViewBy, setProduksiViewBy] = useState<ProduksiViewBy>('jenis-ikan');
   const [produksiChartType, setProduksiChartType] = useState<ChartType>('bar');
-  const [kecamatanViewBy, setKecamatanViewBy] = useState<KecamatanViewBy>('jenis-usaha');
-  const [kecamatanChartType, setKecamatanChartType] = useState<ChartType>('bar');
+  const [kecamatanViewBy, setKecamatanViewBy] = useState<KecamatanViewBy>('produksi');
 
   if (!stats) return null;
 
@@ -737,14 +686,16 @@ export function PdfDashboardCharts() {
   // Build kecamatan chart data
   let kecData: Record<string, unknown>[] = [];
   let kecSeries: { key: string; color: string; name: string }[] = [];
+  const allKecForPdf = Object.keys(stats.productionByKecamatanDetail).sort();
 
-  if (kecamatanViewBy === 'jenis-usaha') {
-    kecData = Object.entries(stats.productionByKecamatan)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([kec, val]) => ({ name: kec, 'Pembesaran (Kg)': val.pembesaran, 'Pembenihan (Ekor)': val.pembenihan }));
+  if (kecamatanViewBy === 'produksi' || kecamatanViewBy === 'jenis-usaha') {
+    kecData = allKecForPdf.map(kec => {
+      const val = stats.productionByKecamatanDetail[kec];
+      return { name: kec, 'Pembesaran': val.pembesaranProduction, 'Pembenihan': val.pembenihanProduction };
+    });
     kecSeries = [
-      { key: 'Pembesaran (Kg)', color: PEMBESARAN_COLOR, name: 'Pembesaran (Kg)' },
-      { key: 'Pembenihan (Ekor)', color: PEMBENIHAN_COLOR, name: 'Pembenihan (Ekor)' },
+      { key: 'Pembesaran', color: '#3B82F6', name: 'Pembesaran' },
+      { key: 'Pembenihan', color: '#22C55E', name: 'Pembenihan' },
     ];
   } else if (kecamatanViewBy === 'jenis-ikan') {
     const crossData = stats.productionByKecamatanByFishType;
@@ -752,25 +703,37 @@ export function PdfDashboardCharts() {
     Object.values(crossData).forEach(ft => Object.keys(ft).forEach(f => allFT.add(f)));
     const sortedFT = Array.from(allFT).sort();
     kecSeries = sortedFT.map((ft, i) => ({ key: ft, color: CHART_COLORS[i % CHART_COLORS.length], name: ft }));
-    kecData = Object.entries(crossData).sort(([a], [b]) => a.localeCompare(b)).map(([kec, fishTypes]) => {
+    kecData = allKecForPdf.map(kec => {
       const row: Record<string, unknown> = { name: kec };
-      sortedFT.forEach(ft => { const val = fishTypes[ft]; row[ft] = val ? val.pembesaran + val.pembenihan : 0; });
+      sortedFT.forEach(ft => { const val = crossData[kec]?.[ft]; row[ft] = val ? val.pembesaran + val.pembenihan : 0; });
       return row;
     });
-  } else {
+  } else if (kecamatanViewBy === 'wadah') {
     const crossData = stats.productionByKecamatanByContainer;
     const allCT = new Set<string>();
     Object.values(crossData).forEach(ct => Object.keys(ct).forEach(c => allCT.add(c)));
     const sortedCT = Array.from(allCT).sort();
     kecSeries = sortedCT.map((ct, i) => ({ key: ct, color: CHART_COLORS[i % CHART_COLORS.length], name: ct }));
-    kecData = Object.entries(crossData).sort(([a], [b]) => a.localeCompare(b)).map(([kec, containers]) => {
+    kecData = allKecForPdf.map(kec => {
       const row: Record<string, unknown> = { name: kec };
-      sortedCT.forEach(ct => { const val = containers[ct]; row[ct] = val ? val.pembesaran + val.pembenihan : 0; });
+      sortedCT.forEach(ct => { const val = crossData[kec]?.[ct]; row[ct] = val ? val.pembesaran + val.pembenihan : 0; });
       return row;
     });
+  } else if (kecamatanViewBy === 'pelaku-usaha') {
+    kecData = allKecForPdf.map(kec => {
+      const val = stats.productionByKecamatanDetail[kec];
+      return { name: kec, 'Pembudidaya': val.farmer };
+    });
+    kecSeries = [{ key: 'Pembudidaya', color: '#F59E0B', name: 'Pembudidaya' }];
+  } else if (kecamatanViewBy === 'kelompok') {
+    kecData = allKecForPdf.map(kec => {
+      const val = stats.productionByKecamatanDetail[kec];
+      return { name: kec, 'Kelompok': val.group };
+    });
+    kecSeries = [{ key: 'Kelompok', color: '#A855F7', name: 'Kelompok' }];
   }
 
-  const kecTitle = `Produksi per Kecamatan (by ${KECAMATAN_VIEWS.find(v => v.id === kecamatanViewBy)?.label ?? ''})`;
+  const kecTitle = 'Produksi per Kecamatan';
 
   const pdfTextStyle = { fill: '#1A2332', fontSize: 11 };
   const pdfGridStyle = { stroke: '#E0E0E0', strokeDasharray: '3 3' };
@@ -854,37 +817,23 @@ export function PdfDashboardCharts() {
   };
 
   const renderPdfKecamatanChart = () => {
-    if (kecamatanChartType === 'line') {
-      return (
-        <div style={{ height: 320 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={kecData} margin={{ top: 10, right: 20, left: 10, bottom: 40 }}>
-              <CartesianGrid {...pdfGridStyle} />
-              <XAxis dataKey="name" tick={{ ...pdfTextStyle, fontSize: 9 }} angle={-40} textAnchor="end" interval={0} height={70} />
-              <YAxis tick={{ ...pdfTextStyle, fontSize: 10 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
-              <Tooltip contentStyle={{ background: '#fff', border: '1px solid #ccc', borderRadius: 4, fontSize: 12 }} />
-              <Legend wrapperStyle={{ fontSize: 10, color: '#333' }} />
-              {kecSeries.map(s => (
-                <Line key={s.key} type="monotone" dataKey={s.key} stroke={s.color} strokeWidth={2} dot={{ r: 3 }} name={s.name} />
-              ))}
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      );
-    }
-
-    // Default: bar
+    // Horizontal stacked bar chart for PDF
     return (
-      <div style={{ height: 320 }}>
+      <div style={{ height: 360 }}>
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={kecData} margin={{ top: 25, right: 20, left: 10, bottom: 40 }}>
-            <CartesianGrid {...pdfGridStyle} />
-            <XAxis dataKey="name" tick={{ ...pdfTextStyle, fontSize: 9 }} angle={-40} textAnchor="end" interval={0} height={70} />
-            <YAxis tick={{ ...pdfTextStyle, fontSize: 10 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
-            <Tooltip contentStyle={{ background: '#fff', border: '1px solid #ccc', borderRadius: 4, fontSize: 12 }} />
+          <BarChart data={kecData} layout="vertical" margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#E0E0E0" horizontal={false} />
+            <XAxis type="number" tick={{ fill: '#1A2332', fontSize: 10 }} tickFormatter={(v: number) => {
+              if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+              if (v >= 1_000) return `${(v / 1_000).toFixed(0)}k`;
+              return v.toFixed(0);
+            }} />
+            <YAxis type="category" dataKey="name" tick={{ fill: '#1A2332', fontSize: 10 }} width={110} />
+            <Tooltip contentStyle={{ background: '#fff', border: '1px solid #ccc', borderRadius: 4, fontSize: 12 }}
+              formatter={(value: number) => new Intl.NumberFormat('id-ID').format(value)} />
             <Legend wrapperStyle={{ fontSize: 10, color: '#333' }} />
             {kecSeries.map(s => (
-              <Bar key={s.key} dataKey={s.key} fill={s.color} radius={[4, 4, 0, 0]} label={renderBarLabelPdf} name={s.name} />
+              <Bar key={s.key} dataKey={s.key} fill={s.color} stackId="a" name={s.name} />
             ))}
           </BarChart>
         </ResponsiveContainer>
@@ -928,19 +877,7 @@ export function PdfDashboardCharts() {
       {/* Legacy IDs for backward compatibility with PDF export dialog */}
       <div id="pdf-chart-kecamatan" style={{ background: '#FFFFFF', padding: 20, width: 900, marginBottom: 16 }}>
         <h3 style={{ color: '#1A2332', fontSize: 14, fontWeight: 'bold', marginBottom: 8, fontFamily: 'sans-serif' }}>Produksi per Kecamatan</h3>
-        <div style={{ height: 320 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={getProduksiData(stats, 'kecamatan')} margin={{ top: 25, right: 20, left: 10, bottom: 40 }}>
-              <CartesianGrid {...pdfGridStyle} />
-              <XAxis dataKey="name" tick={{ ...pdfTextStyle, fontSize: 9 }} angle={-40} textAnchor="end" interval={0} height={70} />
-              <YAxis tick={{ ...pdfTextStyle, fontSize: 10 }} tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} />
-              <Tooltip contentStyle={{ background: '#fff', border: '1px solid #ccc', borderRadius: 4, fontSize: 12 }} />
-              <Legend wrapperStyle={{ fontSize: 11, color: '#333' }} />
-              <Bar dataKey="Pembesaran (Kg)" fill="#3B82F6" radius={[4, 4, 0, 0]} label={renderBarLabelPdf} />
-              <Bar dataKey="Pembenihan (Ekor)" fill="#22C55E" radius={[4, 4, 0, 0]} label={renderBarLabelPdf} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+        {renderPdfKecamatanChart()}
       </div>
 
       <div id="pdf-chart-wadah-budidaya" style={{ background: '#FFFFFF', padding: 20, width: 900 }}>
