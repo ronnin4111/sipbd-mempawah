@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   useReactTable,
   getCoreRowModel,
@@ -105,8 +105,25 @@ export function DataTable({ page, pageSize, onPageChange, onPageSizeChange }: Da
   const updateMutation = useUpdateFishFarm();
   const deleteMutation = useDeleteFishFarm();
 
+  // Persist column visibility to localStorage
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('fishFarm_columnVisibility');
+        if (saved) return JSON.parse(saved) as VisibilityState;
+      } catch {}
+    }
+    return {};
+  });
+
+  // Save to localStorage whenever columnVisibility changes
+  useEffect(() => {
+    try {
+      localStorage.setItem('fishFarm_columnVisibility', JSON.stringify(columnVisibility));
+    } catch {}
+  }, [columnVisibility]);
+
   const [sorting, setSorting] = useState<SortingState>([]);
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
 
   // Password protection state
   const [adminPassword, setAdminPassword] = useState('');
