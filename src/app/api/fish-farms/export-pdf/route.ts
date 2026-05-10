@@ -113,22 +113,38 @@ export async function GET(request: NextRequest) {
     const kecDetail: Record<string, {
       pembesaranProduction: number; pembenihanProduction: number;
       value: number; rtp: number; farmer: number; group: Set<string>;
+      pembesaranRtp: number; pembenihanRtp: number;
+      pembesaranFarmer: number; pembenihanFarmer: number;
+      pembesaranGroup: Set<string>; pembenihanGroup: Set<string>;
     }> = {};
     records.forEach(r => {
       if (!kecDetail[r.kecamatan]) kecDetail[r.kecamatan] = {
         pembesaranProduction: 0, pembenihanProduction: 0,
         value: 0, rtp: 0, farmer: 0, group: new Set(),
+        pembesaranRtp: 0, pembenihanRtp: 0,
+        pembesaranFarmer: 0, pembenihanFarmer: 0,
+        pembesaranGroup: new Set(), pembenihanGroup: new Set(),
       };
       if (r.businessType === 'Pembesaran') {
         kecDetail[r.kecamatan].pembesaranProduction += r.productionQty;
+        kecDetail[r.kecamatan].pembesaranRtp += r.rtpCount;
+        kecDetail[r.kecamatan].pembesaranFarmer += r.farmerCount;
       } else {
         kecDetail[r.kecamatan].pembenihanProduction += r.productionQty;
+        kecDetail[r.kecamatan].pembenihanRtp += r.rtpCount;
+        kecDetail[r.kecamatan].pembenihanFarmer += r.farmerCount;
       }
       kecDetail[r.kecamatan].value += r.productionValue;
       kecDetail[r.kecamatan].rtp += r.rtpCount;
       kecDetail[r.kecamatan].farmer += r.farmerCount;
       if (r.groupName && r.groupName.trim()) {
-        kecDetail[r.kecamatan].group.add(r.groupName.trim().toLowerCase());
+        const normalized = r.groupName.trim().toLowerCase();
+        kecDetail[r.kecamatan].group.add(normalized);
+        if (r.businessType === 'Pembesaran') {
+          kecDetail[r.kecamatan].pembesaranGroup.add(normalized);
+        } else {
+          kecDetail[r.kecamatan].pembenihanGroup.add(normalized);
+        }
       }
     });
 
@@ -210,20 +226,30 @@ export async function GET(request: NextRequest) {
 
     autoTable(doc, {
       startY: currentY + 2,
-      head: [['No', 'Kecamatan', 'Pembesaran (Kg)', 'Pembenihan (Ekor)', 'Nilai (Rp)', 'RTP', 'Pembudidaya', 'Kelompok']],
+      head: [[
+        { content: 'No', rowSpan: 2 },
+        { content: 'Kecamatan', rowSpan: 2 },
+        { content: 'Pembesaran', colSpan: 3, styles: { halign: 'center' } },
+        { content: 'Pembenihan', colSpan: 3, styles: { halign: 'center' } },
+        { content: 'Nilai (Rp)', rowSpan: 2 },
+      ], [
+        'Produksi (Kg)', 'RTP', 'Kelompok',
+        'Produksi (Ekor)', 'RTP', 'Kelompok',
+      ]],
       body: Object.entries(kecDetail).map(([kec, d], i) => [
         i + 1,
         kec,
         formatNumber(d.pembesaranProduction),
+        formatNumber(d.pembesaranRtp),
+        formatNumber(d.pembesaranGroup.size),
         formatNumber(d.pembenihanProduction),
+        formatNumber(d.pembenihanRtp),
+        formatNumber(d.pembenihanGroup.size),
         formatNumber(d.value),
-        formatNumber(d.rtp),
-        formatNumber(d.farmer),
-        formatNumber(d.group.size),
       ]),
       theme: 'grid',
-      headStyles: { fillColor: [22, 101, 52], textColor: 255, fontStyle: 'bold', fontSize: 7 },
-      styles: { fontSize: 7, cellPadding: 2 },
+      headStyles: { fillColor: [22, 101, 52], textColor: 255, fontStyle: 'bold', fontSize: 6 },
+      styles: { fontSize: 6, cellPadding: 2 },
       margin: { left: margin, right: margin },
       tableWidth: usableWidth,
       columnStyles: {
@@ -235,6 +261,7 @@ export async function GET(request: NextRequest) {
         5: { halign: 'right' },
         6: { halign: 'right' },
         7: { halign: 'right' },
+        8: { halign: 'right' },
       },
     });
 

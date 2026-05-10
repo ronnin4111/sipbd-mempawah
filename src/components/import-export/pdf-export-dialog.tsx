@@ -331,38 +331,51 @@ export function PdfExportDialog({ open, onOpenChange }: PdfExportDialogProps) {
               }
               currentY = addSectionTitle(section.label, currentY);
 
-              const fishTypeData: any[][] = Object.entries(statsData.productionByFishTypeDetail)
+              const fishTypeEntries = Object.entries(statsData.productionByFishTypeDetail);
+              const fishTypeData: any[][] = fishTypeEntries
                 .map(([fishType, val]: any) => [
                   fishType,
                   fmtNum(val.pembesaranProduction),
+                  fmtNum(val.pembesaranRtp || 0),
+                  fmtNum(val.pembesaranGroup || 0),
                   fmtNum(val.pembenihanProduction),
+                  fmtNum(val.pembenihanRtp || 0),
+                  fmtNum(val.pembenihanGroup || 0),
                   fmtCur(val.value),
-                  fmtNum(val.rtp),
-                  fmtNum(val.farmer),
-                  fmtNum(val.group),
                 ]);
 
-              const fishTypeValues: any[] = Object.values(statsData.productionByFishTypeDetail);
-              const totals = fishTypeValues.reduce((acc: any, val: any) => ({
-                pembesaranProduction: acc.pembesaranProduction + val.pembesaranProduction,
-                pembenihanProduction: acc.pembenihanProduction + val.pembenihanProduction,
-                value: acc.value + val.value,
-                rtp: acc.rtp + val.rtp,
-                farmer: acc.farmer + val.farmer,
-                group: acc.group + val.group,
-              }), { pembesaranProduction: 0, pembenihanProduction: 0, value: 0, rtp: 0, farmer: 0, group: 0 });
+              const fishTypeTotals = fishTypeEntries.reduce((acc: any, [, val]: any) => ({
+                pembesaranProduction: acc.pembesaranProduction + (val.pembesaranProduction as number),
+                pembenihanProduction: acc.pembenihanProduction + (val.pembenihanProduction as number),
+                pembesaranRtp: acc.pembesaranRtp + (val.pembesaranRtp || 0),
+                pembenihanRtp: acc.pembenihanRtp + (val.pembenihanRtp || 0),
+                pembesaranGroup: acc.pembesaranGroup + (val.pembesaranGroup || 0),
+                pembenihanGroup: acc.pembenihanGroup + (val.pembenihanGroup || 0),
+                value: acc.value + (val.value as number),
+              }), { pembesaranProduction: 0, pembenihanProduction: 0, pembesaranRtp: 0, pembenihanRtp: 0, pembesaranGroup: 0, pembenihanGroup: 0, value: 0 });
+
+              fishTypeData.push([
+                'TOTAL',
+                fmtNum(fishTypeTotals.pembesaranProduction), fmtNum(fishTypeTotals.pembesaranRtp), fmtNum(fishTypeTotals.pembesaranGroup),
+                fmtNum(fishTypeTotals.pembenihanProduction), fmtNum(fishTypeTotals.pembenihanRtp), fmtNum(fishTypeTotals.pembenihanGroup),
+                fmtCur(fishTypeTotals.value),
+              ]);
 
               autoTable(doc, {
                 startY: currentY,
-                head: [['Jenis Ikan', 'Pembesaran (Kg)', 'Pembenihan (Ekor)', 'Nilai (Rp)', 'RTP', 'Pembudidaya', 'Kelompok']],
-                body: [
-                  ...fishTypeData,
-                  ['TOTAL', fmtNum(totals.pembesaranProduction), fmtNum(totals.pembenihanProduction),
-                   fmtCur(totals.value), fmtNum(totals.rtp), fmtNum(totals.farmer), fmtNum(totals.group)],
-                ],
+                head: [[
+                  { content: 'Jenis Ikan', rowSpan: 2 },
+                  { content: 'Pembesaran', colSpan: 3, styles: { halign: 'center' } },
+                  { content: 'Pembenihan', colSpan: 3, styles: { halign: 'center' } },
+                  { content: 'Nilai (Rp)', rowSpan: 2 },
+                ], [
+                  'Produksi (Kg)', 'RTP', 'Kelompok',
+                  'Produksi (Ekor)', 'RTP', 'Kelompok',
+                ]],
+                body: fishTypeData,
                 theme: 'grid',
-                headStyles: { fillColor: [22, 101, 52], textColor: 255, fontStyle: 'bold', fontSize: 7 },
-                styles: { fontSize: 7, cellPadding: 2 },
+                headStyles: { fillColor: [22, 101, 52], textColor: 255, fontStyle: 'bold', fontSize: 6 },
+                styles: { fontSize: 6, cellPadding: 2 },
                 margin: { left: margin, right: margin },
                 columnStyles: {
                   0: { fontStyle: 'bold' },
@@ -372,10 +385,12 @@ export function PdfExportDialog({ open, onOpenChange }: PdfExportDialogProps) {
                   4: { halign: 'right' },
                   5: { halign: 'right' },
                   6: { halign: 'right' },
+                  7: { halign: 'right' },
                 },
                 didParseCell: (data: any) => {
-                  if (data.row.section === 'body' && data.row.index === fishTypeData.length) {
+                  if (data.row.section === 'body' && data.row.index === fishTypeData.length - 1) {
                     data.cell.styles.fontStyle = 'bold';
+                    data.cell.styles.fillColor = [240, 240, 240];
                   }
                 },
               });
@@ -440,46 +455,50 @@ export function PdfExportDialog({ open, onOpenChange }: PdfExportDialogProps) {
               const kecData: any[][] = kecEntries
                 .map(([kec, val]: any, i: number) => [
                   i + 1, kec,
-                  val.pembesaranProduction as number,
-                  val.pembenihanProduction as number,
-                  val.value as number,
-                  val.rtp as number,
-                  val.farmer as number,
-                  val.group as number,
+                  fmtNum(val.pembesaranProduction),
+                  fmtNum(val.pembesaranRtp || 0),
+                  fmtNum(val.pembesaranGroup || 0),
+                  fmtNum(val.pembenihanProduction),
+                  fmtNum(val.pembenihanRtp || 0),
+                  fmtNum(val.pembenihanGroup || 0),
+                  fmtCur(val.value),
                 ]);
 
               // Calculate totals
               const kecTotals = kecEntries.reduce((acc: any, [, val]: any) => ({
                 pembesaranProduction: acc.pembesaranProduction + (val.pembesaranProduction as number),
                 pembenihanProduction: acc.pembenihanProduction + (val.pembenihanProduction as number),
+                pembesaranRtp: acc.pembesaranRtp + (val.pembesaranRtp || 0),
+                pembenihanRtp: acc.pembenihanRtp + (val.pembenihanRtp || 0),
+                pembesaranGroup: acc.pembesaranGroup + (val.pembesaranGroup || 0),
+                pembenihanGroup: acc.pembenihanGroup + (val.pembenihanGroup || 0),
                 value: acc.value + (val.value as number),
-                rtp: acc.rtp + (val.rtp as number),
-                farmer: acc.farmer + (val.farmer as number),
-                group: acc.group + (val.group as number),
-              }), { pembesaranProduction: 0, pembenihanProduction: 0, value: 0, rtp: 0, farmer: 0, group: 0 });
-
-              // Format data rows
-              const kecDataFormatted: any[][] = kecData.map(row => [
-                row[0], row[1],
-                fmtNum(row[2]), fmtNum(row[3]), fmtCur(row[4]),
-                fmtNum(row[5]), fmtNum(row[6]), fmtNum(row[7]),
-              ]);
+              }), { pembesaranProduction: 0, pembenihanProduction: 0, pembesaranRtp: 0, pembenihanRtp: 0, pembesaranGroup: 0, pembenihanGroup: 0, value: 0 });
 
               // Add total row
-              kecDataFormatted.push([
+              kecData.push([
                 '', 'TOTAL',
-                fmtNum(kecTotals.pembesaranProduction), fmtNum(kecTotals.pembenihanProduction),
-                fmtCur(kecTotals.value), fmtNum(kecTotals.rtp),
-                fmtNum(kecTotals.farmer), fmtNum(kecTotals.group),
+                fmtNum(kecTotals.pembesaranProduction), fmtNum(kecTotals.pembesaranRtp), fmtNum(kecTotals.pembesaranGroup),
+                fmtNum(kecTotals.pembenihanProduction), fmtNum(kecTotals.pembenihanRtp), fmtNum(kecTotals.pembenihanGroup),
+                fmtCur(kecTotals.value),
               ]);
 
               autoTable(doc, {
                 startY: currentY,
-                head: [['No', 'Kecamatan', 'Pembesaran (Kg)', 'Pembenihan (Ekor)', 'Nilai (Rp)', 'RTP', 'Pembudidaya', 'Kelompok']],
-                body: kecDataFormatted,
+                head: [[
+                  { content: 'No', rowSpan: 2 },
+                  { content: 'Kecamatan', rowSpan: 2 },
+                  { content: 'Pembesaran', colSpan: 3, styles: { halign: 'center' } },
+                  { content: 'Pembenihan', colSpan: 3, styles: { halign: 'center' } },
+                  { content: 'Nilai (Rp)', rowSpan: 2 },
+                ], [
+                  'Produksi (Kg)', 'RTP', 'Kelompok',
+                  'Produksi (Ekor)', 'RTP', 'Kelompok',
+                ]],
+                body: kecData,
                 theme: 'grid',
-                headStyles: { fillColor: [22, 101, 52], textColor: 255, fontStyle: 'bold', fontSize: 7 },
-                styles: { fontSize: 7, cellPadding: 2 },
+                headStyles: { fillColor: [22, 101, 52], textColor: 255, fontStyle: 'bold', fontSize: 6 },
+                styles: { fontSize: 6, cellPadding: 2 },
                 margin: { left: margin, right: margin },
                 columnStyles: {
                   0: { halign: 'center' },
@@ -490,10 +509,11 @@ export function PdfExportDialog({ open, onOpenChange }: PdfExportDialogProps) {
                   5: { halign: 'right' },
                   6: { halign: 'right' },
                   7: { halign: 'right' },
+                  8: { halign: 'right' },
                 },
                 didParseCell: (data: any) => {
                   // Bold the TOTAL row
-                  if (data.row.section === 'body' && data.row.index === kecDataFormatted.length - 1) {
+                  if (data.row.section === 'body' && data.row.index === kecData.length - 1) {
                     data.cell.styles.fontStyle = 'bold';
                     data.cell.styles.fillColor = [240, 240, 240];
                   }

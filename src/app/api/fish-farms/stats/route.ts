@@ -504,13 +504,23 @@ export async function GET(request: NextRequest) {
       rtp: number;
       farmer: number;
       group: number;
+      pembesaranFarmer: number;
+      pembenihanFarmer: number;
+      pembesaranRtp: number;
+      pembenihanRtp: number;
+      pembesaranGroup: number;
+      pembenihanGroup: number;
     }> = {};
     const groupNamesByFishType: Record<string, Set<string>> = {};
+    const groupNamesByFishTypeBusinessType: Record<string, Record<string, Set<string>>> = {};
     records.forEach(r => {
       if (!productionByFishTypeDetail[r.fishType]) {
         productionByFishTypeDetail[r.fishType] = {
           pembesaranProduction: 0, pembenihanProduction: 0,
           value: 0, rtp: 0, farmer: 0, group: 0,
+          pembesaranFarmer: 0, pembenihanFarmer: 0,
+          pembesaranRtp: 0, pembenihanRtp: 0,
+          pembesaranGroup: 0, pembenihanGroup: 0,
         };
       }
       if (r.businessType === 'Pembesaran') {
@@ -520,8 +530,12 @@ export async function GET(request: NextRequest) {
       }
       productionByFishTypeDetail[r.fishType].value += r.productionValue;
       if (r.groupName && r.groupName.trim()) {
+        const normalized = r.groupName.trim().toLowerCase();
         if (!groupNamesByFishType[r.fishType]) groupNamesByFishType[r.fishType] = new Set();
-        groupNamesByFishType[r.fishType].add(r.groupName.trim().toLowerCase());
+        groupNamesByFishType[r.fishType].add(normalized);
+        if (!groupNamesByFishTypeBusinessType[r.fishType]) groupNamesByFishTypeBusinessType[r.fishType] = {};
+        if (!groupNamesByFishTypeBusinessType[r.fishType][r.businessType]) groupNamesByFishTypeBusinessType[r.fishType][r.businessType] = new Set();
+        groupNamesByFishTypeBusinessType[r.fishType][r.businessType].add(normalized);
       }
     });
     // Calculate farmer/rtp from unique farmer records only (avoid double-counting)
@@ -529,10 +543,20 @@ export async function GET(request: NextRequest) {
       if (productionByFishTypeDetail[r.fishType]) {
         productionByFishTypeDetail[r.fishType].rtp += r.rtpCount;
         productionByFishTypeDetail[r.fishType].farmer += r.farmerCount;
+        // Split by business type
+        if (r.businessType === 'Pembesaran') {
+          productionByFishTypeDetail[r.fishType].pembesaranFarmer += r.farmerCount;
+          productionByFishTypeDetail[r.fishType].pembesaranRtp += r.rtpCount;
+        } else {
+          productionByFishTypeDetail[r.fishType].pembenihanFarmer += r.farmerCount;
+          productionByFishTypeDetail[r.fishType].pembenihanRtp += r.rtpCount;
+        }
       }
     });
     Object.keys(productionByFishTypeDetail).forEach(ft => {
       productionByFishTypeDetail[ft].group = groupNamesByFishType[ft]?.size || 0;
+      productionByFishTypeDetail[ft].pembesaranGroup = groupNamesByFishTypeBusinessType[ft]?.['Pembesaran']?.size || 0;
+      productionByFishTypeDetail[ft].pembenihanGroup = groupNamesByFishTypeBusinessType[ft]?.['Pembenihan']?.size || 0;
     });
 
     // Round all float values to 2 decimal places
@@ -644,6 +668,12 @@ export async function GET(request: NextRequest) {
           rtp: v.rtp,
           farmer: v.farmer,
           group: v.group,
+          pembesaranFarmer: v.pembesaranFarmer,
+          pembenihanFarmer: v.pembenihanFarmer,
+          pembesaranRtp: v.pembesaranRtp,
+          pembenihanRtp: v.pembenihanRtp,
+          pembesaranGroup: v.pembesaranGroup,
+          pembenihanGroup: v.pembenihanGroup,
         }])
       ),
       trendByFishType: Object.fromEntries(

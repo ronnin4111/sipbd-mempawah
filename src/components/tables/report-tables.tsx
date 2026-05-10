@@ -298,11 +298,14 @@ function KecamatanDetailTable() {
       pembesaranProduction: acc.pembesaranProduction + row.pembesaranProduction,
       pembenihanProduction: acc.pembenihanProduction + row.pembenihanProduction,
       value: acc.value + row.value,
-      rtp: acc.rtp + row.rtp,
-      farmer: acc.farmer + row.farmer,
-      group: acc.group + row.group,
+      pembesaranRtp: acc.pembesaranRtp + (row.pembesaranRtp || 0),
+      pembenihanRtp: acc.pembenihanRtp + (row.pembenihanRtp || 0),
+      pembesaranFarmer: acc.pembesaranFarmer + (row.pembesaranFarmer || 0),
+      pembenihanFarmer: acc.pembenihanFarmer + (row.pembenihanFarmer || 0),
+      pembesaranGroup: acc.pembesaranGroup + (row.pembesaranGroup || 0),
+      pembenihanGroup: acc.pembenihanGroup + (row.pembenihanGroup || 0),
     }),
-    { pembesaranProduction: 0, pembenihanProduction: 0, value: 0, rtp: 0, farmer: 0, group: 0 }
+    { pembesaranProduction: 0, pembenihanProduction: 0, value: 0, pembesaranRtp: 0, pembenihanRtp: 0, pembesaranFarmer: 0, pembenihanFarmer: 0, pembesaranGroup: 0, pembenihanGroup: 0 }
   );
 
   return (
@@ -323,12 +326,17 @@ function KecamatanDetailTable() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50 hover:bg-muted/50 sticky top-0">
-                  <TableHead className="text-xs font-semibold">Kecamatan</TableHead>
-                  <TableHead className="text-xs font-semibold text-right">Pembesaran (Kg)</TableHead>
-                  <TableHead className="text-xs font-semibold text-right">Pembenihan (Ekor)</TableHead>
-                  <TableHead className="text-xs font-semibold text-right">Nilai (Rp)</TableHead>
+                  <TableHead className="text-xs font-semibold" rowSpan={2}>Kecamatan</TableHead>
+                  <TableHead className="text-xs font-semibold text-center border-b" colSpan={3}>Pembesaran</TableHead>
+                  <TableHead className="text-xs font-semibold text-center border-b" colSpan={3}>Pembenihan</TableHead>
+                  <TableHead className="text-xs font-semibold text-right" rowSpan={2}>Nilai (Rp)</TableHead>
+                </TableRow>
+                <TableRow className="bg-muted/50 hover:bg-muted/50">
+                  <TableHead className="text-xs font-semibold text-right">Produksi (Kg)</TableHead>
                   <TableHead className="text-xs font-semibold text-right">RTP</TableHead>
-                  <TableHead className="text-xs font-semibold text-right">Pembudidaya</TableHead>
+                  <TableHead className="text-xs font-semibold text-right">Kelompok</TableHead>
+                  <TableHead className="text-xs font-semibold text-right">Produksi (Ekor)</TableHead>
+                  <TableHead className="text-xs font-semibold text-right">RTP</TableHead>
                   <TableHead className="text-xs font-semibold text-right">Kelompok</TableHead>
                 </TableRow>
               </TableHeader>
@@ -337,22 +345,24 @@ function KecamatanDetailTable() {
                   <TableRow key={row.kecamatan}>
                     <TableCell className="text-xs font-medium whitespace-nowrap">{row.kecamatan}</TableCell>
                     <TableCell className="text-xs text-right">{formatNumber(row.pembesaranProduction)}</TableCell>
+                    <TableCell className="text-xs text-right">{formatNumber(row.pembesaranRtp || 0)}</TableCell>
+                    <TableCell className="text-xs text-right">{formatNumber(row.pembesaranGroup || 0)}</TableCell>
                     <TableCell className="text-xs text-right">{formatNumber(row.pembenihanProduction)}</TableCell>
+                    <TableCell className="text-xs text-right">{formatNumber(row.pembenihanRtp || 0)}</TableCell>
+                    <TableCell className="text-xs text-right">{formatNumber(row.pembenihanGroup || 0)}</TableCell>
                     <TableCell className="text-xs text-right">{formatCurrency(row.value)}</TableCell>
-                    <TableCell className="text-xs text-right">{formatNumber(row.rtp)}</TableCell>
-                    <TableCell className="text-xs text-right">{formatNumber(row.farmer)}</TableCell>
-                    <TableCell className="text-xs text-right">{formatNumber(row.group)}</TableCell>
                   </TableRow>
                 ))}
                 {/* Total Row */}
                 <TableRow className="bg-muted/30 font-semibold sticky bottom-0">
                   <TableCell className="text-xs font-bold">TOTAL</TableCell>
                   <TableCell className="text-xs text-right font-bold">{formatNumber(totals.pembesaranProduction)}</TableCell>
+                  <TableCell className="text-xs text-right font-bold">{formatNumber(totals.pembesaranRtp)}</TableCell>
+                  <TableCell className="text-xs text-right font-bold">{formatNumber(totals.pembesaranGroup)}</TableCell>
                   <TableCell className="text-xs text-right font-bold">{formatNumber(totals.pembenihanProduction)}</TableCell>
+                  <TableCell className="text-xs text-right font-bold">{formatNumber(totals.pembenihanRtp)}</TableCell>
+                  <TableCell className="text-xs text-right font-bold">{formatNumber(totals.pembenihanGroup)}</TableCell>
                   <TableCell className="text-xs text-right font-bold">{formatCurrency(totals.value)}</TableCell>
-                  <TableCell className="text-xs text-right font-bold">{formatNumber(totals.rtp)}</TableCell>
-                  <TableCell className="text-xs text-right font-bold">{formatNumber(totals.farmer)}</TableCell>
-                  <TableCell className="text-xs text-right font-bold">{formatNumber(totals.group)}</TableCell>
                 </TableRow>
               </TableBody>
             </Table>
@@ -394,11 +404,14 @@ function FishTypeDetailTable() {
       pembesaranProduction: acc.pembesaranProduction + row.pembesaranProduction,
       pembenihanProduction: acc.pembenihanProduction + row.pembenihanProduction,
       value: acc.value + row.value,
-      rtp: acc.rtp + row.rtp,
-      farmer: acc.farmer + row.farmer,
-      group: acc.group + row.group,
+      pembesaranRtp: acc.pembesaranRtp + (row.pembesaranRtp || 0),
+      pembenihanRtp: acc.pembenihanRtp + (row.pembenihanRtp || 0),
+      pembesaranFarmer: acc.pembesaranFarmer + (row.pembesaranFarmer || 0),
+      pembenihanFarmer: acc.pembenihanFarmer + (row.pembenihanFarmer || 0),
+      pembesaranGroup: acc.pembesaranGroup + (row.pembesaranGroup || 0),
+      pembenihanGroup: acc.pembenihanGroup + (row.pembenihanGroup || 0),
     }),
-    { pembesaranProduction: 0, pembenihanProduction: 0, value: 0, rtp: 0, farmer: 0, group: 0 }
+    { pembesaranProduction: 0, pembenihanProduction: 0, value: 0, pembesaranRtp: 0, pembenihanRtp: 0, pembesaranFarmer: 0, pembenihanFarmer: 0, pembesaranGroup: 0, pembenihanGroup: 0 }
   );
 
   return (
@@ -419,12 +432,17 @@ function FishTypeDetailTable() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50 hover:bg-muted/50 sticky top-0 z-10">
-                  <TableHead className="text-xs font-semibold">Jenis Ikan</TableHead>
-                  <TableHead className="text-xs font-semibold text-right">Pembesaran (Kg)</TableHead>
-                  <TableHead className="text-xs font-semibold text-right">Pembenihan (Ekor)</TableHead>
-                  <TableHead className="text-xs font-semibold text-right">Nilai (Rp)</TableHead>
+                  <TableHead className="text-xs font-semibold" rowSpan={2}>Jenis Ikan</TableHead>
+                  <TableHead className="text-xs font-semibold text-center border-b" colSpan={3}>Pembesaran</TableHead>
+                  <TableHead className="text-xs font-semibold text-center border-b" colSpan={3}>Pembenihan</TableHead>
+                  <TableHead className="text-xs font-semibold text-right" rowSpan={2}>Nilai (Rp)</TableHead>
+                </TableRow>
+                <TableRow className="bg-muted/50 hover:bg-muted/50">
+                  <TableHead className="text-xs font-semibold text-right">Produksi (Kg)</TableHead>
                   <TableHead className="text-xs font-semibold text-right">RTP</TableHead>
-                  <TableHead className="text-xs font-semibold text-right">Pembudidaya</TableHead>
+                  <TableHead className="text-xs font-semibold text-right">Kelompok</TableHead>
+                  <TableHead className="text-xs font-semibold text-right">Produksi (Ekor)</TableHead>
+                  <TableHead className="text-xs font-semibold text-right">RTP</TableHead>
                   <TableHead className="text-xs font-semibold text-right">Kelompok</TableHead>
                 </TableRow>
               </TableHeader>
@@ -433,22 +451,24 @@ function FishTypeDetailTable() {
                   <TableRow key={row.fishType}>
                     <TableCell className="text-xs font-medium whitespace-nowrap">{row.fishType}</TableCell>
                     <TableCell className="text-xs text-right">{formatNumber(row.pembesaranProduction)}</TableCell>
+                    <TableCell className="text-xs text-right">{formatNumber(row.pembesaranRtp || 0)}</TableCell>
+                    <TableCell className="text-xs text-right">{formatNumber(row.pembesaranGroup || 0)}</TableCell>
                     <TableCell className="text-xs text-right">{formatNumber(row.pembenihanProduction)}</TableCell>
+                    <TableCell className="text-xs text-right">{formatNumber(row.pembenihanRtp || 0)}</TableCell>
+                    <TableCell className="text-xs text-right">{formatNumber(row.pembenihanGroup || 0)}</TableCell>
                     <TableCell className="text-xs text-right">{formatCurrency(row.value)}</TableCell>
-                    <TableCell className="text-xs text-right">{formatNumber(row.rtp)}</TableCell>
-                    <TableCell className="text-xs text-right">{formatNumber(row.farmer)}</TableCell>
-                    <TableCell className="text-xs text-right">{formatNumber(row.group)}</TableCell>
                   </TableRow>
                 ))}
                 {/* Total Row */}
                 <TableRow className="bg-muted/30 font-semibold sticky bottom-0">
                   <TableCell className="text-xs font-bold">TOTAL</TableCell>
                   <TableCell className="text-xs text-right font-bold">{formatNumber(totals.pembesaranProduction)}</TableCell>
+                  <TableCell className="text-xs text-right font-bold">{formatNumber(totals.pembesaranRtp)}</TableCell>
+                  <TableCell className="text-xs text-right font-bold">{formatNumber(totals.pembesaranGroup)}</TableCell>
                   <TableCell className="text-xs text-right font-bold">{formatNumber(totals.pembenihanProduction)}</TableCell>
+                  <TableCell className="text-xs text-right font-bold">{formatNumber(totals.pembenihanRtp)}</TableCell>
+                  <TableCell className="text-xs text-right font-bold">{formatNumber(totals.pembenihanGroup)}</TableCell>
                   <TableCell className="text-xs text-right font-bold">{formatCurrency(totals.value)}</TableCell>
-                  <TableCell className="text-xs text-right font-bold">{formatNumber(totals.rtp)}</TableCell>
-                  <TableCell className="text-xs text-right font-bold">{formatNumber(totals.farmer)}</TableCell>
-                  <TableCell className="text-xs text-right font-bold">{formatNumber(totals.group)}</TableCell>
                 </TableRow>
               </TableBody>
             </Table>
