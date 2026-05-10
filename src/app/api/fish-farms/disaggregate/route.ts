@@ -13,9 +13,9 @@ const VALID_TRIWULAN = ['Q1', 'Q2', 'Q3', 'Q4'];
  * Query params:
  *   year          - target year (e.g. 2025)
  *   triwulan      - Q1/Q2/Q3/Q4
- *   kecamatan     - kecamatan name
- *   fishType      - fish type name
- *   containerType - container type name
+ *   kecamatan     - comma-separated kecamatan names (multi-select)
+ *   fishType      - comma-separated fish type names (multi-select)
+ *   containerType - comma-separated container type names (multi-select)
  *   businessType  - Pembesaran / Pembenihan
  *   totalQty      - the aggregate total to distribute
  */
@@ -25,14 +25,19 @@ export async function GET(request: NextRequest) {
 
     const year = Number(searchParams.get('year'));
     const triwulan = searchParams.get('triwulan') || 'Q4';
-    const kecamatan = searchParams.get('kecamatan') || '';
-    const fishType = searchParams.get('fishType') || '';
-    const containerType = searchParams.get('containerType') || '';
+    const kecamatanParam = searchParams.get('kecamatan') || '';
+    const fishTypeParam = searchParams.get('fishType') || '';
+    const containerTypeParam = searchParams.get('containerType') || '';
     const businessType = searchParams.get('businessType') || '';
     const totalQty = Number(searchParams.get('totalQty'));
 
+    // Parse comma-separated params into arrays
+    const kecamatanList = kecamatanParam.split(',').map((s) => s.trim()).filter(Boolean);
+    const fishTypeList = fishTypeParam.split(',').map((s) => s.trim()).filter(Boolean);
+    const containerTypeList = containerTypeParam.split(',').map((s) => s.trim()).filter(Boolean);
+
     // Validate required params
-    if (!year || !kecamatan || !fishType || !containerType || !businessType || !totalQty) {
+    if (!year || kecamatanList.length === 0 || fishTypeList.length === 0 || containerTypeList.length === 0 || !businessType || !totalQty) {
       return NextResponse.json(
         { error: 'Parameter tidak lengkap (year, triwulan, kecamatan, fishType, containerType, businessType, totalQty)' },
         { status: 400 }
@@ -46,12 +51,11 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Step 1: Find all existing FishFarm records matching: kecamatan + fishType + containerType + businessType
-    // Look in the current year first, then most recent year
+    // Step 1: Find all existing FishFarm records matching: kecamatan[] + fishType[] + containerType[] + businessType
     const matchCriteria = {
-      kecamatan,
-      fishType,
-      containerType,
+      kecamatan: { in: kecamatanList },
+      fishType: { in: fishTypeList },
+      containerType: { in: containerTypeList },
       businessType,
     };
 
@@ -91,11 +95,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Step 2: Check if same triwulan exists in previous data for proportional distribution
-    // Look for records with the same triwulan in the most recent year
+    // Step 2: Check if same triwulan exists in previous data
     let hasReference = false;
 
-    // Try to find reference data: same criteria + triwulan in the reference year
     const referenceRecords = await db.fishFarm.findMany({
       where: {
         ...matchCriteria,
@@ -120,6 +122,9 @@ export async function GET(request: NextRequest) {
       farmerName: string;
       groupName: string;
       desa: string;
+      kecamatan: string;
+      fishType: string;
+      containerType: string;
       referenceQty: number;
       rtpCount: number;
       farmerCount: number;
@@ -148,6 +153,9 @@ export async function GET(request: NextRequest) {
           farmerName: r.farmerName,
           groupName: r.groupName,
           desa: r.desa,
+          kecamatan: r.kecamatan,
+          fishType: r.fishType,
+          containerType: r.containerType,
           referenceQty: r.productionQty,
           rtpCount: r.rtpCount,
           farmerCount: r.farmerCount,
@@ -176,11 +184,13 @@ export async function GET(request: NextRequest) {
         farmerName: f.farmerName,
         groupName: f.groupName,
         desa: f.desa,
+        kecamatan: f.kecamatan,
+        fishType: f.fishType,
+        containerType: f.containerType,
         referenceQty: Math.round(f.referenceQty * 100) / 100,
         proportion: Math.round(proportion * 10000) / 10000,
         allocatedQty,
         adjustmentPct,
-        // Include metadata for save operation
         rtpCount: f.rtpCount,
         farmerCount: f.farmerCount,
         groupCount: f.groupCount,
@@ -197,7 +207,6 @@ export async function GET(request: NextRequest) {
     const totalAllocated = farmersWithAllocation.reduce((sum, f) => sum + f.allocatedQty, 0);
     const diff = Math.round((totalQty - totalAllocated) * 100) / 100;
     if (diff !== 0 && farmersWithAllocation.length > 0) {
-      // Add the difference to the largest farmer
       farmersWithAllocation[0].allocatedQty = Math.round((farmersWithAllocation[0].allocatedQty + diff) * 100) / 100;
     }
 
@@ -224,16 +233,16 @@ export async function GET(request: NextRequest) {
  * Save disaggregated data as individual FishFarm records.
  *
  * Body:
- *   password     - "diskan2026"
- *   year         - target year
- *   triwulan     - Q1/Q2/Q3/Q4
- *   kecamatan    - kecamatan name
- *   fishType     - fish type
- *   containerType - container type
- *   businessType - Pembesaran/Pembenihan
- *   totalQty     - total aggregate quantity
- *   notes        - optional notes
- *   farmers[]    - array of farmer allocations
+ *   password      - "diskan2026"
+ *   year          - target year
+ *   triwulan      - Q1/Q2/Q3/Q4
+ *   kecamatan     - string[] or string (multi-select support)
+ *   fishType      - string[] or string (multi-select support)
+ *   containerType - string[] or string (multi-select support)
+ *   businessType  - Pembesaran/Pembenihan
+ *   totalQty      - total aggregate quantity
+ *   notes         - optional notes
+ *   farmers[]     - array of farmer allocations (each with kecamatan, fishType, containerType)
  */
 export async function POST(request: NextRequest) {
   try {
@@ -253,9 +262,9 @@ export async function POST(request: NextRequest) {
       password: string;
       year: number;
       triwulan: string;
-      kecamatan: string;
-      fishType: string;
-      containerType: string;
+      kecamatan: string | string[];
+      fishType: string | string[];
+      containerType: string | string[];
       businessType: string;
       totalQty: number;
       notes?: string;
@@ -264,6 +273,9 @@ export async function POST(request: NextRequest) {
         farmerName: string;
         groupName: string;
         desa: string;
+        kecamatan?: string;
+        fishType?: string;
+        containerType?: string;
         allocatedQty: number;
         rtpCount?: number;
         farmerCount?: number;
@@ -285,8 +297,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Normalize to arrays
+    const kecamatanList = Array.isArray(kecamatan) ? kecamatan : [kecamatan];
+    const fishTypeList = Array.isArray(fishType) ? fishType : [fishType];
+    const containerTypeList = Array.isArray(containerType) ? containerType : [containerType];
+
     // Validate required fields
-    if (!year || !triwulan || !kecamatan || !fishType || !containerType || !businessType || !totalQty) {
+    if (!year || !triwulan || kecamatanList.length === 0 || fishTypeList.length === 0 || containerTypeList.length === 0 || !businessType || !totalQty) {
       return NextResponse.json(
         { error: 'Field wajib tidak lengkap' },
         { status: 400 }
@@ -312,9 +329,9 @@ export async function POST(request: NextRequest) {
       data: {
         year,
         triwulan,
-        kecamatan,
-        fishType,
-        containerType,
+        kecamatan: kecamatanList.join(', '),
+        fishType: fishTypeList.join(', '),
+        containerType: containerTypeList.join(', '),
         businessType,
         totalQty,
         notes,
@@ -330,12 +347,17 @@ export async function POST(request: NextRequest) {
       const createPromises = farmerBatch.map(async (farmer) => {
         let farmerId = farmer.farmerId || '';
 
+        // Use farmer-specific kecamatan/fishType/containerType if provided (from multi-select),
+        // otherwise use the first value from the aggregate selection
+        const farmerKecamatan = farmer.kecamatan || kecamatanList[0];
+        const farmerFishType = farmer.fishType || fishTypeList[0];
+        const farmerContainerType = farmer.containerType || containerTypeList[0];
+
         if (farmer.isNew || !farmerId) {
-          // Generate new farmerId for new farmers
           farmerId = generateFarmerId({
             farmerName: farmer.farmerName,
             groupName: farmer.groupName,
-            kecamatan,
+            kecamatan: farmerKecamatan,
             desa: farmer.desa,
           });
         }
@@ -376,10 +398,10 @@ export async function POST(request: NextRequest) {
             year,
             triwulan,
             farmerId,
-            kecamatan,
+            kecamatan: farmerKecamatan,
             desa: farmer.desa,
-            fishType,
-            containerType,
+            fishType: farmerFishType,
+            containerType: farmerContainerType,
             businessType,
             farmerName: farmer.farmerName,
             groupName: farmer.groupName,

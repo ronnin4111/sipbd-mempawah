@@ -11,7 +11,7 @@ import { MapView } from '@/components/map/map-view';
 import { ReportTables } from '@/components/tables/report-tables';
 import { ImportDialog } from '@/components/import-export/import-dialog';
 import { ExportSection } from '@/components/import-export/export-section';
-import { DisaggregationSection } from '@/components/disaggregation/disaggregation-section';
+import { DisaggregationDialog } from '@/components/disaggregation/disaggregation-dialog';
 import { useFilterStore } from '@/store/filter-store';
 import { HeroBanner } from '@/components/layout/hero-banner';
 import { CommodityPricesTable } from '@/components/commodity-prices/commodity-prices-table';
@@ -117,14 +117,6 @@ function HargaKomoditasSection() {
   );
 }
 
-function DisagregasiSection() {
-  return (
-    <div className="space-y-4">
-      <DisaggregationSection />
-    </div>
-  );
-}
-
 function ImportExportSection() {
   const [importOpen, setImportOpen] = useState(false);
 
@@ -153,6 +145,10 @@ function ImportExportSection() {
 
 export default function Home() {
   const activeSection = useFilterStore((s) => s.activeSection);
+  const [disaggregationOpen, setDisaggregationOpen] = useState(false);
+
+  // Open dialog when sidebar selects disagregasi
+  const isDisagregasi = activeSection === 'disagregasi';
 
   const renderSection = () => {
     switch (activeSection) {
@@ -168,8 +164,6 @@ export default function Home() {
         return <TrenV2Section />;
       case 'harga-komoditas':
         return <HargaKomoditasSection />;
-      case 'disagregasi':
-        return <DisagregasiSection />;
       case 'import-export':
         return <ImportExportSection />;
       default:
@@ -183,15 +177,27 @@ export default function Home() {
       <PdfDashboardCharts />
       <AnimatePresence mode="wait">
         <motion.div
-          key={activeSection}
+          key={activeSection === 'disagregasi' ? 'dashboard' : activeSection}
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -8 }}
           transition={{ duration: 0.25, ease: 'easeOut' }}
         >
-          {renderSection()}
+          {activeSection === 'disagregasi' ? <DashboardSection /> : renderSection()}
         </motion.div>
       </AnimatePresence>
+
+      {/* Disaggregation dialog — only opens from sidebar */}
+      <DisaggregationDialog
+        open={isDisagregasi || disaggregationOpen}
+        onOpenChange={(open) => {
+          setDisaggregationOpen(open);
+          if (!open) {
+            // When dialog closes, go back to dashboard
+            useFilterStore.getState().setActiveSection('dashboard');
+          }
+        }}
+      />
     </AppShell>
   );
 }

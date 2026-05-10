@@ -5,7 +5,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Split,
   Search,
-  Users,
   Plus,
   RotateCcw,
   ChevronLeft,
@@ -16,6 +15,8 @@ import {
   Lock,
   Save,
   Trash2,
+  FileSpreadsheet,
+  Download,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -46,6 +47,7 @@ import { Badge } from '@/components/ui/badge';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
+import { MultiSelect } from '@/components/ui/multi-select';
 import {
   KECAMATAN_LIST,
   KECAMATAN_DESA,
@@ -60,13 +62,15 @@ interface FarmerAllocation {
   farmerName: string;
   groupName: string;
   desa: string;
+  kecamatan: string;
+  fishType: string;
+  containerType: string;
   referenceQty: number;
   proportion: number;
   allocatedQty: number;
   adjustmentPct: number;
   finalQty: number;
   isNew: boolean;
-  // metadata for save
   rtpCount: number;
   farmerCount: number;
   groupCount: number;
@@ -80,10 +84,10 @@ interface FarmerAllocation {
 interface AgregatForm {
   year: string;
   triwulan: string;
-  kecamatan: string;
+  kecamatan: string[];       // multi-select
   businessType: string;
-  fishType: string;
-  containerType: string;
+  fishType: string[];         // multi-select
+  containerType: string[];    // multi-select
   totalQty: string;
 }
 
@@ -114,17 +118,16 @@ interface DisaggregationDialogProps {
 }
 
 export function DisaggregationDialog({ open, onOpenChange }: DisaggregationDialogProps) {
-  // Step control
   const [step, setStep] = useState(1);
 
-  // Step 1 — Aggregate input
+  // Step 1 — Aggregate input (multi-select for kecamatan, fishType, containerType)
   const [form, setForm] = useState<AgregatForm>({
     year: '',
     triwulan: '',
-    kecamatan: '',
+    kecamatan: [],
     businessType: '',
-    fishType: '',
-    containerType: '',
+    fishType: [],
+    containerType: [],
     totalQty: '',
   });
 
@@ -133,7 +136,10 @@ export function DisaggregationDialog({ open, onOpenChange }: DisaggregationDialo
   const [loading, setLoading] = useState(false);
   const [referenceInfo, setReferenceInfo] = useState<{ hasReference: boolean; referenceYear: number } | null>(null);
 
-  // Step 3 — New farmer inline form
+  // Bulk adjust input
+  const [bulkAdjustValue, setBulkAdjustValue] = useState('');
+
+  // New farmer inline form
   const [showNewFarmer, setShowNewFarmer] = useState(false);
   const [newFarmer, setNewFarmer] = useState<NewFarmerForm>({
     farmerName: '',
@@ -146,6 +152,7 @@ export function DisaggregationDialog({ open, onOpenChange }: DisaggregationDialo
   const [password, setPassword] = useState('');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   // ─── Derived ─────────────────────────────────────────────────────────────
 
@@ -160,21 +167,22 @@ export function DisaggregationDialog({ open, onOpenChange }: DisaggregationDialo
   const isFormValid = useMemo(
     () =>
       form.year &&
-      parseInt(form.year) >= 2000 &&
-      parseInt(form.year) <= 2099 &&
+      parseInt(form.year) >= 2020 &&
+      parseInt(form.year) <= 2025 &&
       form.triwulan &&
-      form.kecamatan &&
+      form.kecamatan.length > 0 &&
       form.businessType &&
-      form.fishType &&
-      form.containerType &&
+      form.fishType.length > 0 &&
+      form.containerType.length > 0 &&
       form.totalQty &&
       parseFloat(form.totalQty) > 0,
     [form],
   );
 
   const desaOptions = useMemo(() => {
-    if (!form.kecamatan) return [];
-    return KECAMATAN_DESA[form.kecamatan] || [];
+    if (form.kecamatan.length === 0) return [];
+    const allDesa = form.kecamatan.flatMap((k) => KECAMATAN_DESA[k] || []);
+    return allDesa;
   }, [form.kecamatan]);
 
   // ─── Recalculation logic ────────────────────────────────────────────────
@@ -183,18 +191,14 @@ export function DisaggregationDialog({ open, onOpenChange }: DisaggregationDialo
     (currentFarmers: FarmerAllocation[], totalQty: number): FarmerAllocation[] => {
       if (currentFarmers.length === 0 || totalQty <= 0) return currentFarmers;
 
-      // 1. Calculate adjusted values for all farmers
       const withAdjusted = currentFarmers.map((f) => ({
         ...f,
         finalQty: f.allocatedQty * (1 + f.adjustmentPct / 100),
       }));
 
-      // 2. Sum of adjusted values
       const sumAdjusted = withAdjusted.reduce((s, f) => s + f.finalQty, 0);
 
-      // 3. If sum ≠ totalQty, scale proportionally
       if (Math.abs(sumAdjusted - totalQty) > 0.01) {
-        // Identify farmers with zero adjustment (neutral)
         const adjustedFarmers = withAdjusted.filter((f) => f.adjustmentPct !== 0);
         const neutralFarmers = withAdjusted.filter((f) => f.adjustmentPct === 0);
 
@@ -214,7 +218,6 @@ export function DisaggregationDialog({ open, onOpenChange }: DisaggregationDialo
           });
         }
 
-        // If no neutral farmers, scale everything proportionally
         const scale = totalQty / sumAdjusted;
         return withAdjusted.map((f) => ({
           ...f,
@@ -235,9 +238,9 @@ export function DisaggregationDialog({ open, onOpenChange }: DisaggregationDialo
       const params = new URLSearchParams({
         year: form.year,
         triwulan: form.triwulan,
-        kecamatan: form.kecamatan,
-        fishType: form.fishType,
-        containerType: form.containerType,
+        kecamatan: form.kecamatan.join(','),
+        fishType: form.fishType.join(','),
+        containerType: form.containerType.join(','),
         businessType: form.businessType,
         totalQty: form.totalQty,
       });
@@ -256,6 +259,9 @@ export function DisaggregationDialog({ open, onOpenChange }: DisaggregationDialo
           farmerName: f.farmerName as string,
           groupName: f.groupName as string,
           desa: f.desa as string,
+          kecamatan: f.kecamatan as string,
+          fishType: f.fishType as string,
+          containerType: f.containerType as string,
           referenceQty: f.referenceQty as number,
           proportion: f.proportion as number,
           allocatedQty: f.allocatedQty as number,
@@ -298,18 +304,18 @@ export function DisaggregationDialog({ open, onOpenChange }: DisaggregationDialo
     [totalQtyNum, recalculate],
   );
 
-  const handleBulkAdjust = useCallback(
-    (pct: number) => {
-      setFarmers((prev) => {
-        const updated = prev.map((f) => ({
-          ...f,
-          adjustmentPct: f.adjustmentPct + pct,
-        }));
-        return recalculate(updated, totalQtyNum);
-      });
-    },
-    [totalQtyNum, recalculate],
-  );
+  const handleBulkAdjust = useCallback(() => {
+    const pct = parseFloat(bulkAdjustValue) || 0;
+    if (pct === 0) return;
+    setFarmers((prev) => {
+      const updated = prev.map((f) => ({
+        ...f,
+        adjustmentPct: f.adjustmentPct + pct,
+      }));
+      return recalculate(updated, totalQtyNum);
+    });
+    setBulkAdjustValue('');
+  }, [bulkAdjustValue, totalQtyNum, recalculate]);
 
   const handleResetDistribution = useCallback(() => {
     setFarmers((prev) => {
@@ -320,6 +326,7 @@ export function DisaggregationDialog({ open, onOpenChange }: DisaggregationDialo
       }));
       return recalculate(updated, totalQtyNum);
     });
+    setBulkAdjustValue('');
   }, [totalQtyNum, recalculate]);
 
   const handleAddNewFarmer = useCallback(() => {
@@ -339,9 +346,12 @@ export function DisaggregationDialog({ open, onOpenChange }: DisaggregationDialo
       farmerName: newFarmer.farmerName.trim(),
       groupName: newFarmer.groupName.trim(),
       desa: newFarmer.desa,
+      kecamatan: form.kecamatan[0] || '',
+      fishType: form.fishType[0] || '',
+      containerType: form.containerType[0] || '',
       referenceQty: 0,
       proportion: 0,
-      allocatedQty: 0, // Will be recalculated
+      allocatedQty: 0,
       adjustmentPct: 0,
       finalQty: allocatedQty,
       isNew: true,
@@ -355,7 +365,6 @@ export function DisaggregationDialog({ open, onOpenChange }: DisaggregationDialo
       cbib: false,
     };
 
-    // Redistribute: subtract new farmer's allocation from total, redistribute remaining
     const remainingTotal = totalQtyNum - allocatedQty;
 
     setFarmers((prev) => {
@@ -388,14 +397,12 @@ export function DisaggregationDialog({ open, onOpenChange }: DisaggregationDialo
     setShowNewFarmer(false);
     setNewFarmer({ farmerName: '', groupName: '', desa: '', allocatedQty: '' });
     toast.success('Pembudidaya baru ditambahkan');
-  }, [newFarmer, totalQtyNum]);
+  }, [newFarmer, totalQtyNum, form.kecamatan, form.fishType, form.containerType]);
 
   const handleRemoveFarmer = useCallback(
     (index: number) => {
       setFarmers((prev) => {
         const updated = prev.filter((_, i) => i !== index);
-        // Redistribute the removed farmer's allocation
-        const removedFinal = prev[index].finalQty;
         const existingNonNew = updated.filter((f) => !f.isNew);
         if (existingNonNew.length > 0) {
           const totalCurrentAllocated = existingNonNew.reduce(
@@ -429,10 +436,10 @@ export function DisaggregationDialog({ open, onOpenChange }: DisaggregationDialo
     setForm({
       year: '',
       triwulan: '',
-      kecamatan: '',
+      kecamatan: [],
       businessType: '',
-      fishType: '',
-      containerType: '',
+      fishType: [],
+      containerType: [],
       totalQty: '',
     });
     setFarmers([]);
@@ -442,7 +449,8 @@ export function DisaggregationDialog({ open, onOpenChange }: DisaggregationDialo
     setPassword('');
     setNotes('');
     setSaving(false);
-    setLoading(false);
+    setExporting(false);
+    setBulkAdjustValue('');
     onOpenChange(false);
   }, [onOpenChange]);
 
@@ -469,6 +477,9 @@ export function DisaggregationDialog({ open, onOpenChange }: DisaggregationDialo
           farmerName: f.farmerName,
           groupName: f.groupName,
           desa: f.desa,
+          kecamatan: f.kecamatan,
+          fishType: f.fishType,
+          containerType: f.containerType,
           allocatedQty: Math.round(f.finalQty * 100) / 100,
           rtpCount: f.rtpCount,
           farmerCount: f.farmerCount,
@@ -506,13 +517,91 @@ export function DisaggregationDialog({ open, onOpenChange }: DisaggregationDialo
     }
   }, [password, form, totalQtyNum, notes, farmers, handleClose]);
 
+  const handleExportExcel = useCallback(async () => {
+    setExporting(true);
+    try {
+      // Dynamically import xlsx
+      const XLSX = await import('xlsx');
+
+      const rows = farmers.map((f, i) => ({
+        No: i + 1,
+        Kecamatan: f.kecamatan,
+        Desa: f.desa,
+        'Nama Pembudidaya': f.farmerName,
+        'Kelompok': f.groupName || '-',
+        'Jenis Ikan': f.fishType,
+        'Wadah Budidaya': f.containerType,
+        'Jenis Usaha': form.businessType,
+        'Riwayat Produksi': f.referenceQty > 0 ? f.referenceQty : '',
+        'Proporsi (%)': Math.round(f.proportion * 10000) / 100,
+        'Alokasi': f.allocatedQty,
+        'Adjustment (%)': f.adjustmentPct || '',
+        'Nilai Akhir': Math.round(f.finalQty * 100) / 100,
+        'Baru': f.isNew ? 'Ya' : 'Tidak',
+        RTP: f.rtpCount,
+      }));
+
+      // Add total row
+      rows.push({
+        No: 0,
+        Kecamatan: 'TOTAL',
+        Desa: '',
+        'Nama Pembudidaya': '',
+        'Kelompok': '',
+        'Jenis Ikan': '',
+        'Wadah Budidaya': '',
+        'Jenis Usaha': '',
+        'Riwayat Produksi': 0,
+        'Proporsi (%)': 100,
+        'Alokasi': farmers.reduce((s, f) => s + f.allocatedQty, 0),
+        'Adjustment (%)': '',
+        'Nilai Akhir': Math.round(totalFinalQty * 100) / 100,
+        'Baru': '',
+        RTP: farmers.reduce((s, f) => s + f.rtpCount, 0),
+      });
+
+      const ws = XLSX.utils.json_to_sheet(rows);
+
+      // Set column widths
+      ws['!cols'] = [
+        { wch: 5 },   // No
+        { wch: 18 },  // Kecamatan
+        { wch: 18 },  // Desa
+        { wch: 22 },  // Nama
+        { wch: 18 },  // Kelompok
+        { wch: 15 },  // Jenis Ikan
+        { wch: 18 },  // Wadah
+        { wch: 14 },  // Jenis Usaha
+        { wch: 16 },  // Riwayat
+        { wch: 12 },  // Proporsi
+        { wch: 14 },  // Alokasi
+        { wch: 14 },  // Adj
+        { wch: 14 },  // Nilai Akhir
+        { wch: 6 },   // Baru
+        { wch: 5 },   // RTP
+      ];
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Disagregasi');
+
+      const fileName = `Disagregasi_${form.businessType}_${form.triwulan}_${form.year}_${form.kecamatan.join('+')}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+
+      toast.success(`File Excel berhasil diunduh: ${fileName}`);
+    } catch (err) {
+      console.error('Excel export error:', err);
+      toast.error('Gagal mengekspor ke Excel');
+    } finally {
+      setExporting(false);
+    }
+  }, [farmers, form, totalFinalQty]);
+
   // ─── Step indicators ─────────────────────────────────────────────────────
 
   const steps = [
     { num: 1, label: 'Input Agregat' },
     { num: 2, label: 'Distribusi' },
-    { num: 3, label: 'Tambah Baru' },
-    { num: 4, label: 'Simpan' },
+    { num: 3, label: 'Simpan' },
   ];
 
   // ─── Render ──────────────────────────────────────────────────────────────
@@ -596,7 +685,6 @@ export function DisaggregationDialog({ open, onOpenChange }: DisaggregationDialo
             {step === 1 && renderStep1()}
             {step === 2 && renderStep2()}
             {step === 3 && renderStep3()}
-            {step === 4 && renderStep4()}
           </motion.div>
         </AnimatePresence>
       </DialogContent>
@@ -620,13 +708,19 @@ export function DisaggregationDialog({ open, onOpenChange }: DisaggregationDialo
               <Label className="text-xs font-medium">Tahun</Label>
               <Input
                 type="number"
-                min="2000"
-                max="2099"
-                placeholder="Contoh: 2025"
+                min="2020"
+                max="2025"
+                placeholder="2020 - 2025"
                 value={form.year}
-                onChange={(e) => setForm((p) => ({ ...p, year: e.target.value }))}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setForm((p) => ({ ...p, year: val }));
+                }}
                 className="text-sm"
               />
+              {form.year && (parseInt(form.year) < 2020 || parseInt(form.year) > 2025) && (
+                <p className="text-[10px] text-red-400">Tahun harus antara 2020-2025</p>
+              )}
             </div>
 
             {/* Triwulan */}
@@ -649,26 +743,15 @@ export function DisaggregationDialog({ open, onOpenChange }: DisaggregationDialo
               </Select>
             </div>
 
-            {/* Kecamatan */}
+            {/* Kecamatan — multi-select */}
             <div className="space-y-1.5">
               <Label className="text-xs font-medium">Kecamatan</Label>
-              <Select
-                value={form.kecamatan}
-                onValueChange={(v) =>
-                  setForm((p) => ({ ...p, kecamatan: v }))
-                }
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Pilih kecamatan" />
-                </SelectTrigger>
-                <SelectContent>
-                  {KECAMATAN_LIST.map((k) => (
-                    <SelectItem key={k} value={k}>
-                      {k}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <MultiSelect
+                options={KECAMATAN_LIST}
+                selected={form.kecamatan}
+                onChange={(selected) => setForm((p) => ({ ...p, kecamatan: selected }))}
+                placeholder="Pilih kecamatan..."
+              />
             </div>
 
             {/* Jenis Usaha */}
@@ -696,46 +779,26 @@ export function DisaggregationDialog({ open, onOpenChange }: DisaggregationDialo
               </RadioGroup>
             </div>
 
-            {/* Jenis Ikan */}
+            {/* Jenis Ikan — multi-select */}
             <div className="space-y-1.5">
               <Label className="text-xs font-medium">Jenis Ikan</Label>
-              <Select
-                value={form.fishType}
-                onValueChange={(v) => setForm((p) => ({ ...p, fishType: v }))}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Pilih jenis ikan" />
-                </SelectTrigger>
-                <SelectContent>
-                  {FISH_TYPES.map((f) => (
-                    <SelectItem key={f} value={f}>
-                      {f}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <MultiSelect
+                options={FISH_TYPES}
+                selected={form.fishType}
+                onChange={(selected) => setForm((p) => ({ ...p, fishType: selected }))}
+                placeholder="Pilih jenis ikan..."
+              />
             </div>
 
-            {/* Wadah Budidaya */}
+            {/* Wadah Budidaya — multi-select */}
             <div className="space-y-1.5">
               <Label className="text-xs font-medium">Wadah Budidaya</Label>
-              <Select
-                value={form.containerType}
-                onValueChange={(v) =>
-                  setForm((p) => ({ ...p, containerType: v }))
-                }
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Pilih wadah" />
-                </SelectTrigger>
-                <SelectContent>
-                  {CONTAINER_TYPES.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <MultiSelect
+                options={CONTAINER_TYPES}
+                selected={form.containerType}
+                onChange={(selected) => setForm((p) => ({ ...p, containerType: selected }))}
+                placeholder="Pilih wadah budidaya..."
+              />
             </div>
 
             {/* Total Produksi */}
@@ -799,11 +862,11 @@ export function DisaggregationDialog({ open, onOpenChange }: DisaggregationDialo
           <span className="opacity-40">·</span>
           <span>{form.businessType}</span>
           <span className="opacity-40">·</span>
-          <span>{form.fishType}</span>
+          <span>{form.fishType.join(', ')}</span>
           <span className="opacity-40">·</span>
-          <span>{form.containerType}</span>
+          <span>{form.containerType.join(', ')}</span>
           <span className="opacity-40">·</span>
-          <span>{form.kecamatan}</span>
+          <span>{form.kecamatan.join(', ')}</span>
           <span className="opacity-40">·</span>
           <span className="font-semibold">
             Total: {fmtNum(totalQtyNum)} {unitLabel}
@@ -819,21 +882,31 @@ export function DisaggregationDialog({ open, onOpenChange }: DisaggregationDialo
           )}
         </div>
 
-        {/* Quick adjustment buttons */}
+        {/* Bulk adjustment — flexible text input */}
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs text-muted-foreground mr-1">Adjust semua:</span>
-          {[-10, -5, 5, 10].map((pct) => (
+          <div className="flex items-center gap-1.5">
+            <Input
+              type="number"
+              value={bulkAdjustValue}
+              onChange={(e) => setBulkAdjustValue(e.target.value)}
+              placeholder="0"
+              className="h-7 w-20 text-xs text-center"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleBulkAdjust();
+              }}
+            />
+            <span className="text-xs text-muted-foreground">%</span>
             <Button
-              key={pct}
               variant="outline"
               size="sm"
               className="h-7 text-xs gap-1"
-              onClick={() => handleBulkAdjust(pct)}
+              onClick={handleBulkAdjust}
+              disabled={!bulkAdjustValue || parseFloat(bulkAdjustValue) === 0}
             >
-              {pct > 0 ? '+' : ''}
-              {pct}%
+              Terapkan
             </Button>
-          ))}
+          </div>
           <Button
             variant="outline"
             size="sm"
@@ -1129,10 +1202,10 @@ export function DisaggregationDialog({ open, onOpenChange }: DisaggregationDialo
             size="sm"
             className="gap-1"
             style={{ background: 'linear-gradient(135deg, #06B6D4, #0891B2)' }}
-            onClick={() => setStep(4)}
+            onClick={() => setStep(3)}
             disabled={farmers.length === 0}
           >
-            Lanjut Review
+            Lanjut Simpan
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
@@ -1140,18 +1213,9 @@ export function DisaggregationDialog({ open, onOpenChange }: DisaggregationDialo
     );
   }
 
-  // ─── Step 3: (Integrated into Step 2 as inline form) ─────────────────────
+  // ─── Step 3: Review & Save ───────────────────────────────────────────────
 
   function renderStep3() {
-    // Step 3 is integrated as inline form in the table
-    // This is kept for the step indicator but redirects to step 2
-    setStep(2);
-    return null;
-  }
-
-  // ─── Step 4: Review & Save ───────────────────────────────────────────────
-
-  function renderStep4() {
     const isTotalMatch = Math.abs(totalFinalQty - totalQtyNum) < 0.1;
 
     return (
@@ -1168,8 +1232,8 @@ export function DisaggregationDialog({ open, onOpenChange }: DisaggregationDialo
             Data Agregat
           </h4>
           <p className="text-sm">
-            {form.triwulan} {form.year} · {form.businessType} · {form.fishType} ·{' '}
-            {form.containerType} · {form.kecamatan} · Total:{' '}
+            {form.triwulan} {form.year} · {form.businessType} · {form.fishType.join(', ')} ·{' '}
+            {form.containerType.join(', ')} · {form.kecamatan.join(', ')} · Total:{' '}
             <strong>{fmtNum(totalQtyNum)} {unitLabel}</strong>
           </p>
         </div>
@@ -1319,19 +1383,9 @@ export function DisaggregationDialog({ open, onOpenChange }: DisaggregationDialo
           />
         </div>
 
-        {/* Navigation */}
-        <div className="flex items-center justify-between pt-2">
+        {/* Action buttons: Save to Database + Save to Excel */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Button
-            variant="outline"
-            size="sm"
-            className="gap-1"
-            onClick={() => setStep(2)}
-          >
-            <ChevronLeft className="h-4 w-4" />
-            Kembali
-          </Button>
-          <Button
-            size="sm"
             className="gap-2"
             style={{ background: 'linear-gradient(135deg, #06B6D4, #0891B2)' }}
             onClick={handleSave}
@@ -1348,6 +1402,38 @@ export function DisaggregationDialog({ open, onOpenChange }: DisaggregationDialo
                 Simpan ke Database
               </>
             )}
+          </Button>
+          <Button
+            variant="outline"
+            className="gap-2"
+            style={{ borderColor: 'rgba(16,185,129,0.4)', color: '#10B981' }}
+            onClick={handleExportExcel}
+            disabled={exporting || farmers.length === 0}
+          >
+            {exporting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Mengekspor...
+              </>
+            ) : (
+              <>
+                <FileSpreadsheet className="h-4 w-4" />
+                Simpan ke Excel
+              </>
+            )}
+          </Button>
+        </div>
+
+        {/* Navigation back */}
+        <div className="flex items-center justify-start pt-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1"
+            onClick={() => setStep(2)}
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Kembali ke Distribusi
           </Button>
         </div>
       </div>
