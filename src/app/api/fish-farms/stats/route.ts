@@ -78,19 +78,32 @@ function buildWhere(searchParams: URLSearchParams) {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const where = buildWhere(searchParams);
-
-    const records = await db.fishFarm.findMany({ where });
-
-    // === Display period info ===
     const now = new Date();
     const calendarYear = now.getFullYear();
-    const indonesianMonths = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
 
+    // Determine if year filter is explicitly set
     const yearParam = searchParams.get('year');
     const selectedYears = yearParam
       ? yearParam.split(',').map(Number).filter(n => !isNaN(n)).sort((a, b) => a - b)
       : [];
+
+    // === Default to current year when no year filter is selected ===
+    // This ensures tables/charts show current year data by default.
+    // Trend data always fetches ALL years regardless.
+    const where = buildWhere(searchParams);
+    if (!yearParam) {
+      where.year = calendarYear;
+    }
+
+    const records = await db.fishFarm.findMany({ where });
+
+    // === For trend data, always fetch ALL years (not just current year) ===
+    const trendWhere = buildWhere(searchParams);
+    // Remove year filter for trend data to show all years
+    delete trendWhere.year;
+    const trendRecords = await db.fishFarm.findMany({ where: trendWhere });
+
+    const indonesianMonths = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
 
     // Build a human-readable period label
     // Examples: "s/d Maret 2026", "Tahun 2024", "2022, 2023 s/d 2024"
@@ -326,9 +339,9 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // === Trend 5 Year ===
+    // === Trend 5 Year (uses ALL years from trendRecords) ===
     const trend5Year: Record<string, { pembesaran: number; pembenihan: number }> = {};
-    records.forEach(r => {
+    trendRecords.forEach(r => {
       const yearKey = String(r.year);
       if (!trend5Year[yearKey]) {
         trend5Year[yearKey] = { pembesaran: 0, pembenihan: 0 };
@@ -340,9 +353,9 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // === Trend by Fish Type per Year ===
+    // === Trend by Fish Type per Year (uses ALL years from trendRecords) ===
     const trendByFishType: Record<string, Record<string, { pembesaran: number; pembenihan: number }>> = {};
-    records.forEach(r => {
+    trendRecords.forEach(r => {
       if (!trendByFishType[r.fishType]) trendByFishType[r.fishType] = {};
       const yearKey = String(r.year);
       if (!trendByFishType[r.fishType][yearKey]) {
@@ -355,9 +368,9 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // === Trend by Kecamatan per Year ===
+    // === Trend by Kecamatan per Year (uses ALL years from trendRecords) ===
     const trendByKecamatan: Record<string, Record<string, { pembesaran: number; pembenihan: number }>> = {};
-    records.forEach(r => {
+    trendRecords.forEach(r => {
       if (!trendByKecamatan[r.kecamatan]) trendByKecamatan[r.kecamatan] = {};
       const yearKey = String(r.year);
       if (!trendByKecamatan[r.kecamatan][yearKey]) {
@@ -370,9 +383,9 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // === Trend by Container Type per Year ===
+    // === Trend by Container Type per Year (uses ALL years from trendRecords) ===
     const trendByContainer: Record<string, Record<string, { pembesaran: number; pembenihan: number }>> = {};
-    records.forEach(r => {
+    trendRecords.forEach(r => {
       if (!trendByContainer[r.containerType]) trendByContainer[r.containerType] = {};
       const yearKey = String(r.year);
       if (!trendByContainer[r.containerType][yearKey]) {

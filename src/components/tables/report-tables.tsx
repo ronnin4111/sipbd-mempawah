@@ -46,23 +46,37 @@ function Trend5YearTable() {
       total: val.pembesaran + val.pembenihan,
     }));
 
-  // Build data with trend (compare with previous year)
+  // Build data with trend (compare with previous year) - separate for each business type
   const data = rawEntries.map((row, idx) => {
-    let trendPct: number | null = null;
-    let trendDirection: 'up' | 'down' | 'flat' | null = null;
+    let trendPctPembesaran: number | null = null;
+    let trendDirectionPembesaran: 'up' | 'down' | 'flat' | null = null;
+    let trendPctPembenihan: number | null = null;
+    let trendDirectionPembenihan: 'up' | 'down' | 'flat' | null = null;
+
     if (idx > 0) {
-      const prevTotal = rawEntries[idx - 1].total;
-      if (prevTotal > 0) {
-        trendPct = ((row.total - prevTotal) / prevTotal) * 100;
-        if (trendPct > 0.5) trendDirection = 'up';
-        else if (trendPct < -0.5) trendDirection = 'down';
-        else trendDirection = 'flat';
-      } else if (row.total > 0) {
-        trendPct = 100;
-        trendDirection = 'up';
+      const prev = rawEntries[idx - 1];
+      // Pembesaran trend
+      if (prev.pembesaran > 0) {
+        trendPctPembesaran = ((row.pembesaran - prev.pembesaran) / prev.pembesaran) * 100;
+        if (trendPctPembesaran > 0.5) trendDirectionPembesaran = 'up';
+        else if (trendPctPembesaran < -0.5) trendDirectionPembesaran = 'down';
+        else trendDirectionPembesaran = 'flat';
+      } else if (row.pembesaran > 0) {
+        trendPctPembesaran = 100;
+        trendDirectionPembesaran = 'up';
+      }
+      // Pembenihan trend
+      if (prev.pembenihan > 0) {
+        trendPctPembenihan = ((row.pembenihan - prev.pembenihan) / prev.pembenihan) * 100;
+        if (trendPctPembenihan > 0.5) trendDirectionPembenihan = 'up';
+        else if (trendPctPembenihan < -0.5) trendDirectionPembenihan = 'down';
+        else trendDirectionPembenihan = 'flat';
+      } else if (row.pembenihan > 0) {
+        trendPctPembenihan = 100;
+        trendDirectionPembenihan = 'up';
       }
     }
-    return { ...row, trendPct, trendDirection };
+    return { ...row, trendPctPembesaran, trendDirectionPembesaran, trendPctPembenihan, trendDirectionPembenihan };
   });
 
   // Dynamic title based on filter
@@ -90,9 +104,14 @@ function Trend5YearTable() {
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50 hover:bg-muted/50">
-                  <TableHead className="text-xs font-semibold">Tahun</TableHead>
-                  <TableHead className="text-xs font-semibold text-right">Pembesaran (Kg)</TableHead>
-                  <TableHead className="text-xs font-semibold text-right">Pembenihan (Ekor)</TableHead>
+                  <TableHead className="text-xs font-semibold" rowSpan={2}>Tahun</TableHead>
+                  <TableHead className="text-xs font-semibold text-center border-b" colSpan={2}>Pembesaran</TableHead>
+                  <TableHead className="text-xs font-semibold text-center border-b" colSpan={2}>Pembenihan</TableHead>
+                </TableRow>
+                <TableRow className="bg-muted/50 hover:bg-muted/50">
+                  <TableHead className="text-xs font-semibold text-right">Produksi (Kg)</TableHead>
+                  <TableHead className="text-xs font-semibold text-right">Tren</TableHead>
+                  <TableHead className="text-xs font-semibold text-right">Produksi (Ekor)</TableHead>
                   <TableHead className="text-xs font-semibold text-right">Tren</TableHead>
                 </TableRow>
               </TableHeader>
@@ -101,18 +120,34 @@ function Trend5YearTable() {
                   <TableRow key={row.year}>
                     <TableCell className="text-xs font-medium">{row.year}</TableCell>
                     <TableCell className="text-xs text-right">{formatNumber(row.pembesaran)}</TableCell>
-                    <TableCell className="text-xs text-right">{formatNumber(row.pembenihan)}</TableCell>
                     <TableCell className="text-xs text-right">
-                      {row.trendPct !== null ? (
+                      {row.trendPctPembesaran !== null ? (
                         <span className={`inline-flex items-center gap-1 font-semibold ${
-                          row.trendDirection === 'up' ? 'text-emerald-600' :
-                          row.trendDirection === 'down' ? 'text-red-500' :
+                          row.trendDirectionPembesaran === 'up' ? 'text-emerald-600' :
+                          row.trendDirectionPembesaran === 'down' ? 'text-red-500' :
                           'text-amber-500'
                         }`}>
-                          {row.trendDirection === 'up' && <ArrowUpRight className="h-3.5 w-3.5" />}
-                          {row.trendDirection === 'down' && <ArrowDownRight className="h-3.5 w-3.5" />}
-                          {row.trendDirection === 'flat' && <Minus className="h-3.5 w-3.5" />}
-                          {row.trendPct >= 0 ? '+' : ''}{row.trendPct.toFixed(1)}%
+                          {row.trendDirectionPembesaran === 'up' && <ArrowUpRight className="h-3.5 w-3.5" />}
+                          {row.trendDirectionPembesaran === 'down' && <ArrowDownRight className="h-3.5 w-3.5" />}
+                          {row.trendDirectionPembesaran === 'flat' && <Minus className="h-3.5 w-3.5" />}
+                          {row.trendPctPembesaran >= 0 ? '+' : ''}{row.trendPctPembesaran.toFixed(1)}%
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs text-right">{formatNumber(row.pembenihan)}</TableCell>
+                    <TableCell className="text-xs text-right">
+                      {row.trendPctPembenihan !== null ? (
+                        <span className={`inline-flex items-center gap-1 font-semibold ${
+                          row.trendDirectionPembenihan === 'up' ? 'text-emerald-600' :
+                          row.trendDirectionPembenihan === 'down' ? 'text-red-500' :
+                          'text-amber-500'
+                        }`}>
+                          {row.trendDirectionPembenihan === 'up' && <ArrowUpRight className="h-3.5 w-3.5" />}
+                          {row.trendDirectionPembenihan === 'down' && <ArrowDownRight className="h-3.5 w-3.5" />}
+                          {row.trendDirectionPembenihan === 'flat' && <Minus className="h-3.5 w-3.5" />}
+                          {row.trendPctPembenihan >= 0 ? '+' : ''}{row.trendPctPembenihan.toFixed(1)}%
                         </span>
                       ) : (
                         <span className="text-muted-foreground">-</span>
