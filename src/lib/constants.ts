@@ -123,7 +123,7 @@ export const CONTAINER_TYPES = [
 
 export const BUSINESS_TYPES = ["Pembesaran", "Pembenihan"];
 
-export const YEARS = [2020, 2021, 2022, 2023, 2024, 2025];
+export const YEARS = [2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026, 2027];
 
 // Approximate coordinates for each kecamatan center in Kab. Mempawah (from Wikipedia/OpenStreetMap)
 export const KECAMATAN_COORDS: Record<string, { lat: number; lng: number }> = {

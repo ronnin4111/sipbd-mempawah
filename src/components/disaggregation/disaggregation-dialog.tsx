@@ -51,7 +51,6 @@ import {
   KECAMATAN_DESA,
   FISH_TYPES,
   CONTAINER_TYPES,
-  YEARS,
 } from '@/lib/constants';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -161,6 +160,8 @@ export function DisaggregationDialog({ open, onOpenChange }: DisaggregationDialo
   const isFormValid = useMemo(
     () =>
       form.year &&
+      parseInt(form.year) >= 2000 &&
+      parseInt(form.year) <= 2099 &&
       form.triwulan &&
       form.kecamatan &&
       form.businessType &&
@@ -617,21 +618,15 @@ export function DisaggregationDialog({ open, onOpenChange }: DisaggregationDialo
             {/* Tahun */}
             <div className="space-y-1.5">
               <Label className="text-xs font-medium">Tahun</Label>
-              <Select
+              <Input
+                type="number"
+                min="2000"
+                max="2099"
+                placeholder="Contoh: 2025"
                 value={form.year}
-                onValueChange={(v) => setForm((p) => ({ ...p, year: v }))}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Pilih tahun" />
-                </SelectTrigger>
-                <SelectContent>
-                  {YEARS.map((y) => (
-                    <SelectItem key={y} value={String(y)}>
-                      {y}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onChange={(e) => setForm((p) => ({ ...p, year: e.target.value }))}
+                className="text-sm"
+              />
             </div>
 
             {/* Triwulan */}
