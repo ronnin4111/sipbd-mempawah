@@ -8,6 +8,7 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: [
     ".space-z.ai",
   ],
+  // Build v2026.05 - force cache refresh
 };
 
 export default nextConfig;
