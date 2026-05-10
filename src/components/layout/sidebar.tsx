@@ -25,7 +25,7 @@ import { IMPORT_PASSWORD } from '@/lib/constants';
 
 const menuItems = [
   { id: 'dashboard', label: 'Ringkasan Produksi', icon: LayoutDashboard, description: 'Ringkasan & statistik', adminOnly: false },
-  { id: 'data-produksi', label: 'Data Produksi', icon: Database, description: 'Tabel data lengkap', adminOnly: false },
+  { id: 'data-produksi', label: 'Data Pembudidaya', icon: Database, description: 'Tabel data lengkap', adminOnly: false },
   { id: 'peta-lokasi', label: 'Peta Lokasi', icon: Map, description: 'Sebaran lokasi budidaya', adminOnly: false },
   { id: 'tren-laporan', label: 'Tren & Laporan', icon: TrendingUp, description: 'Analisis tren produksi', adminOnly: false },
   { id: 'tren-v2', label: 'Tren V2 (Triwulan)', icon: ExternalLink, description: 'Data tren versi triwulan', adminOnly: false },
@@ -136,7 +136,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           </div>
           <p className="text-xs leading-relaxed" style={{ color: 'var(--muted-foreground)' }}>
             Sistem Informasi Perikanan Budidaya<br />
-            <span style={{ color: '#06B6D4' }}>Dinas Perikanan Kab. Mempawah</span>
+            <span style={{ color: '#06B6D4' }}>Dinas Pertanian Ketahanan Pangan dan Perikanan Kab. Mempawah</span>
           </p>
         </div>
 
@@ -289,7 +289,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           style={{ borderTop: `1px solid ${isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}` }}
         >
           <div className="text-[10px] text-center" style={{ color: 'var(--muted-foreground)', opacity: 0.5 }}>
-            &copy; {new Date().getFullYear()} Dinas Perikanan Kab. Mempawah<br />
+            &copy; {new Date().getFullYear()} Dinas Pertanian Ketahanan Pangan dan Perikanan Kab. Mempawah<br />
             <span style={{ color: '#06B6D4' }}>Kalimantan Barat</span>
           </div>
         </div>

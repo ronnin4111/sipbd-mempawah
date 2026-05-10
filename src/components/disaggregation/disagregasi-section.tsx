@@ -716,7 +716,7 @@ export function DisagregasiSection() {
           >
             <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" style={{ color: '#06B6D4' }} />
             <span>
-              Fitur ini hanya untuk admin Dinas Perikanan. Hubungi administrator jika Anda memerlukan akses.
+              Fitur ini hanya untuk admin Dinas Pertanian Ketahanan Pangan dan Perikanan. Hubungi administrator jika Anda memerlukan akses.
             </span>
           </div>
         </div>

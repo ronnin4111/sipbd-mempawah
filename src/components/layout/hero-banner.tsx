@@ -270,7 +270,7 @@ export function HeroBanner() {
               className="text-xs font-semibold tracking-widest uppercase"
               style={{ color: isDark ? '#06B6D4' : '#0891B2' }}
             >
-              Dinas Perikanan Kab. Mempawah
+              Dinas Pertanian Ketahanan Pangan dan Perikanan Kab. Mempawah
             </span>
           </motion.div>
 

@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
 
     const wb = XLSX.utils.book_new();
 
-    // Sheet 1: Data Produksi - all fish farm data (re-importable format)
+    // Sheet 1: Data Pembudidaya - all fish farm data (re-importable format)
     const dataProduksiHeaders = [
       'year', 'kecamatan', 'desa', 'fishType', 'containerType', 'businessType',
       'farmerName', 'groupName',
@@ -110,7 +110,7 @@ export async function GET(request: NextRequest) {
       { wch: 10 }, // cbib
     ];
 
-    XLSX.utils.book_append_sheet(wb, ws1, 'Data Produksi');
+    XLSX.utils.book_append_sheet(wb, ws1, 'Data Pembudidaya');
 
     // Sheet 2: Produksi Per Kecamatan - separated by business type
     const kecDetail: Record<string, {

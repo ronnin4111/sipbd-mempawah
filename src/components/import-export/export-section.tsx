@@ -133,7 +133,7 @@ export function ExportSection() {
             <ul className="text-xs text-muted-foreground space-y-1.5">
               <li className="flex items-start gap-1.5">
                 <span className="text-teal-600 mt-0.5">&#x2022;</span>
-                Data Produksi (semua record)
+                Data Pembudidaya (semua record)
               </li>
               <li className="flex items-start gap-1.5">
                 <span className="text-teal-600 mt-0.5">&#x2022;</span>
@@ -200,7 +200,7 @@ export function ExportSection() {
               </li>
               <li className="flex items-start gap-1.5">
                 <span className="text-teal-600 mt-0.5">&#x2022;</span>
-                Header resmi Dinas Perikanan
+                Header resmi Dinas Pertanian Ketahanan Pangan dan Perikanan
               </li>
               <li className="flex items-start gap-1.5">
                 <span className="text-teal-600 mt-0.5">&#x2022;</span>

@@ -16,7 +16,7 @@ const dmSans = DM_Sans({
 
 export const metadata: Metadata = {
   title: "SIPBD - Sistem Informasi Perikanan Budidaya",
-  description: "Sistem Informasi Perikanan Budidaya Dinas Perikanan Kabupaten Mempawah",
+  description: "Sistem Informasi Perikanan Budidaya Dinas Pertanian Ketahanan Pangan dan Perikanan Kabupaten Mempawah",
   icons: {
     icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐟</text></svg>",
   },

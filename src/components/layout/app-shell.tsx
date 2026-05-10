@@ -31,7 +31,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 style={{ background: 'rgba(255,255,255,0.9)', padding: 1 }}
               />
               <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
-                &copy; {new Date().getFullYear()} Dinas Perikanan Kabupaten Mempawah
+                &copy; {new Date().getFullYear()} Dinas Pertanian Ketahanan Pangan dan Perikanan Kab. Mempawah
               </p>
             </div>
             <p className="text-xs" style={{ color: '#06B6D4' }}>

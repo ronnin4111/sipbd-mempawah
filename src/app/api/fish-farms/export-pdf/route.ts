@@ -172,7 +172,7 @@ export async function GET(request: NextRequest) {
     // Header
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
-    doc.text('DINAS PERIKANAN KABUPATEN MEMPAWAH', pageWidth / 2, 15, { align: 'center' });
+    doc.text('DINAS PERTANIAN KETAHANAN PANGAN DAN PERIKANAN KABUPATEN MEMPAWAH', pageWidth / 2, 15, { align: 'center' });
 
     doc.setFontSize(12);
     doc.text('LAPORAN SISTEM INFORMASI PERIKANAN BUDIDAYA', pageWidth / 2, 22, { align: 'center' });
@@ -269,7 +269,7 @@ export async function GET(request: NextRequest) {
     doc.addPage();
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
-    doc.text('DINAS PERIKANAN KABUPATEN MEMPAWAH', pageWidth / 2, 15, { align: 'center' });
+    doc.text('DINAS PERTANIAN KETAHANAN PANGAN DAN PERIKANAN KABUPATEN MEMPAWAH', pageWidth / 2, 15, { align: 'center' });
     doc.setFontSize(12);
     doc.text('Target vs Realisasi Produksi Per Jenis Ikan', pageWidth / 2, 22, { align: 'center' });
 

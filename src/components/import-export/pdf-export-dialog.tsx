@@ -19,7 +19,7 @@ const SECTION_OPTIONS = [
   { id: 'tabel-jenis-ikan', label: 'Laporan Produksi per Jenis Ikan', type: 'table' as const },
   { id: 'tabel-target', label: 'Tabel Target vs Realisasi', type: 'table' as const },
   { id: 'tabel-kecamatan', label: 'Tabel Produksi per Kecamatan', type: 'table' as const },
-  { id: 'data-produksi', label: 'Data Produksi Perikanan', type: 'table' as const },
+  { id: 'data-produksi', label: 'Data Pembudidaya Perikanan', type: 'table' as const },
   { id: 'chart-tren', label: 'Grafik Tren Produksi', type: 'chart' as const },
   { id: 'chart-produksi', label: 'Grafik Produksi', type: 'chart' as const },
   { id: 'chart-produksi-kecamatan', label: 'Grafik Produksi per Kecamatan', type: 'chart' as const },
@@ -153,7 +153,7 @@ export function PdfExportDialog({ open, onOpenChange }: PdfExportDialogProps) {
         doc.setFontSize(14);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(22, 101, 52);
-        doc.text('DINAS PERIKANAN KABUPATEN MEMPAWAH', pageWidth / 2, 15, { align: 'center' });
+        doc.text('DINAS PERTANIAN KETAHANAN PANGAN DAN PERIKANAN KABUPATEN MEMPAWAH', pageWidth / 2, 15, { align: 'center' });
 
         doc.setFontSize(11);
         doc.setTextColor(80, 80, 80);

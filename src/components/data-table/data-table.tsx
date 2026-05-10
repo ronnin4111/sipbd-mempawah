@@ -872,7 +872,7 @@ export function DataTable({ page, pageSize, onPageChange, onPageSizeChange }: Da
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Pencil className="h-5 w-5 text-teal-600" />
-              {editingRow ? 'Edit Data Produksi' : 'Tambah Data Produksi'}
+              {editingRow ? 'Edit Data Pembudidaya' : 'Tambah Data Pembudidaya'}
             </DialogTitle>
             <DialogDescription>
               {editingRow ? 'Ubah data produksi perikanan budidaya' : 'Tambah data produksi perikanan budidaya baru'}
