@@ -257,23 +257,32 @@ export function PdfExportDialog({ open, onOpenChange }: PdfExportDialogProps) {
                   year,
                   pembesaran: val.pembesaran as number,
                   pembenihan: val.pembenihan as number,
-                  total: (val.pembesaran as number) + (val.pembenihan as number),
                 }));
 
               rawEntries.forEach((row: any, idx: number) => {
-                let trendStr = '-';
+                let trendPembesaranStr = '-';
+                let trendPembenihanStr = '-';
+
                 if (idx > 0) {
-                  const prevTotal = rawEntries[idx - 1].total;
-                  if (prevTotal > 0) {
-                    const pct = ((row.total - prevTotal) / prevTotal) * 100;
-                    // Use ASCII-safe symbols because jsPDF default fonts cannot render Unicode arrows
+                  const prev = rawEntries[idx - 1];
+                  // Pembesaran trend
+                  if (prev.pembesaran > 0) {
+                    const pct = ((row.pembesaran - prev.pembesaran) / prev.pembesaran) * 100;
                     const arrow = pct > 0.5 ? '[^]' : pct < -0.5 ? '[v]' : '[>]';
-                    trendStr = `${arrow} ${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
-                  } else if (row.total > 0) {
-                    trendStr = '[^] +100%';
+                    trendPembesaranStr = `${arrow} ${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
+                  } else if (row.pembesaran > 0) {
+                    trendPembesaranStr = '[^] +100%';
+                  }
+                  // Pembenihan trend
+                  if (prev.pembenihan > 0) {
+                    const pct = ((row.pembenihan - prev.pembenihan) / prev.pembenihan) * 100;
+                    const arrow = pct > 0.5 ? '[^]' : pct < -0.5 ? '[v]' : '[>]';
+                    trendPembenihanStr = `${arrow} ${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
+                  } else if (row.pembenihan > 0) {
+                    trendPembenihanStr = '[^] +100%';
                   }
                 }
-                trendDataWithPct.push([row.year, fmtNum(row.pembesaran), fmtNum(row.pembenihan), trendStr]);
+                trendDataWithPct.push([row.year, fmtNum(row.pembesaran), trendPembesaranStr, fmtNum(row.pembenihan), trendPembenihanStr]);
               });
 
               const yearRange = rawEntries.length >= 2
@@ -282,7 +291,7 @@ export function PdfExportDialog({ open, onOpenChange }: PdfExportDialogProps) {
 
               autoTable(doc, {
                 startY: currentY,
-                head: [[`Tahun: ${yearRange}`, 'Pembesaran (Kg)', 'Pembenihan (Ekor)', 'Tren']],
+                head: [[`Tahun: ${yearRange}`, 'Pembesaran (Kg)', 'Tren Pembesaran', 'Pembenihan (Ekor)', 'Tren Pembenihan']],
                 body: trendDataWithPct,
                 theme: 'grid',
                 headStyles: { fillColor: [22, 101, 52], textColor: 255, fontStyle: 'bold', fontSize: 8 },
@@ -291,12 +300,13 @@ export function PdfExportDialog({ open, onOpenChange }: PdfExportDialogProps) {
                 columnStyles: {
                   0: { halign: 'center', fontStyle: 'bold' },
                   1: { halign: 'right' },
-                  2: { halign: 'right' },
-                  3: { halign: 'center', fontStyle: 'bold' },
+                  2: { halign: 'center', fontStyle: 'bold' },
+                  3: { halign: 'right' },
+                  4: { halign: 'center', fontStyle: 'bold' },
                 },
                 didParseCell: (data: any) => {
-                  // Color the Tren column cells based on trend direction
-                  if (data.column.index === 3 && data.row.section === 'body') {
+                  // Color the Tren columns (2 and 4) based on trend direction
+                  if ((data.column.index === 2 || data.column.index === 4) && data.row.section === 'body') {
                     const val = String(data.cell.raw || '');
                     if (val.startsWith('[^]')) {
                       data.cell.styles.textColor = [22, 163, 74]; // green for up
