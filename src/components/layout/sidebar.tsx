@@ -95,7 +95,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
 
       {/* Sidebar */}
       <aside
-        className="fixed top-0 left-0 h-full z-50 overflow-y-auto transition-transform duration-300"
+        className="fixed top-0 left-0 h-full z-50 flex flex-col transition-transform duration-300"
         style={{
           width: 290,
           background: isDark
@@ -108,7 +108,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
       >
         {/* Sidebar header */}
         <div
-          className="p-5"
+          className="shrink-0 p-5"
           style={{ borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}` }}
         >
           <div className="flex items-center justify-between mb-3">
@@ -142,7 +142,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
 
         {/* Admin login section */}
         <div
-          className="px-4 py-3"
+          className="shrink-0 px-4 py-3"
           style={{ borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}` }}
         >
           {isAdmin ? (
@@ -230,7 +230,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
         </div>
 
         {/* Nav */}
-        <nav className="p-3">
+        <nav className="p-3 flex-1 overflow-y-auto">
           <div
             className="text-[10px] font-semibold uppercase tracking-widest px-3 mb-2"
             style={{ color: 'var(--muted-foreground)', opacity: 0.6 }}
@@ -285,7 +285,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
 
         {/* Footer */}
         <div
-          className="absolute bottom-0 left-0 right-0 p-4"
+          className="shrink-0 p-4"
           style={{ borderTop: `1px solid ${isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}` }}
         >
           <div className="text-[10px] text-center" style={{ color: 'var(--muted-foreground)', opacity: 0.5 }}>
