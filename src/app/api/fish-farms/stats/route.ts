@@ -82,14 +82,22 @@ export async function GET(request: NextRequest) {
 
     const records = await db.fishFarm.findMany({ where });
 
-    // === Current year & month info ===
+    // === Display year & month info ===
+    // Use selected filter year if available, otherwise current calendar year
     const now = new Date();
-    const currentYear = now.getFullYear();
+    const calendarYear = now.getFullYear();
+    const yearParam = searchParams.get('year');
+    const selectedYears = yearParam
+      ? yearParam.split(',').map(Number).filter(n => !isNaN(n))
+      : [];
+    // Use the latest selected year, or fall back to calendar year
+    const displayYear = selectedYears.length > 0 ? Math.max(...selectedYears) : calendarYear;
     const indonesianMonths = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-    const currentMonthName = indonesianMonths[now.getMonth()];
+    // Only show month name when displayYear is the current calendar year
+    const currentMonthName = displayYear === calendarYear ? indonesianMonths[now.getMonth()] : '';
 
-    // === Current year records (for dashboard cards) ===
-    const currentYearRecords = records.filter(r => r.year === currentYear);
+    // === Display year records (for dashboard cards) ===
+    const currentYearRecords = records.filter(r => r.year === displayYear);
     const currentYearPembesaranProduction = currentYearRecords
       .filter(r => r.businessType === 'Pembesaran')
       .reduce((sum, r) => sum + r.productionQty, 0);
@@ -526,8 +534,8 @@ export async function GET(request: NextRequest) {
       rtpByBusinessType,
       farmerByBusinessType,
       groupByBusinessType,
-      // Current year data for dashboard cards
-      currentYear,
+      // Display year data for dashboard cards
+      currentYear: displayYear,
       currentMonthName,
       currentYearPembesaranProduction: round2(currentYearPembesaranProduction),
       currentYearPembenihanProduction: round2(currentYearPembenihanProduction),
