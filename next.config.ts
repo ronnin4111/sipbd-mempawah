@@ -8,7 +8,10 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: [
     ".space-z.ai",
   ],
-  // Build v2026.05 - force cache refresh
+  // Force webpack build to bypass Turbopack cache
+  webpack: (config, { dev }) => {
+    return config;
+  },
 };
 
 export default nextConfig;
