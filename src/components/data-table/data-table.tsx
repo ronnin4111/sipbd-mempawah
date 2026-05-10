@@ -56,7 +56,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useFishFarms, useCreateFishFarm, useUpdateFishFarm, useDeleteFishFarm, type FishFarm } from '@/hooks/use-fish-farms';
-import { useIsMobile } from '@/hooks/use-mobile';
 import {
   KECAMATAN_LIST,
   ALL_DESA,
@@ -105,80 +104,79 @@ export function DataTable({ page, pageSize, onPageChange, onPageSizeChange }: Da
   const createMutation = useCreateFishFarm();
   const updateMutation = useUpdateFishFarm();
   const deleteMutation = useDeleteFishFarm();
-  const isMobile = useIsMobile();
 
-  // Default column visibility for mobile — hide less important columns
-  const MOBILE_HIDDEN_COLUMNS: VisibilityState = {
-    desa: false,
-    containerType: false,
-    farmerName: false,
-    groupName: false,
-    rtpCount: false,
-    farmerCount: false,
-    groupCount: false,
-    targetQty: false,
-    productionValue: false,
-    kusuka: false,
-    cpib: false,
-    cbib: false,
-  };
-
-  // Get initial column visibility: saved preference > mobile default > all visible
+  // Column visibility: synced via database so it works across devices
+  // Priority: localStorage (fast init) → API (authoritative sync) → default (all visible)
   const getInitialVisibility = (): VisibilityState => {
     if (typeof window !== 'undefined') {
       try {
         const saved = localStorage.getItem('fishFarm_columnVisibility');
         if (saved) return JSON.parse(saved) as VisibilityState;
       } catch {}
-      // No saved preference — apply mobile defaults if on mobile
-      if (window.innerWidth < 768) {
-        return { ...MOBILE_HIDDEN_COLUMNS };
-      }
     }
     return {};
   };
 
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(getInitialVisibility);
+  const [visibilityLoaded, setVisibilityLoaded] = useState(false);
 
-  // Track whether user has manually customized columns (via Kolom popover)
-  const [userCustomized, setUserCustomized] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return !!localStorage.getItem('fishFarm_columnVisibility_userSet');
-    }
-    return false;
-  });
+  // Password protection state (needed before handleColumnVisibilityChange)
+  const [adminPassword, setAdminPassword] = useState('');
+  const [isAdminUnlocked, setIsAdminUnlocked] = useState(false);
 
-  // When viewport changes between mobile/desktop and user hasn't customized, apply defaults
+  // Load column visibility from database on mount (overrides localStorage with server truth)
   useEffect(() => {
-    if (userCustomized) return; // Respect user's explicit choices
-    if (isMobile) {
-      setColumnVisibility({ ...MOBILE_HIDDEN_COLUMNS });
-    } else {
-      setColumnVisibility({});
-    }
-  }, [isMobile, userCustomized]);
+    fetch('/api/settings?key=columnVisibility')
+      .then(res => res.ok ? res.json() : null)
+      .then(result => {
+        if (result?.value) {
+          try {
+            const parsed = JSON.parse(result.value) as VisibilityState;
+            setColumnVisibility(parsed);
+            // Also update localStorage for fast next load
+            try { localStorage.setItem('fishFarm_columnVisibility', JSON.stringify(parsed)); } catch {}
+          } catch {}
+        }
+        setVisibilityLoaded(true);
+      })
+      .catch(() => setVisibilityLoaded(true));
+  }, []);
 
-  // Save to localStorage whenever columnVisibility changes
+  // Save to localStorage whenever columnVisibility changes (for fast local reload)
   useEffect(() => {
     try {
       localStorage.setItem('fishFarm_columnVisibility', JSON.stringify(columnVisibility));
     } catch {}
   }, [columnVisibility]);
 
-  // Wrapper for setColumnVisibility that marks user customization
+  // Wrapper for setColumnVisibility that also saves to database
   const handleColumnVisibilityChange = useCallback((updaterOrValue: VisibilityState | ((old: VisibilityState) => VisibilityState)) => {
-    setColumnVisibility(updaterOrValue);
-    setUserCustomized(true);
-    try {
-      localStorage.setItem('fishFarm_columnVisibility_userSet', '1');
-    } catch {}
-  }, []);
+    setColumnVisibility(prev => {
+      const newValue = typeof updaterOrValue === 'function'
+        ? updaterOrValue(prev)
+        : updaterOrValue;
+
+      // Save to database in background (only if admin is unlocked)
+      if (isAdminUnlocked && adminPassword) {
+        fetch('/api/settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            password: adminPassword,
+            key: 'columnVisibility',
+            value: newValue,
+          }),
+        }).catch(() => {
+          // Silently fail — localStorage is still the fallback
+        });
+      }
+
+      return newValue;
+    });
+  }, [isAdminUnlocked, adminPassword]);
 
   const [sorting, setSorting] = useState<SortingState>([]);
 
-  // Password protection state
-  const [adminPassword, setAdminPassword] = useState('');
-  const [isAdminUnlocked, setIsAdminUnlocked] = useState(false);
   const [verifyingPassword, setVerifyingPassword] = useState(false);
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
   const [passwordPurpose, setPasswordPurpose] = useState<'columns' | 'edit'>('columns');
