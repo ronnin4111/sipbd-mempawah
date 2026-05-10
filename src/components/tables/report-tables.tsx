@@ -292,6 +292,19 @@ function KecamatanDetailTable() {
     }))
     .sort((a, b) => (b.pembesaranProduction + b.pembenihanProduction) - (a.pembesaranProduction + a.pembenihanProduction));
 
+  // Calculate totals
+  const totals = data.reduce(
+    (acc, row) => ({
+      pembesaranProduction: acc.pembesaranProduction + row.pembesaranProduction,
+      pembenihanProduction: acc.pembenihanProduction + row.pembenihanProduction,
+      value: acc.value + row.value,
+      rtp: acc.rtp + row.rtp,
+      farmer: acc.farmer + row.farmer,
+      group: acc.group + row.group,
+    }),
+    { pembesaranProduction: 0, pembenihanProduction: 0, value: 0, rtp: 0, farmer: 0, group: 0 }
+  );
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -331,6 +344,16 @@ function KecamatanDetailTable() {
                     <TableCell className="text-xs text-right">{formatNumber(row.group)}</TableCell>
                   </TableRow>
                 ))}
+                {/* Total Row */}
+                <TableRow className="bg-muted/30 font-semibold sticky bottom-0">
+                  <TableCell className="text-xs font-bold">TOTAL</TableCell>
+                  <TableCell className="text-xs text-right font-bold">{formatNumber(totals.pembesaranProduction)}</TableCell>
+                  <TableCell className="text-xs text-right font-bold">{formatNumber(totals.pembenihanProduction)}</TableCell>
+                  <TableCell className="text-xs text-right font-bold">{formatCurrency(totals.value)}</TableCell>
+                  <TableCell className="text-xs text-right font-bold">{formatNumber(totals.rtp)}</TableCell>
+                  <TableCell className="text-xs text-right font-bold">{formatNumber(totals.farmer)}</TableCell>
+                  <TableCell className="text-xs text-right font-bold">{formatNumber(totals.group)}</TableCell>
+                </TableRow>
               </TableBody>
             </Table>
           </div>
