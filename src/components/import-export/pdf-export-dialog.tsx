@@ -436,21 +436,47 @@ export function PdfExportDialog({ open, onOpenChange }: PdfExportDialogProps) {
               }
               currentY = addSectionTitle(section.label, currentY);
 
-              const kecData: any[][] = Object.entries(statsData.productionByKecamatanDetail)
+              const kecEntries = Object.entries(statsData.productionByKecamatanDetail);
+              const kecData: any[][] = kecEntries
                 .map(([kec, val]: any, i: number) => [
                   i + 1, kec,
-                  fmtNum(val.pembesaranProduction),
-                  fmtNum(val.pembenihanProduction),
-                  fmtCur(val.value),
-                  fmtNum(val.rtp),
-                  fmtNum(val.farmer),
-                  fmtNum(val.group),
+                  val.pembesaranProduction as number,
+                  val.pembenihanProduction as number,
+                  val.value as number,
+                  val.rtp as number,
+                  val.farmer as number,
+                  val.group as number,
                 ]);
+
+              // Calculate totals
+              const kecTotals = kecEntries.reduce((acc: any, [, val]: any) => ({
+                pembesaranProduction: acc.pembesaranProduction + (val.pembesaranProduction as number),
+                pembenihanProduction: acc.pembenihanProduction + (val.pembenihanProduction as number),
+                value: acc.value + (val.value as number),
+                rtp: acc.rtp + (val.rtp as number),
+                farmer: acc.farmer + (val.farmer as number),
+                group: acc.group + (val.group as number),
+              }), { pembesaranProduction: 0, pembenihanProduction: 0, value: 0, rtp: 0, farmer: 0, group: 0 });
+
+              // Format data rows
+              const kecDataFormatted: any[][] = kecData.map(row => [
+                row[0], row[1],
+                fmtNum(row[2]), fmtNum(row[3]), fmtCur(row[4]),
+                fmtNum(row[5]), fmtNum(row[6]), fmtNum(row[7]),
+              ]);
+
+              // Add total row
+              kecDataFormatted.push([
+                '', 'TOTAL',
+                fmtNum(kecTotals.pembesaranProduction), fmtNum(kecTotals.pembenihanProduction),
+                fmtCur(kecTotals.value), fmtNum(kecTotals.rtp),
+                fmtNum(kecTotals.farmer), fmtNum(kecTotals.group),
+              ]);
 
               autoTable(doc, {
                 startY: currentY,
                 head: [['No', 'Kecamatan', 'Pembesaran (Kg)', 'Pembenihan (Ekor)', 'Nilai (Rp)', 'RTP', 'Pembudidaya', 'Kelompok']],
-                body: kecData,
+                body: kecDataFormatted,
                 theme: 'grid',
                 headStyles: { fillColor: [22, 101, 52], textColor: 255, fontStyle: 'bold', fontSize: 7 },
                 styles: { fontSize: 7, cellPadding: 2 },
@@ -464,6 +490,13 @@ export function PdfExportDialog({ open, onOpenChange }: PdfExportDialogProps) {
                   5: { halign: 'right' },
                   6: { halign: 'right' },
                   7: { halign: 'right' },
+                },
+                didParseCell: (data: any) => {
+                  // Bold the TOTAL row
+                  if (data.row.section === 'body' && data.row.index === kecDataFormatted.length - 1) {
+                    data.cell.styles.fontStyle = 'bold';
+                    data.cell.styles.fillColor = [240, 240, 240];
+                  }
                 },
               });
               break;
