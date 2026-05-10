@@ -141,41 +141,54 @@ export function HeroBanner() {
   const mounted = useMounted();
   const isDark = mounted ? theme === 'dark' : true;
 
-  const pembesaranProduction = stats?.pembesaranProduction ?? 0;
-  const pembenihanProduction = stats?.pembenihanProduction ?? 0;
-  const pembudidayaPembesaran = stats?.farmerByBusinessType?.['Pembesaran'] ?? 0;
-  const pembudidayaPembenihan = stats?.farmerByBusinessType?.['Pembenihan'] ?? 0;
+  // Current year production data
+  const pembesaranProduction = stats?.currentYearPembesaranProduction ?? 0;
+  const pembenihanProduction = stats?.currentYearPembenihanProduction ?? 0;
+  // Current year farmer & group data
+  const pembudidayaPembesaran = stats?.currentYearFarmerByBusinessType?.['Pembesaran'] ?? 0;
+  const pembudidayaPembenihan = stats?.currentYearFarmerByBusinessType?.['Pembenihan'] ?? 0;
+  const pokdakanPembesaran = stats?.currentYearGroupByBusinessType?.['Pembesaran'] ?? 0;
+  const pokdakanPembenihan = stats?.currentYearGroupByBusinessType?.['Pembenihan'] ?? 0;
+  const rtpPembesaran = stats?.currentYearRtpByBusinessType?.['Pembesaran'] ?? 0;
+  const rtpPembenihan = stats?.currentYearRtpByBusinessType?.['Pembenihan'] ?? 0;
   const totalKecamatan = stats?.productionByKecamatan ? Object.keys(stats.productionByKecamatan).length : 0;
   const totalKusuka = stats?.totalKusuka ?? 0;
 
+  // Period label for production cards
+  const currentMonthName = stats?.currentMonthName ?? '';
+  const currentYear = stats?.currentYear ?? new Date().getFullYear();
+  const periodLabel = currentMonthName ? `s/d ${currentMonthName} ${currentYear}` : `Tahun ${currentYear}`;
+
   const statCards = [
     {
-      label: 'Produksi Pembesaran',
+      label: `Produksi Pembesaran ${periodLabel}`,
       value: pembesaranProduction,
       unit: 'Kg',
       icon: <Fish className="h-5 w-5 sm:h-6 sm:w-6" />,
       color: '#3B82F6',
     },
     {
-      label: 'Produksi Pembenihan',
+      label: `Produksi Pembenihan ${periodLabel}`,
       value: pembenihanProduction,
       unit: 'Ekor',
       icon: <Fish className="h-5 w-5 sm:h-6 sm:w-6" />,
       color: '#22C55E',
     },
     {
-      label: 'Pembudidaya Pembesaran',
-      value: pembudidayaPembesaran,
-      unit: 'Orang',
+      label: `${pokdakanPembesaran} Pokdakan, ${pembudidayaPembesaran} Orang Pembesaran`,
+      value: pokdakanPembesaran,
+      unit: 'Pokdakan',
       icon: <Users className="h-5 w-5 sm:h-6 sm:w-6" />,
       color: '#F59E0B',
+      subLabel: `RTP: ${rtpPembesaran}`,
     },
     {
-      label: 'Pembudidaya Pembenihan',
-      value: pembudidayaPembenihan,
-      unit: 'Orang',
+      label: `${pokdakanPembenihan} Pokdakan, ${pembudidayaPembenihan} Orang Pembenih`,
+      value: pokdakanPembenihan,
+      unit: 'Pokdakan',
       icon: <Users className="h-5 w-5 sm:h-6 sm:w-6" />,
       color: '#A855F7',
+      subLabel: `RTP: ${rtpPembenihan}`,
     },
     {
       label: 'Jumlah KUSUKA',
@@ -356,12 +369,20 @@ export function HeroBanner() {
                     )}
                   </div>
                   <span
-                    className="text-[8px] sm:text-[10px] lg:text-[11px] leading-tight block mt-0.5 truncate"
+                    className="text-[8px] sm:text-[10px] lg:text-[11px] leading-tight block mt-0.5"
                     style={{ color: 'var(--muted-foreground)' }}
                     title={card.label}
                   >
                     {card.label}
                   </span>
+                  {'subLabel' in card && card.subLabel && (
+                    <span
+                      className="text-[7px] sm:text-[9px] lg:text-[10px] leading-tight block mt-0.5"
+                      style={{ color: 'var(--muted-foreground)', opacity: 0.7 }}
+                    >
+                      {card.subLabel}
+                    </span>
+                  )}
                 </div>
               </motion.div>
             ))
