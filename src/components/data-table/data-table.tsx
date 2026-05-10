@@ -56,6 +56,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useFishFarms, useCreateFishFarm, useUpdateFishFarm, useDeleteFishFarm, type FishFarm } from '@/hooks/use-fish-farms';
+import { useIsMobile } from '@/hooks/use-mobile';
 import {
   KECAMATAN_LIST,
   ALL_DESA,
@@ -104,17 +105,58 @@ export function DataTable({ page, pageSize, onPageChange, onPageSizeChange }: Da
   const createMutation = useCreateFishFarm();
   const updateMutation = useUpdateFishFarm();
   const deleteMutation = useDeleteFishFarm();
+  const isMobile = useIsMobile();
 
-  // Persist column visibility to localStorage
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(() => {
+  // Default column visibility for mobile — hide less important columns
+  const MOBILE_HIDDEN_COLUMNS: VisibilityState = {
+    desa: false,
+    containerType: false,
+    farmerName: false,
+    groupName: false,
+    rtpCount: false,
+    farmerCount: false,
+    groupCount: false,
+    targetQty: false,
+    productionValue: false,
+    kusuka: false,
+    cpib: false,
+    cbib: false,
+  };
+
+  // Get initial column visibility: saved preference > mobile default > all visible
+  const getInitialVisibility = (): VisibilityState => {
     if (typeof window !== 'undefined') {
       try {
         const saved = localStorage.getItem('fishFarm_columnVisibility');
         if (saved) return JSON.parse(saved) as VisibilityState;
       } catch {}
+      // No saved preference — apply mobile defaults if on mobile
+      if (window.innerWidth < 768) {
+        return { ...MOBILE_HIDDEN_COLUMNS };
+      }
     }
     return {};
+  };
+
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(getInitialVisibility);
+
+  // Track whether user has manually customized columns (via Kolom popover)
+  const [userCustomized, setUserCustomized] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return !!localStorage.getItem('fishFarm_columnVisibility_userSet');
+    }
+    return false;
   });
+
+  // When viewport changes between mobile/desktop and user hasn't customized, apply defaults
+  useEffect(() => {
+    if (userCustomized) return; // Respect user's explicit choices
+    if (isMobile) {
+      setColumnVisibility({ ...MOBILE_HIDDEN_COLUMNS });
+    } else {
+      setColumnVisibility({});
+    }
+  }, [isMobile, userCustomized]);
 
   // Save to localStorage whenever columnVisibility changes
   useEffect(() => {
@@ -122,6 +164,15 @@ export function DataTable({ page, pageSize, onPageChange, onPageSizeChange }: Da
       localStorage.setItem('fishFarm_columnVisibility', JSON.stringify(columnVisibility));
     } catch {}
   }, [columnVisibility]);
+
+  // Wrapper for setColumnVisibility that marks user customization
+  const handleColumnVisibilityChange = useCallback((updaterOrValue: VisibilityState | ((old: VisibilityState) => VisibilityState)) => {
+    setColumnVisibility(updaterOrValue);
+    setUserCustomized(true);
+    try {
+      localStorage.setItem('fishFarm_columnVisibility_userSet', '1');
+    } catch {}
+  }, []);
 
   const [sorting, setSorting] = useState<SortingState>([]);
 
@@ -533,7 +584,7 @@ export function DataTable({ page, pageSize, onPageChange, onPageSizeChange }: Da
       columnVisibility,
     },
     onSortingChange: setSorting,
-    onColumnVisibilityChange: setColumnVisibility,
+    onColumnVisibilityChange: handleColumnVisibilityChange,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     manualPagination: true,
