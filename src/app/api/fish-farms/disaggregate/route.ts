@@ -7,8 +7,11 @@ import { generateFarmerId } from '@/lib/farmer-id';
 const VALID_TRIWULAN = ['Q1', 'Q2', 'Q3', 'Q4'];
 
 /**
- * GET /api/fish-farms/disaggregate?action=preview
- * Preview proportional distribution of aggregate production data to individual farmers.
+ * GET /api/fish-farms/disaggregate
+ *
+ * Two actions:
+ * 1. action=groups → return unique group names matching filters
+ * 2. (default) → preview proportional distribution
  *
  * Query params:
  *   year          - target year (e.g. 2025)
@@ -18,10 +21,12 @@ const VALID_TRIWULAN = ['Q1', 'Q2', 'Q3', 'Q4'];
  *   containerType - comma-separated container type names (multi-select)
  *   businessType  - Pembesaran / Pembenihan
  *   totalQty      - the aggregate total to distribute
+ *   groupName     - comma-separated group names (optional filter, multi-select)
  */
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
+    const action = searchParams.get('action');
 
     const year = Number(searchParams.get('year'));
     const triwulan = searchParams.get('triwulan') || 'Q4';
@@ -30,11 +35,37 @@ export async function GET(request: NextRequest) {
     const containerTypeParam = searchParams.get('containerType') || '';
     const businessType = searchParams.get('businessType') || '';
     const totalQty = Number(searchParams.get('totalQty'));
+    const groupNameParam = searchParams.get('groupName') || '';
 
     // Parse comma-separated params into arrays
     const kecamatanList = kecamatanParam.split(',').map((s) => s.trim()).filter(Boolean);
     const fishTypeList = fishTypeParam.split(',').map((s) => s.trim()).filter(Boolean);
     const containerTypeList = containerTypeParam.split(',').map((s) => s.trim()).filter(Boolean);
+    const groupNameList = groupNameParam.split(',').map((s) => s.trim()).filter(Boolean);
+
+    // Build match criteria
+    const matchCriteria: Record<string, unknown> = {};
+    if (kecamatanList.length > 0) matchCriteria.kecamatan = { in: kecamatanList };
+    if (fishTypeList.length > 0) matchCriteria.fishType = { in: fishTypeList };
+    if (containerTypeList.length > 0) matchCriteria.containerType = { in: containerTypeList };
+    if (businessType) matchCriteria.businessType = businessType;
+    if (groupNameList.length > 0) matchCriteria.groupName = { in: groupNameList };
+
+    // ─── Action: groups ──────────────────────────────────────────────────
+    if (action === 'groups') {
+      const groups = await db.fishFarm.findMany({
+        where: matchCriteria,
+        select: { groupName: true },
+        distinct: ['groupName'],
+        orderBy: { groupName: 'asc' },
+      });
+
+      return NextResponse.json({
+        groups: groups.map((g) => g.groupName).filter(Boolean),
+      });
+    }
+
+    // ─── Action: preview (default) ───────────────────────────────────────
 
     // Validate required params
     if (!year || kecamatanList.length === 0 || fishTypeList.length === 0 || containerTypeList.length === 0 || !businessType || !totalQty) {
@@ -51,15 +82,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Step 1: Find all existing FishFarm records matching: kecamatan[] + fishType[] + containerType[] + businessType
-    const matchCriteria = {
-      kecamatan: { in: kecamatanList },
-      fishType: { in: fishTypeList },
-      containerType: { in: containerTypeList },
-      businessType,
-    };
-
-    // Find records in the target year
+    // Step 1: Find all existing FishFarm records matching criteria
     let existingRecords = await db.fishFarm.findMany({
       where: {
         ...matchCriteria,
@@ -175,9 +198,6 @@ export async function GET(request: NextRequest) {
     const farmersWithAllocation = farmers.map((f) => {
       const proportion = totalReference > 0 ? f.referenceQty / totalReference : 1 / farmers.length;
       const allocatedQty = Math.round(proportion * totalQty * 100) / 100;
-      const adjustmentPct = totalReference > 0
-        ? Math.round(((totalQty / totalReference) - 1) * 10000) / 100
-        : 0;
 
       return {
         farmerId: f.farmerId,
@@ -190,7 +210,6 @@ export async function GET(request: NextRequest) {
         referenceQty: Math.round(f.referenceQty * 100) / 100,
         proportion: Math.round(proportion * 10000) / 10000,
         allocatedQty,
-        adjustmentPct,
         rtpCount: f.rtpCount,
         farmerCount: f.farmerCount,
         groupCount: f.groupCount,
@@ -347,8 +366,7 @@ export async function POST(request: NextRequest) {
       const createPromises = farmerBatch.map(async (farmer) => {
         let farmerId = farmer.farmerId || '';
 
-        // Use farmer-specific kecamatan/fishType/containerType if provided (from multi-select),
-        // otherwise use the first value from the aggregate selection
+        // Use farmer-specific kecamatan/fishType/containerType if provided
         const farmerKecamatan = farmer.kecamatan || kecamatanList[0];
         const farmerFishType = farmer.fishType || fishTypeList[0];
         const farmerContainerType = farmer.containerType || containerTypeList[0];

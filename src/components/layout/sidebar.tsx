@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import {
   LayoutDashboard,
   Database,
@@ -11,20 +12,26 @@ import {
   ChevronRight,
   X,
   Split,
+  Lock,
+  LogOut,
+  Shield,
 } from 'lucide-react';
 import { useFilterStore } from '@/store/filter-store';
 import { useTheme } from 'next-themes';
 import { useMounted } from '@/hooks/use-mounted';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { IMPORT_PASSWORD } from '@/lib/constants';
 
 const menuItems = [
-  { id: 'dashboard', label: 'Ringkasan Produksi', icon: LayoutDashboard, description: 'Ringkasan & statistik' },
-  { id: 'data-produksi', label: 'Data Produksi', icon: Database, description: 'Tabel data lengkap' },
-  { id: 'peta-lokasi', label: 'Peta Lokasi', icon: Map, description: 'Sebaran lokasi budidaya' },
-  { id: 'tren-laporan', label: 'Tren & Laporan', icon: TrendingUp, description: 'Analisis tren produksi' },
-  { id: 'tren-v2', label: 'Tren V2 (Triwulan)', icon: ExternalLink, description: 'Data tren versi triwulan' },
-  { id: 'harga-komoditas', label: 'Harga Komoditas', icon: DollarSign, description: 'Daftar harga ikan' },
-  { id: 'disagregasi', label: 'Disagregasi Data', icon: Split, description: 'Distribusi data agregat' },
-  { id: 'import-export', label: 'Import / Export', icon: FileSpreadsheet, description: 'Kelola data Excel/PDF' },
+  { id: 'dashboard', label: 'Ringkasan Produksi', icon: LayoutDashboard, description: 'Ringkasan & statistik', adminOnly: false },
+  { id: 'data-produksi', label: 'Data Produksi', icon: Database, description: 'Tabel data lengkap', adminOnly: false },
+  { id: 'peta-lokasi', label: 'Peta Lokasi', icon: Map, description: 'Sebaran lokasi budidaya', adminOnly: false },
+  { id: 'tren-laporan', label: 'Tren & Laporan', icon: TrendingUp, description: 'Analisis tren produksi', adminOnly: false },
+  { id: 'tren-v2', label: 'Tren V2 (Triwulan)', icon: ExternalLink, description: 'Data tren versi triwulan', adminOnly: false },
+  { id: 'harga-komoditas', label: 'Harga Komoditas', icon: DollarSign, description: 'Daftar harga ikan', adminOnly: false },
+  { id: 'disagregasi', label: 'Disagregasi Data', icon: Split, description: 'Distribusi data agregat', adminOnly: true },
+  { id: 'import-export', label: 'Import / Export', icon: FileSpreadsheet, description: 'Kelola data Excel/PDF', adminOnly: false },
 ];
 
 interface SidebarProps {
@@ -35,13 +42,44 @@ interface SidebarProps {
 export function Sidebar({ open, onClose }: SidebarProps) {
   const activeSection = useFilterStore((s) => s.activeSection);
   const setActiveSection = useFilterStore((s) => s.setActiveSection);
+  const isAdmin = useFilterStore((s) => s.isAdmin);
+  const setIsAdmin = useFilterStore((s) => s.setIsAdmin);
   const { theme } = useTheme();
   const mounted = useMounted();
   const isDark = mounted ? theme === 'dark' : true;
 
+  const [adminPassword, setAdminPassword] = useState('');
+  const [showLogin, setShowLogin] = useState(false);
+  const [loginError, setLoginError] = useState('');
+
   const handleMenuClick = (section: string) => {
+    const item = menuItems.find((m) => m.id === section);
+    if (item?.adminOnly && !isAdmin) {
+      setShowLogin(true);
+      return;
+    }
     setActiveSection(section);
     onClose();
+  };
+
+  const handleAdminLogin = () => {
+    if (adminPassword === IMPORT_PASSWORD) {
+      setIsAdmin(true);
+      setShowLogin(false);
+      setAdminPassword('');
+      setLoginError('');
+      setActiveSection('disagregasi');
+      onClose();
+    } else {
+      setLoginError('Password salah!');
+    }
+  };
+
+  const handleAdminLogout = () => {
+    setIsAdmin(false);
+    if (activeSection === 'disagregasi') {
+      setActiveSection('dashboard');
+    }
   };
 
   return (
@@ -102,6 +140,95 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           </p>
         </div>
 
+        {/* Admin login section */}
+        <div
+          className="px-4 py-3"
+          style={{ borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}` }}
+        >
+          {isAdmin ? (
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div
+                  className="w-6 h-6 rounded-full flex items-center justify-center"
+                  style={{
+                    background: 'linear-gradient(135deg, #06B6D4, #0891B2)',
+                    boxShadow: '0 2px 8px rgba(6,182,212,0.3)',
+                  }}
+                >
+                  <Shield className="h-3.5 w-3.5 text-white" />
+                </div>
+                <div>
+                  <p className="text-xs font-medium" style={{ color: '#06B6D4' }}>Admin</p>
+                  <p className="text-[10px] text-muted-foreground">Akses penuh aktif</p>
+                </div>
+              </div>
+              <button
+                onClick={handleAdminLogout}
+                className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] text-red-400 hover:bg-red-500/10 transition-colors"
+              >
+                <LogOut className="h-3 w-3" />
+                Logout
+              </button>
+            </div>
+          ) : showLogin ? (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 mb-1">
+                <Lock className="h-3.5 w-3.5" style={{ color: '#06B6D4' }} />
+                <span className="text-xs font-medium">Login Admin</span>
+              </div>
+              <div className="flex gap-1.5">
+                <Input
+                  type="password"
+                  placeholder="Sandi admin..."
+                  value={adminPassword}
+                  onChange={(e) => {
+                    setAdminPassword(e.target.value);
+                    setLoginError('');
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleAdminLogin();
+                  }}
+                  className="h-7 text-xs flex-1"
+                  autoFocus
+                />
+                <Button
+                  onClick={handleAdminLogin}
+                  size="sm"
+                  className="h-7 text-xs px-2"
+                  style={{ background: 'linear-gradient(135deg, #06B6D4, #0891B2)' }}
+                >
+                  Masuk
+                </Button>
+              </div>
+              {loginError && (
+                <p className="text-[10px] text-red-400">{loginError}</p>
+              )}
+              <button
+                onClick={() => {
+                  setShowLogin(false);
+                  setAdminPassword('');
+                  setLoginError('');
+                }}
+                className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Batal
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowLogin(true)}
+              className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground transition-colors"
+              style={{
+                background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
+                border: `1px dashed ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
+              }}
+            >
+              <Lock className="h-3.5 w-3.5" />
+              <span>Login Admin untuk fitur khusus</span>
+            </button>
+          )}
+        </div>
+
         {/* Nav */}
         <nav className="p-3">
           <div
@@ -113,26 +240,28 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           {menuItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeSection === item.id;
+            const isLocked = item.adminOnly && !isAdmin;
             return (
               <button
                 key={item.id}
                 onClick={() => handleMenuClick(item.id)}
                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left mb-0.5 group transition-all"
                 style={{
-                  background: isActive
+                  background: isActive && !isLocked
                     ? 'linear-gradient(135deg, #06B6D4, #0891B2)'
                     : 'transparent',
-                  color: isActive ? 'white' : 'var(--muted-foreground)',
-                  boxShadow: isActive ? '0 4px 16px rgba(6,182,212,0.3)' : 'none',
+                  color: isActive && !isLocked ? 'white' : isLocked ? 'var(--muted-foreground)' : 'var(--muted-foreground)',
+                  boxShadow: isActive && !isLocked ? '0 4px 16px rgba(6,182,212,0.3)' : 'none',
+                  opacity: isLocked ? 0.5 : 1,
                 }}
                 onMouseEnter={(e) => {
-                  if (!isActive) {
+                  if (!isActive || isLocked) {
                     e.currentTarget.style.background = 'rgba(6,182,212,0.1)';
                     e.currentTarget.style.color = '#22D3EE';
                   }
                 }}
                 onMouseLeave={(e) => {
-                  if (!isActive) {
+                  if (!isActive || isLocked) {
                     e.currentTarget.style.background = 'transparent';
                     e.currentTarget.style.color = 'var(--muted-foreground)';
                   }
@@ -140,7 +269,10 @@ export function Sidebar({ open, onClose }: SidebarProps) {
               >
                 <Icon size={15} className="shrink-0" />
                 <div className="min-w-0 flex-1">
-                  <span className="text-sm font-medium block truncate">{item.label}</span>
+                  <span className="text-sm font-medium block truncate">
+                    {item.label}
+                    {isLocked && <Lock className="h-3 w-3 inline ml-1.5" />}
+                  </span>
                   <span className="block text-[10px] truncate" style={{ opacity: 0.6 }}>
                     {item.description}
                   </span>

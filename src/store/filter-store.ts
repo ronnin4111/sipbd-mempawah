@@ -9,6 +9,7 @@ export interface FilterState {
   businessType: string[];
   search: string;
   activeSection: string;
+  isAdmin: boolean;
 }
 
 interface FilterActions {
@@ -20,6 +21,7 @@ interface FilterActions {
   setBusinessType: (businessType: string[]) => void;
   setSearch: (search: string) => void;
   setActiveSection: (section: string) => void;
+  setIsAdmin: (isAdmin: boolean) => void;
   resetFilters: () => void;
 }
 
@@ -32,6 +34,7 @@ const initialState: FilterState = {
   businessType: [],
   search: '',
   activeSection: 'dashboard',
+  isAdmin: false,
 };
 
 export const useFilterStore = create<FilterState & FilterActions>((set) => ({
@@ -44,5 +47,6 @@ export const useFilterStore = create<FilterState & FilterActions>((set) => ({
   setBusinessType: (businessType) => set({ businessType }),
   setSearch: (search) => set({ search }),
   setActiveSection: (activeSection) => set({ activeSection }),
+  setIsAdmin: (isAdmin) => set({ isAdmin }),
   resetFilters: () => set(initialState),
 }));

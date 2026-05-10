@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Menu, Moon, Sun, DollarSign } from 'lucide-react';
+import { Menu, Moon, Sun, Lock } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useFilterStore } from '@/store/filter-store';
 import { useMounted } from '@/hooks/use-mounted';
@@ -11,13 +11,14 @@ interface HeaderProps {
 }
 
 const NAV_TABS = [
-  { id: 'dashboard', label: 'Dashboard' },
-  { id: 'data-produksi', label: 'Data Produksi' },
-  { id: 'peta-lokasi', label: 'Peta Lokasi' },
-  { id: 'tren-laporan', label: 'Tren & Laporan' },
-  { id: 'tren-v2', label: 'Tren V2' },
-  { id: 'harga-komoditas', label: 'Harga Komoditas' },
-  { id: 'import-export', label: 'Import / Export' },
+  { id: 'dashboard', label: 'Dashboard', adminOnly: false },
+  { id: 'data-produksi', label: 'Data Produksi', adminOnly: false },
+  { id: 'peta-lokasi', label: 'Peta Lokasi', adminOnly: false },
+  { id: 'tren-laporan', label: 'Tren & Laporan', adminOnly: false },
+  { id: 'tren-v2', label: 'Tren V2', adminOnly: false },
+  { id: 'harga-komoditas', label: 'Harga Komoditas', adminOnly: false },
+  { id: 'disagregasi', label: 'Disagregasi', adminOnly: true },
+  { id: 'import-export', label: 'Import / Export', adminOnly: false },
 ];
 
 export function Header({ onMenuClick }: HeaderProps) {
@@ -26,6 +27,7 @@ export function Header({ onMenuClick }: HeaderProps) {
   const mounted = useMounted();
   const activeSection = useFilterStore((s) => s.activeSection);
   const setActiveSection = useFilterStore((s) => s.setActiveSection);
+  const isAdmin = useFilterStore((s) => s.isAdmin);
 
   const isDark = mounted ? theme === 'dark' : true;
 
@@ -34,6 +36,15 @@ export function Header({ onMenuClick }: HeaderProps) {
     window.addEventListener('scroll', handler);
     return () => window.removeEventListener('scroll', handler);
   }, []);
+
+  const handleTabClick = (tab: typeof NAV_TABS[number]) => {
+    if (tab.adminOnly && !isAdmin) {
+      // Open sidebar for login
+      onMenuClick();
+      return;
+    }
+    setActiveSection(tab.id);
+  };
 
   return (
     <header
@@ -125,19 +136,22 @@ export function Header({ onMenuClick }: HeaderProps) {
         <nav className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-0">
           {NAV_TABS.map((tab) => {
             const isActive = activeSection === tab.id;
+            const isLocked = tab.adminOnly && !isAdmin;
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveSection(tab.id)}
-                className="relative px-3 py-2 text-xs font-medium whitespace-nowrap transition-all rounded-t-lg"
+                onClick={() => handleTabClick(tab)}
+                className="relative px-3 py-2 text-xs font-medium whitespace-nowrap transition-all rounded-t-lg flex items-center gap-1"
                 style={{
-                  color: isActive ? '#06B6D4' : 'var(--muted-foreground)',
+                  color: isActive ? '#06B6D4' : isLocked ? 'var(--muted-foreground)' : 'var(--muted-foreground)',
                   background: isActive
                     ? isDark ? 'rgba(6,182,212,0.1)' : 'rgba(6,182,212,0.08)'
                     : 'transparent',
+                  opacity: isLocked ? 0.5 : 1,
                 }}
               >
                 {tab.label}
+                {isLocked && <Lock className="h-2.5 w-2.5" />}
                 {isActive && (
                   <span
                     className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full"

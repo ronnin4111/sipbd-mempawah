@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { AnimatePresence, motion } from 'framer-motion';
 import { AppShell } from '@/components/layout/app-shell';
@@ -11,7 +11,7 @@ import { MapView } from '@/components/map/map-view';
 import { ReportTables } from '@/components/tables/report-tables';
 import { ImportDialog } from '@/components/import-export/import-dialog';
 import { ExportSection } from '@/components/import-export/export-section';
-import { DisaggregationDialog } from '@/components/disaggregation/disaggregation-dialog';
+import { DisagregasiSection } from '@/components/disaggregation/disagregasi-section';
 import { useFilterStore } from '@/store/filter-store';
 import { HeroBanner } from '@/components/layout/hero-banner';
 import { CommodityPricesTable } from '@/components/commodity-prices/commodity-prices-table';
@@ -46,16 +46,17 @@ function DataProduksiSection() {
   const businessType = useFilterStore((s) => s.businessType);
   const search = useFilterStore((s) => s.search);
 
-  // Compute a filter key to detect changes
+  // Compute a filter key to detect changes — used for derived page reset
   const filterKey = useMemo(() =>
     `${years.join(',')}|${kecamatan.join(',')}|${desa.join(',')}|${fishType.join(',')}|${containerType.join(',')}|${businessType.join(',')}|${search}`,
     [years, kecamatan, desa, fishType, containerType, businessType, search]
   );
 
-  // Reset page to 1 when filters change
-  const prevFilterKey = useRef(filterKey);
-  if (prevFilterKey.current !== filterKey) {
-    prevFilterKey.current = filterKey;
+  // Derive page from filterKey to reset on filter change
+  const [prevFilterKey, setPrevFilterKey] = useState(filterKey);
+  const currentPage = prevFilterKey !== filterKey ? 1 : page;
+  if (prevFilterKey !== filterKey) {
+    setPrevFilterKey(filterKey);
     setPage(1);
   }
 
@@ -145,10 +146,6 @@ function ImportExportSection() {
 
 export default function Home() {
   const activeSection = useFilterStore((s) => s.activeSection);
-  const [disaggregationOpen, setDisaggregationOpen] = useState(false);
-
-  // Open dialog when sidebar selects disagregasi
-  const isDisagregasi = activeSection === 'disagregasi';
 
   const renderSection = () => {
     switch (activeSection) {
@@ -164,6 +161,8 @@ export default function Home() {
         return <TrenV2Section />;
       case 'harga-komoditas':
         return <HargaKomoditasSection />;
+      case 'disagregasi':
+        return <DisagregasiSection />;
       case 'import-export':
         return <ImportExportSection />;
       default:
@@ -177,27 +176,15 @@ export default function Home() {
       <PdfDashboardCharts />
       <AnimatePresence mode="wait">
         <motion.div
-          key={activeSection === 'disagregasi' ? 'dashboard' : activeSection}
+          key={activeSection}
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -8 }}
           transition={{ duration: 0.25, ease: 'easeOut' }}
         >
-          {activeSection === 'disagregasi' ? <DashboardSection /> : renderSection()}
+          {renderSection()}
         </motion.div>
       </AnimatePresence>
-
-      {/* Disaggregation dialog — only opens from sidebar */}
-      <DisaggregationDialog
-        open={isDisagregasi || disaggregationOpen}
-        onOpenChange={(open) => {
-          setDisaggregationOpen(open);
-          if (!open) {
-            // When dialog closes, go back to dashboard
-            useFilterStore.getState().setActiveSection('dashboard');
-          }
-        }}
-      />
     </AppShell>
   );
 }
