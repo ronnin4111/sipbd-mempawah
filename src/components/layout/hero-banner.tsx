@@ -154,10 +154,8 @@ export function HeroBanner() {
   const totalKecamatan = stats?.productionByKecamatan ? Object.keys(stats.productionByKecamatan).length : 0;
   const totalKusuka = stats?.totalKusuka ?? 0;
 
-  // Period label for production cards
-  const currentMonthName = stats?.currentMonthName ?? '';
-  const currentYear = stats?.currentYear ?? new Date().getFullYear();
-  const periodLabel = currentMonthName ? `s/d ${currentMonthName} ${currentYear}` : `Tahun ${currentYear}`;
+  // Period label from API (e.g., "s/d Maret 2026", "Tahun 2024", "2022, 2023 s/d 2024")
+  const periodLabel = stats?.periodLabel ?? `s/d ${new Date().getFullYear()}`;
 
   const statCards = [
     {

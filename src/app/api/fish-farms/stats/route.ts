@@ -82,22 +82,48 @@ export async function GET(request: NextRequest) {
 
     const records = await db.fishFarm.findMany({ where });
 
-    // === Display year & month info ===
-    // Use selected filter year if available, otherwise current calendar year
+    // === Display period info ===
     const now = new Date();
     const calendarYear = now.getFullYear();
+    const indonesianMonths = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+
     const yearParam = searchParams.get('year');
     const selectedYears = yearParam
-      ? yearParam.split(',').map(Number).filter(n => !isNaN(n))
+      ? yearParam.split(',').map(Number).filter(n => !isNaN(n)).sort((a, b) => a - b)
       : [];
-    // Use the latest selected year, or fall back to calendar year
-    const displayYear = selectedYears.length > 0 ? Math.max(...selectedYears) : calendarYear;
-    const indonesianMonths = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-    // Only show month name when displayYear is the current calendar year
-    const currentMonthName = displayYear === calendarYear ? indonesianMonths[now.getMonth()] : '';
 
-    // === Display year records (for dashboard cards) ===
-    const currentYearRecords = records.filter(r => r.year === displayYear);
+    // Build a human-readable period label
+    // Examples: "s/d Maret 2026", "Tahun 2024", "2022, 2023 s/d 2024"
+    let periodLabel: string;
+    const currentMonthName = indonesianMonths[now.getMonth()];
+
+    if (selectedYears.length === 0) {
+      // No year filter → current calendar year
+      periodLabel = `s/d ${currentMonthName} ${calendarYear}`;
+    } else if (selectedYears.length === 1) {
+      // Single year selected
+      if (selectedYears[0] === calendarYear) {
+        periodLabel = `s/d ${currentMonthName} ${calendarYear}`;
+      } else {
+        periodLabel = `Tahun ${selectedYears[0]}`;
+      }
+    } else {
+      // Multiple years: "2022, 2023 s/d 2024"
+      if (selectedYears.length === 2) {
+        periodLabel = `${selectedYears[0]} s/d ${selectedYears[1]}`;
+      } else {
+        const first = selectedYears.slice(0, -1).join(', ');
+        const last = selectedYears[selectedYears.length - 1];
+        periodLabel = `${first} s/d ${last}`;
+      }
+    }
+
+    // === Display period records (for dashboard cards) ===
+    // When years are selected, use ALL filtered records (already filtered by selected years).
+    // When no year filter, use only current calendar year records.
+    const currentYearRecords = selectedYears.length > 0
+      ? records  // already filtered by buildWhere
+      : records.filter(r => r.year === calendarYear);
     const currentYearPembesaranProduction = currentYearRecords
       .filter(r => r.businessType === 'Pembesaran')
       .reduce((sum, r) => sum + r.productionQty, 0);
@@ -534,9 +560,9 @@ export async function GET(request: NextRequest) {
       rtpByBusinessType,
       farmerByBusinessType,
       groupByBusinessType,
-      // Display year data for dashboard cards
-      currentYear: displayYear,
-      currentMonthName,
+      // Display period data for dashboard cards
+      currentYear: selectedYears.length > 0 ? Math.max(...selectedYears) : calendarYear,
+      periodLabel,
       currentYearPembesaranProduction: round2(currentYearPembesaranProduction),
       currentYearPembenihanProduction: round2(currentYearPembenihanProduction),
       currentYearProductionByFishType: Object.fromEntries(

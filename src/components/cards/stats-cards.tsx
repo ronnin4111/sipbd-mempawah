@@ -153,9 +153,7 @@ export function StatsCards() {
 
   if (!stats) return null;
 
-  const periodLabel = stats.currentMonthName && stats.currentYear
-    ? `s/d ${stats.currentMonthName} ${stats.currentYear}`
-    : '';
+  const periodLabel = stats.periodLabel ?? '';
 
   const items: StatItemProps[] = [
     {
