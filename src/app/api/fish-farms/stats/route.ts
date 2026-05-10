@@ -82,6 +82,65 @@ export async function GET(request: NextRequest) {
 
     const records = await db.fishFarm.findMany({ where });
 
+    // === Current year & month info ===
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const indonesianMonths = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+    const currentMonthName = indonesianMonths[now.getMonth()];
+
+    // === Current year records (for dashboard cards) ===
+    const currentYearRecords = records.filter(r => r.year === currentYear);
+    const currentYearPembesaranProduction = currentYearRecords
+      .filter(r => r.businessType === 'Pembesaran')
+      .reduce((sum, r) => sum + r.productionQty, 0);
+    const currentYearPembenihanProduction = currentYearRecords
+      .filter(r => r.businessType === 'Pembenihan')
+      .reduce((sum, r) => sum + r.productionQty, 0);
+
+    // Current year production by fish type
+    const currentYearProductionByFishType: Record<string, { pembesaran: number; pembenihan: number }> = {};
+    currentYearRecords.forEach(r => {
+      if (!currentYearProductionByFishType[r.fishType]) {
+        currentYearProductionByFishType[r.fishType] = { pembesaran: 0, pembenihan: 0 };
+      }
+      if (r.businessType === 'Pembesaran') {
+        currentYearProductionByFishType[r.fishType].pembesaran += r.productionQty;
+      } else {
+        currentYearProductionByFishType[r.fishType].pembenihan += r.productionQty;
+      }
+    });
+
+    // Current year unique groups by business type
+    const currentYearGroupByBusinessType: Record<string, number> = {};
+    const currentYearGroupNamesByBT: Record<string, Set<string>> = {};
+    currentYearRecords.forEach(r => {
+      if (r.groupName && r.groupName.trim()) {
+        const normalized = r.groupName.trim().toLowerCase();
+        if (!currentYearGroupNamesByBT[r.businessType]) currentYearGroupNamesByBT[r.businessType] = new Set();
+        currentYearGroupNamesByBT[r.businessType].add(normalized);
+      }
+    });
+    Object.entries(currentYearGroupNamesByBT).forEach(([bt, set]) => {
+      currentYearGroupByBusinessType[bt] = set.size;
+    });
+
+    // Current year farmer/rtp by business type (unique farmerId in current year)
+    const currentYearFarmerLatestRecord = new Map<string, typeof records[0]>();
+    const currentYearSortedDesc = [...currentYearRecords].sort((a, b) => b.year - a.year);
+    for (const r of currentYearSortedDesc) {
+      const fid = r.farmerId || generateFarmerIdFromRecord(r);
+      if (!currentYearFarmerLatestRecord.has(fid)) {
+        currentYearFarmerLatestRecord.set(fid, r);
+      }
+    }
+    const currentYearUniqueFarmerRecords = Array.from(currentYearFarmerLatestRecord.values());
+    const currentYearFarmerByBusinessType: Record<string, number> = {};
+    const currentYearRtpByBusinessType: Record<string, number> = {};
+    currentYearUniqueFarmerRecords.forEach(r => {
+      currentYearFarmerByBusinessType[r.businessType] = (currentYearFarmerByBusinessType[r.businessType] || 0) + r.farmerCount;
+      currentYearRtpByBusinessType[r.businessType] = (currentYearRtpByBusinessType[r.businessType] || 0) + r.rtpCount;
+    });
+
     // === Production by business type (NOT combined - different units!) ===
     const pembesaranProduction = records
       .filter(r => r.businessType === 'Pembesaran')
@@ -467,6 +526,20 @@ export async function GET(request: NextRequest) {
       rtpByBusinessType,
       farmerByBusinessType,
       groupByBusinessType,
+      // Current year data for dashboard cards
+      currentYear,
+      currentMonthName,
+      currentYearPembesaranProduction: round2(currentYearPembesaranProduction),
+      currentYearPembenihanProduction: round2(currentYearPembenihanProduction),
+      currentYearProductionByFishType: Object.fromEntries(
+        Object.entries(currentYearProductionByFishType).map(([k, v]) => [k, {
+          pembesaran: round2(v.pembesaran),
+          pembenihan: round2(v.pembenihan),
+        }])
+      ),
+      currentYearGroupByBusinessType,
+      currentYearFarmerByBusinessType,
+      currentYearRtpByBusinessType,
       productionByFishType: Object.fromEntries(
         Object.entries(productionByFishType).map(([k, v]) => [k, {
           pembesaran: round2(v.pembesaran),

@@ -68,6 +68,15 @@ export interface StatsResponse {
   rtpByBusinessType: Record<string, number>;
   farmerByBusinessType: Record<string, number>;
   groupByBusinessType: Record<string, number>;
+  // Current year data for dashboard cards
+  currentYear: number;
+  currentMonthName: string;
+  currentYearPembesaranProduction: number;
+  currentYearPembenihanProduction: number;
+  currentYearProductionByFishType: Record<string, { pembesaran: number; pembenihan: number }>;
+  currentYearGroupByBusinessType: Record<string, number>;
+  currentYearFarmerByBusinessType: Record<string, number>;
+  currentYearRtpByBusinessType: Record<string, number>;
   productionByFishType: Record<string, { pembesaran: number; pembenihan: number }>;
   productionByContainer: Record<string, { pembesaran: number; pembenihan: number }>;
   productionByKecamatan: Record<string, { pembesaran: number; pembenihan: number }>;

@@ -86,6 +86,54 @@ function StatItem({ label, value, unit, icon, color, index, breakdown }: StatIte
   );
 }
 
+interface FarmerStatItemProps {
+  icon: React.ReactNode;
+  color: string;
+  index: number;
+  pokdakanCount: number;
+  orangCount: number;
+  rtpCount: number;
+  businessTypeLabel: string;
+  periodLabel: string;
+}
+
+function FarmerStatItem({ icon, color, index, pokdakanCount, orangCount, rtpCount, businessTypeLabel, periodLabel }: FarmerStatItemProps) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, delay: index * 0.1 }}
+      className="flex flex-col items-center text-center py-4 px-3"
+    >
+      <div
+        className="w-12 h-12 rounded-xl flex items-center justify-center mb-3"
+        style={{
+          background: `${color}15`,
+          border: `1px solid ${color}30`,
+        }}
+      >
+        {icon}
+      </div>
+      <div className="flex items-baseline gap-1.5">
+        <span className="text-xl sm:text-2xl font-bold" style={{ color: 'var(--foreground)' }}>
+          <AnimatedNumber value={pokdakanCount} />
+        </span>
+        <span className="text-[11px] font-medium" style={{ color: 'var(--muted-foreground)' }}>
+          Pokdakan
+        </span>
+      </div>
+      <span className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
+        {formatNumber(orangCount)} Orang {businessTypeLabel} ({periodLabel})
+      </span>
+      <div className="mt-1.5 flex flex-wrap justify-center gap-x-3 gap-y-0.5">
+        <span className="text-[10px]" style={{ color: 'var(--muted-foreground)' }}>
+          RTP: <span className="font-semibold" style={{ color }}>{formatNumber(rtpCount)}</span>
+        </span>
+      </div>
+    </motion.div>
+  );
+}
+
 export function StatsCards() {
   const { data: stats, isLoading } = useFishFarmStats();
 
@@ -105,56 +153,36 @@ export function StatsCards() {
 
   if (!stats) return null;
 
+  const periodLabel = stats.currentMonthName && stats.currentYear
+    ? `s/d ${stats.currentMonthName} ${stats.currentYear}`
+    : '';
+
   const items: StatItemProps[] = [
     {
-      label: 'Total Produksi Pembesaran',
-      value: stats.pembesaranProduction,
+      label: `Produksi Pembesaran ${periodLabel}`,
+      value: stats.currentYearPembesaranProduction,
       unit: 'Kg',
       icon: <Fish className="h-5 w-5" style={{ color: '#3B82F6' }} />,
       color: '#3B82F6',
       index: 0,
-      breakdown: Object.entries(stats.productionByFishType)
+      breakdown: Object.entries(stats.currentYearProductionByFishType)
         .filter(([, v]) => v.pembesaran > 0)
         .map(([k, v]) => ({ label: k, value: v.pembesaran, unit: 'Kg' }))
         .sort((a, b) => b.value - a.value)
         .slice(0, 3),
     },
     {
-      label: 'Total Produksi Pembenihan',
-      value: stats.pembenihanProduction,
+      label: `Produksi Pembenihan ${periodLabel}`,
+      value: stats.currentYearPembenihanProduction,
       unit: 'Ekor',
       icon: <Fish className="h-5 w-5" style={{ color: '#22C55E' }} />,
       color: '#22C55E',
       index: 1,
-      breakdown: Object.entries(stats.productionByFishType)
+      breakdown: Object.entries(stats.currentYearProductionByFishType)
         .filter(([, v]) => v.pembenihan > 0)
         .map(([k, v]) => ({ label: k, value: v.pembenihan, unit: 'Ekor' }))
         .sort((a, b) => b.value - a.value)
         .slice(0, 3),
-    },
-    {
-      label: stats.latestYear ? `Pembudidaya Pembesaran (${stats.latestYear})` : 'Pembudidaya Pembesaran',
-      value: stats.farmerByBusinessType['Pembesaran'] || 0,
-      unit: 'Orang',
-      icon: <Users className="h-5 w-5" style={{ color: '#F59E0B' }} />,
-      color: '#F59E0B',
-      index: 2,
-      breakdown: [
-        { label: 'RTP', value: stats.rtpByBusinessType['Pembesaran'] || 0, unit: 'RTP' },
-        { label: 'Kelompok', value: stats.groupByBusinessType['Pembesaran'] || 0, unit: 'Kelompok' },
-      ],
-    },
-    {
-      label: stats.latestYear ? `Pembudidaya Pembenihan (${stats.latestYear})` : 'Pembudidaya Pembenihan',
-      value: stats.farmerByBusinessType['Pembenihan'] || 0,
-      unit: 'Orang',
-      icon: <UserCheck className="h-5 w-5" style={{ color: '#A855F7' }} />,
-      color: '#A855F7',
-      index: 3,
-      breakdown: [
-        { label: 'RTP', value: stats.rtpByBusinessType['Pembenihan'] || 0, unit: 'RTP' },
-        { label: 'Kelompok', value: stats.groupByBusinessType['Pembenihan'] || 0, unit: 'Kelompok' },
-      ],
     },
   ];
 
@@ -163,6 +191,26 @@ export function StatsCards() {
       {items.map((item) => (
         <StatItem key={item.label} {...item} />
       ))}
+      <FarmerStatItem
+        icon={<Users className="h-5 w-5" style={{ color: '#F59E0B' }} />}
+        color="#F59E0B"
+        index={2}
+        pokdakanCount={stats.currentYearGroupByBusinessType['Pembesaran'] || 0}
+        orangCount={stats.currentYearFarmerByBusinessType['Pembesaran'] || 0}
+        rtpCount={stats.currentYearRtpByBusinessType['Pembesaran'] || 0}
+        businessTypeLabel="Pembesaran"
+        periodLabel={String(stats.currentYear)}
+      />
+      <FarmerStatItem
+        icon={<UserCheck className="h-5 w-5" style={{ color: '#A855F7' }} />}
+        color="#A855F7"
+        index={3}
+        pokdakanCount={stats.currentYearGroupByBusinessType['Pembenihan'] || 0}
+        orangCount={stats.currentYearFarmerByBusinessType['Pembenihan'] || 0}
+        rtpCount={stats.currentYearRtpByBusinessType['Pembenihan'] || 0}
+        businessTypeLabel="Pembenih"
+        periodLabel={String(stats.currentYear)}
+      />
     </div>
   );
 }
