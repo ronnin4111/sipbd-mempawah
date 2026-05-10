@@ -10,8 +10,6 @@ import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import 'leaflet.markercluster';
 
-const formatNumber = (num: number) => new Intl.NumberFormat('id-ID').format(num);
-
 // Colors for each kecamatan boundary
 const KECAMATAN_COLORS: Record<string, string> = {
   "Anjongan": "#2563eb",
@@ -210,27 +208,47 @@ export default function MapInner() {
         });
     });
 
-    // Legend
-        const legend = L.control({ position: 'bottomleft' });
+    // Legend (collapsible on mobile)
+    const legend = L.control({ position: 'bottomleft' });
     legend.onAdd = () => {
       const div = L.DomUtil.create('div', '');
+      const isMobile = window.innerWidth < 640;
       div.innerHTML = `
-        <div style="background:white;padding:10px 14px;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,0.2);font-size:12px;line-height:1.8;color:#1e293b;">
-          <div style="font-weight:700;margin-bottom:6px;font-size:13px;">Keterangan</div>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <div style="width:14px;height:14px;border-radius:50%;background:#2563eb;border:2.5px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.3);flex-shrink:0;"></div>
-            <span style="color:#1e293b;">Koordinat pasti</span>
+        <div id="map-legend-container" style="background:white;padding:6px 10px;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,0.2);font-size:12px;color:#1e293b;">
+          <div id="map-legend-toggle" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;">
+            <span style="font-weight:700;font-size:13px;">Keterangan</span>
+            <span id="map-legend-arrow" style="font-size:10px;transition:transform 0.2s;${isMobile ? 'transform:rotate(-90deg)' : 'transform:rotate(0deg)'}">▼</span>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <div style="width:14px;height:14px;border-radius:50%;background:#16a34a;border:2.5px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.3);flex-shrink:0;"></div>
-            <span style="color:#1e293b;">Dekat lokasi kelompok</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <div style="width:14px;height:14px;border-radius:50%;background:#f59e0b;border:2.5px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.3);flex-shrink:0;"></div>
-            <span style="color:#1e293b;">Lokasi perkiraan (desa)</span>
+          <div id="map-legend-body" style="${isMobile ? 'display:none;' : ''}margin-top:6px;line-height:1.8;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div style="width:14px;height:14px;border-radius:50%;background:#2563eb;border:2.5px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.3);flex-shrink:0;"></div>
+              <span style="color:#1e293b;">Koordinat pasti</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div style="width:14px;height:14px;border-radius:50%;background:#16a34a;border:2.5px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.3);flex-shrink:0;"></div>
+              <span style="color:#1e293b;">Dekat lokasi kelompok</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div style="width:14px;height:14px;border-radius:50%;background:#f59e0b;border:2.5px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.3);flex-shrink:0;"></div>
+              <span style="color:#1e293b;">Lokasi perkiraan (desa)</span>
+            </div>
           </div>
         </div>
       `;
+      // Toggle logic
+      setTimeout(() => {
+        const toggle = div.querySelector('#map-legend-toggle');
+        const body = div.querySelector('#map-legend-body') as HTMLElement | null;
+        const arrow = div.querySelector('#map-legend-arrow') as HTMLElement | null;
+        if (toggle && body && arrow) {
+          toggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isOpen = body.style.display !== 'none';
+            body.style.display = isOpen ? 'none' : 'block';
+            arrow.style.transform = isOpen ? 'rotate(-90deg)' : 'rotate(0deg)';
+          });
+        }
+      }, 0);
       return div;
     };
     legend.addTo(map);
@@ -313,7 +331,9 @@ export default function MapInner() {
       popupAnchor: [0, -9],
     });
 
-            function createPopup(farm: typeof dedupedData[0], coordLabel: string) {
+            function createPopup(farm: typeof dedupedData[0], coordLabel: string, lat: number, lng: number) {
+      const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+      const googleStreetUrl = `https://www.google.com/maps/@${lat},${lng},17z/data=!3m1!1e3`;
       return `
         <div style="font-size:13px;min-width:220px;max-width:300px;color:#1e293b;background:#ffffff;padding:10px 12px;border-radius:8px;">
           <strong style="font-size:15px;color:#0d9488;display:block;margin-bottom:6px;">${farm.kecamatan} - ${farm.desa}</strong>
@@ -322,10 +342,13 @@ export default function MapInner() {
             <tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:4px 8px 4px 0;color:#334155;font-weight:700;white-space:nowrap;">Jenis Ikan</td><td style="padding:4px 0;color:#0f172a;">${farm.fishType || '-'}</td></tr>
             <tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:4px 8px 4px 0;color:#334155;font-weight:700;white-space:nowrap;">Wadah Budidaya</td><td style="padding:4px 0;color:#0f172a;">${farm.containerType || '-'}</td></tr>
             <tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:4px 8px 4px 0;color:#334155;font-weight:700;white-space:nowrap;">Jenis Usaha</td><td style="padding:4px 0;color:#0f172a;">${farm.businessType || '-'}</td></tr>
-            <tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:4px 8px 4px 0;color:#334155;font-weight:700;white-space:nowrap;">Jumlah Produksi</td><td style="padding:4px 0;color:#0f172a;">${formatNumber(farm.productionQty || 0)} kg</td></tr>
             <tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:4px 8px 4px 0;color:#334155;font-weight:700;white-space:nowrap;">Pembudidaya</td><td style="padding:4px 0;color:#0f172a;">${farm.farmerName || '-'}</td></tr>
-            <tr><td style="padding:4px 8px 4px 0;color:#334155;font-weight:700;white-space:nowrap;">Kelompok</td><td style="padding:4px 0;color:#0f172a;">${farm.groupName || '-'}</td></tr>
+            <tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:4px 8px 4px 0;color:#334155;font-weight:700;white-space:nowrap;">Kelompok</td><td style="padding:4px 0;color:#0f172a;">${farm.groupName || '-'}</td></tr>
           </table>
+          <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
+            <a href="${googleMapsUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:5px;background:#0d9488;color:#fff;text-decoration:none;font-size:11px;font-weight:600;">📍 Navigasi</a>
+            <a href="${googleStreetUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:5px;background:#2563eb;color:#fff;text-decoration:none;font-size:11px;font-weight:600;">🏙️ Street View</a>
+          </div>
         </div>
       `;
     }
@@ -357,7 +380,7 @@ export default function MapInner() {
         ? ''
         : '<span style="font-size:10px;color:#92400e;background:#fef3c7;padding:1px 4px;border-radius:3px;">Lokasi perkiraan (desa)</span><br/>';
 
-      marker.bindPopup(createPopup(farm, coordLabel), { maxWidth: 350 });
+      marker.bindPopup(createPopup(farm, coordLabel, coords.lat, coords.lng), { maxWidth: 350 });
       clusterGroup.addLayer(marker);
     });
 
@@ -423,7 +446,7 @@ export default function MapInner() {
         }
 
         const marker = L.marker([finalLat, finalLng], { icon });
-        marker.bindPopup(createPopup(farm, coordLabel), { maxWidth: 350 });
+        marker.bindPopup(createPopup(farm, coordLabel, finalLat, finalLng), { maxWidth: 350 });
         clusterGroup.addLayer(marker);
       });
     }
