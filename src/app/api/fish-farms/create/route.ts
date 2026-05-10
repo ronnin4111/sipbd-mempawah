@@ -36,6 +36,7 @@ export async function POST(request: NextRequest) {
     const record = await db.fishFarm.create({
       data: {
         year: Number(data.year),
+        triwulan: String(data.triwulan || 'Q4'),
         farmerId: generateFarmerId({ farmerName, groupName, kecamatan, desa }),
         kecamatan,
         desa,

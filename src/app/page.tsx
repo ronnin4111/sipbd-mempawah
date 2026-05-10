@@ -11,6 +11,7 @@ import { MapView } from '@/components/map/map-view';
 import { ReportTables } from '@/components/tables/report-tables';
 import { ImportDialog } from '@/components/import-export/import-dialog';
 import { ExportSection } from '@/components/import-export/export-section';
+import { DisaggregationSection } from '@/components/disaggregation/disaggregation-section';
 import { useFilterStore } from '@/store/filter-store';
 import { HeroBanner } from '@/components/layout/hero-banner';
 import { CommodityPricesTable } from '@/components/commodity-prices/commodity-prices-table';
@@ -116,6 +117,14 @@ function HargaKomoditasSection() {
   );
 }
 
+function DisagregasiSection() {
+  return (
+    <div className="space-y-4">
+      <DisaggregationSection />
+    </div>
+  );
+}
+
 function ImportExportSection() {
   const [importOpen, setImportOpen] = useState(false);
 
@@ -159,6 +168,8 @@ export default function Home() {
         return <TrenV2Section />;
       case 'harga-komoditas':
         return <HargaKomoditasSection />;
+      case 'disagregasi':
+        return <DisagregasiSection />;
       case 'import-export':
         return <ImportExportSection />;
       default:

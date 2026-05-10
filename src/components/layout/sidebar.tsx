@@ -10,6 +10,7 @@ import {
   ExternalLink,
   ChevronRight,
   X,
+  Split,
 } from 'lucide-react';
 import { useFilterStore } from '@/store/filter-store';
 import { useTheme } from 'next-themes';
@@ -22,6 +23,7 @@ const menuItems = [
   { id: 'tren-laporan', label: 'Tren & Laporan', icon: TrendingUp, description: 'Analisis tren produksi' },
   { id: 'tren-v2', label: 'Tren V2 (Triwulan)', icon: ExternalLink, description: 'Data tren versi triwulan' },
   { id: 'harga-komoditas', label: 'Harga Komoditas', icon: DollarSign, description: 'Daftar harga ikan' },
+  { id: 'disagregasi', label: 'Disagregasi Data', icon: Split, description: 'Distribusi data agregat' },
   { id: 'import-export', label: 'Import / Export', icon: FileSpreadsheet, description: 'Kelola data Excel/PDF' },
 ];
 

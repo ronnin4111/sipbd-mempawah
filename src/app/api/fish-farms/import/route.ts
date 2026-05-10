@@ -5,6 +5,7 @@ import { generateFarmerId } from '@/lib/farmer-id';
 
 interface ImportFishFarm {
   year: number;
+  triwulan?: string;
   kecamatan: string;
   desa: string;
   fishType: string;
@@ -187,6 +188,7 @@ export async function POST(request: NextRequest) {
 
       return {
         year: Number(record.year),
+        triwulan: String(record.triwulan || 'Q4'),
         farmerId: generateFarmerId({ farmerName, groupName, kecamatan: kec, desa: des }),
         kecamatan: kec,
         desa: des,

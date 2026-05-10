@@ -29,6 +29,7 @@ export interface FishFarm {
   id: string;
   farmerId: string;
   year: number;
+  triwulan: string;
   kecamatan: string;
   desa: string;
   fishType: string;
@@ -47,6 +48,7 @@ export interface FishFarm {
   kusuka: string;
   cpib: boolean;
   cbib: boolean;
+  disaggregationBatchId: string | null;
 }
 
 export interface FishFarmResponse {

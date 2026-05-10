@@ -34,6 +34,7 @@ export async function PUT(
     // Build update data - only include provided fields
     const updateData: Record<string, unknown> = {};
     if (data.year !== undefined) updateData.year = Number(data.year);
+    if (data.triwulan !== undefined) updateData.triwulan = String(data.triwulan);
     if (data.kecamatan !== undefined) updateData.kecamatan = String(data.kecamatan);
     if (data.desa !== undefined) updateData.desa = String(data.desa);
     if (data.fishType !== undefined) updateData.fishType = String(data.fishType);

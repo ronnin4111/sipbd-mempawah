@@ -11,6 +11,7 @@ model FishFarm {
   id              String   @id @default(cuid())
   farmerId        String   @default("")
   year            Int
+  triwulan        String   @default("Q4")
   kecamatan       String
   desa            String
   fishType        String
@@ -29,8 +30,25 @@ model FishFarm {
   kusuka          String   @default("")
   cpib            Boolean  @default(false)
   cbib            Boolean  @default(false)
+  disaggregationBatchId String?
+  disaggregationBatch   DisaggregationBatch? @relation(fields: [disaggregationBatchId], references: [id])
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+}
+
+model DisaggregationBatch {
+  id              String   @id @default(cuid())
+  year            Int
+  triwulan        String
+  kecamatan       String
+  fishType        String
+  containerType   String
+  businessType    String
+  totalQty        Float
+  notes           String   @default("")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  fishFarms       FishFarm[]
 }
 
 model CommodityPrice {
