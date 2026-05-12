@@ -31,3 +31,31 @@ Stage Summary:
 - Disagregasi tab in header shows lock icon for non-admin users
 - API supports ?action=groups endpoint and groupName parameter filtering
 - Code pushed to GitHub: ronnin4111/sipbd-mempawah main branch
+
+---
+Task ID: 1
+Agent: Main Agent
+Task: Fix AI Chatbot critical bugs and enhance data context
+
+Work Log:
+- Diagnosed 3 critical bugs in AI chatbot: wrong message role (assistant→system), missing group/farmer data, no database query capability
+- Fixed system role in /api/ai/chat/route.ts: changed 'assistant' to 'system' for system prompts
+- Fixed system role in /api/ai/narrate/route.ts: same fix
+- Removed thinking:{type:'disabled'} parameter that could cause API issues
+- Created /api/ai/data-context/route.ts: new endpoint providing group & farmer detail data for AI
+- Enhanced /api/ai/chat/route.ts: now fetches group/farmer data server-side directly from DB, no extra HTTP request
+- Improved system prompt with comprehensive domain knowledge (CPIB, CBIB, Poktan, KUSUKA definitions)
+- Added Indonesian field names in data context (namaKelompok, jumlahAnggota, jenisIkan, etc.)
+- Updated ai-chat-widget.tsx: sends filters for server-side data context, better error messages, markdown formatting
+- Updated quick prompts to include group/farmer questions
+- AI can now answer specific questions about groups, members, farmers, and locations
+- When a group name isn't found, AI suggests similar names from the database
+- All changes tested and working locally
+- Committed and pushed to GitHub (5a7f7c5)
+
+Stage Summary:
+- AI chatbot no longer crashes on questions about specific groups/farmers
+- System prompt uses correct 'system' role for proper AI instruction following
+- Data context includes group listings with member counts, farmer details, kecamatan/desa lists
+- Error messages now show the actual error detail instead of generic message
+- Pending name changes were already applied in previous sessions (confirmed)
