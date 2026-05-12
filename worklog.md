@@ -281,3 +281,35 @@ Stage Summary:
 - AI can now list ALL kelompok when asked, not just 30
 - Total counts will be accurate (derived from actual DB query)
 - User should see correct responses after Vercel redeploy
+
+---
+Task ID: 4
+Agent: main
+Task: Fix AI kelompok count discrepancy (says 57 but lists only 55)
+
+Work Log:
+- Diagnosed root cause: groups with same name in different desa are counted
+  separately in groupMap (57 entries) but AI merges them when listing by name only
+  (e.g. "Gemura" appears in Anjungan Melancar AND Pak Bulu = 2 entries, but AI
+  lists it once)
+- Another cause: max_tokens=2048 was too low for listing 57 groups — response
+  got truncated, causing AI to say "data tidak lengkap"
+- Another cause: "jumlah kelompok" was classified as 'stats' not 'specific',
+  so full group list wasn't included in context
+
+Changes:
+1. Added numbered list format (1-57) in data context — AI can count exactly
+2. Added duplicate name detection — notes which names appear in multiple desa
+3. Increased max_tokens to 4096 for listing questions (detected by regex)
+4. Fixed classifyQuestion: "jumlah kelompok" now returns 'specific' not 'stats'
+5. Added system prompt rules:
+   - Use numbered list from DATA CONTEXT when listing groups
+   - Don't merge same-name groups in different desa
+   - Never say "data tidak lengkap" — all data is provided
+6. Sort groups by kecamatan first, then name for better organization
+
+Stage Summary:
+- AI should now list exactly the same number of groups as totalGroups
+- Groups with same name in different desa will be clearly distinguished
+- Listing questions get more tokens (4096 vs 2048) to avoid truncation
+- Committed and pushed (76b5d78)
