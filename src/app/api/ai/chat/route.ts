@@ -9,7 +9,8 @@ import { generateFarmerId } from '@/lib/farmer-id';
  */
 function buildSystemPrompt(
   statsContext?: Record<string, unknown>,
-  dataContext?: Record<string, unknown>
+  dataContext?: Record<string, unknown>,
+  targetedResults?: Record<string, unknown>
 ): string {
   let prompt = `You are Asisten AI Perikanan Budidaya (SIPBD AI), an expert assistant for the Dinas Pertanian Ketahanan Pangan dan Perikanan Kabupaten Mempawah, Kalimantan Barat.
 
@@ -33,6 +34,7 @@ Response rules:
 - Suggest relevant actions when identifying issues
 - Use proper Indonesian terminology for fisheries terms
 - If a group or farmer name is not found, suggest similar names that exist in the data
+- When asked "siapa saja" or "daftar anggota" for a group, list ALL farmer names from the "HASIL PENCARIAN SPESIFIK" section if available
 
 Key domain knowledge:
 - Kabupaten Mempawah has 9 kecamatan: Siantan, Sengah Temila, Mempawah Hilir, Mempawah Hulu, Ledo, Toho, Mandor, Sungai Kunyit, Jawai
@@ -57,10 +59,11 @@ When analyzing data:
 
 IMPORTANT RULES:
 - Always answer based on the provided data context when data questions are asked. Do NOT fabricate or guess numbers.
-- If asked about a specific group, check the "groups" list in the data context section.
-- If asked about a specific farmer, check the "farmers" list in the data context section.
+- If asked about a specific group, check the "daftarKelompok" in the data context, AND check the "HASIL PENCARIAN SPESIFIK" section for detailed member list.
+- If asked about a specific farmer, check the "daftarPembudidaya" in the data context AND the "HASIL PENCARIAN SPESIFIK" section.
 - If a name is not found, try searching case-insensitively or suggest similar names.
 - For group member count questions, use "jumlahAnggota" from the groups data.
+- For "siapa saja anggota" questions, list the farmer names from the targeted search results.
 - Always format numbers with Indonesian thousand separators (dot separator, e.g., 1.234.567).`;
 
   if (statsContext && Object.keys(statsContext).length > 0) {
@@ -69,12 +72,267 @@ IMPORTANT RULES:
   }
 
   if (dataContext && Object.keys(dataContext).length > 0) {
-    prompt += `\n\n=== DATA KELOMPOK DAN PEMBUDIDAYA (DETAIL) ===\nBerikut adalah data detail kelompok dan pembudidaya:\n`;
+    prompt += `\n\n=== DATA KELOMPOK DAN PEMBUDIDAYA (UMUM) ===\nBerikut adalah data kelompok dan pembudidaya (sampel terbatas):\n`;
     prompt += JSON.stringify(dataContext, null, 2);
-    prompt += `\n\nGunakan data di atas untuk menjawab pertanyaan tentang kelompok spesifik, jumlah anggota, pembudidaya, dan lokasi.`;
+    prompt += `\n\nCatatan: daftarPembudidaya di atas adalah sampel terbatas. Untuk daftar lengkap anggota kelompok tertentu, lihat bagian HASIL PENCARIAN SPESIFIK di bawah.`;
+  }
+
+  if (targetedResults && Object.keys(targetedResults).length > 0) {
+    prompt += `\n\n=== HASIL PENCARIAN SPESIFIK ===\nBerikut adalah hasil pencarian spesifik berdasarkan pertanyaan pengguna:\n`;
+    prompt += JSON.stringify(targetedResults, null, 2);
+    prompt += `\n\nGunakan data di atas sebagai sumber utama untuk menjawab pertanyaan spesifik tentang kelompok/anggota/pembudidaya.`;
   }
 
   return prompt;
+}
+
+/**
+ * Extract potential search keywords from the user's message.
+ * Detects group names, farmer names, kecamatan, desa, etc.
+ */
+function extractSearchTerms(message: string): string[] {
+  const terms: string[] = [];
+  const lower = message.toLowerCase();
+
+  // Common Indonesian question patterns
+  const patterns = [
+    // "kelompok [name]" or "kelompok [name]" patterns
+    /kelompok\s+([^\?,\.\!]+)/i,
+    // "anggota kelompok [name]"
+    /anggota\s+kelompok\s+([^\?,\.\!]+)/i,
+    // "pembudidaya [name]"
+    /pembudidaya\s+([^\?,\.\!]+)/i,
+    // "siapa saja" after group mention
+    /kelompok\s+(\w+(?:\s+\w+)*)/i,
+    // "grup [name]"
+    /grup\s+([^\?,\.\!]+)/i,
+    // quoted names
+    /["']([^"']+)["']/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = lower.match(pattern);
+    if (match && match[1]) {
+      const term = match[1].trim();
+      if (term.length > 2) {
+        terms.push(term);
+      }
+    }
+  }
+
+  // Also check for proper nouns (capitalized words that aren't common words)
+  const commonWords = new Set([
+    'berapa', 'jumlah', 'anggota', 'kelompok', 'pembudidaya', 'siapa',
+    'saja', 'apa', 'dimana', 'kapan', 'bagaimana', 'mengapa', 'yang',
+    'di', 'ke', 'dari', 'dengan', 'untuk', 'pada', 'adalah', 'ini',
+    'itu', 'dan', 'atau', 'tetapi', 'karena', 'jika', 'kalau', 'bisa',
+    'ada', 'tidak', 'sudah', 'belum', 'akan', 'dapat', 'harus', 'perlu',
+    'semua', 'setiap', 'lain', 'lainnya', 'total', 'data', 'produksi',
+    'tahun', 'kecamatan', 'desa', 'ikan', 'jenis', 'usaha', 'rtp',
+    'kusuka', 'cpib', 'cbib', 'halo', 'hai', 'hello', 'hi', 'tolong',
+    'bantu', 'jelaskan', 'sebutkan', 'daftar', 'informasi', 'tentang',
+    'kabupaten', 'mempawah', 'dinas', 'perikanan', 'budidaya',
+  ]);
+
+  const words = message.split(/\s+/);
+  for (const word of words) {
+    const clean = word.replace(/[^\w]/g, '');
+    if (clean.length > 2 && clean[0] === clean[0].toUpperCase() && !commonWords.has(clean.toLowerCase())) {
+      terms.push(clean);
+    }
+  }
+
+  // Deduplicate
+  return [...new Set(terms)];
+}
+
+/**
+ * Fetch targeted search results based on user's message.
+ * This finds specific groups, farmers, etc. matching the search terms.
+ */
+async function fetchTargetedResults(searchTerms: string[]): Promise<Record<string, unknown>> {
+  if (searchTerms.length === 0) return {};
+
+  try {
+    const where: Record<string, unknown> = {};
+    where.year = new Date().getFullYear();
+
+    const records = await db.fishFarm.findMany({ where });
+
+    const results: {
+      kelompokDitemukan: Array<Record<string, unknown>>;
+      pembudidayaDitemukan: Array<Record<string, unknown>>;
+    } = {
+      kelompokDitemukan: [],
+      pembudidayaDitemukan: [],
+    };
+
+    // Search for matching groups and their members
+    const matchedGroupKeys = new Set<string>();
+
+    // Build group data
+    interface GroupDetail {
+      name: string;
+      kecamatan: string;
+      desa: string;
+      businessTypes: Set<string>;
+      fishTypes: Set<string>;
+      memberCount: number;
+      rtpCount: number;
+      kusukaCount: number;
+    }
+
+    const groupMap = new Map<string, GroupDetail>();
+    const farmerLatestByGroup = new Map<string, Map<string, typeof records[0]>>();
+    const sortedDesc = [...records].sort((a, b) => b.year - a.year);
+
+    records.forEach(r => {
+      if (!r.groupName || !r.groupName.trim()) return;
+      const normalizedName = r.groupName.trim();
+      const key = `${normalizedName.toLowerCase()}|${r.kecamatan}|${r.desa}`;
+
+      if (!groupMap.has(key)) {
+        groupMap.set(key, {
+          name: normalizedName,
+          kecamatan: r.kecamatan,
+          desa: r.desa,
+          businessTypes: new Set(),
+          fishTypes: new Set(),
+          memberCount: 0,
+          rtpCount: 0,
+          kusukaCount: 0,
+        });
+      }
+
+      groupMap.get(key)!.businessTypes.add(r.businessType);
+      groupMap.get(key)!.fishTypes.add(r.fishType);
+
+      // Track unique farmers per group
+      if (!farmerLatestByGroup.has(key)) farmerLatestByGroup.set(key, new Map());
+      const fid = r.farmerId || generateFarmerId({
+        farmerName: r.farmerName || '', groupName: r.groupName || '',
+        kecamatan: r.kecamatan || '', desa: r.desa || '',
+      });
+      if (!farmerLatestByGroup.get(key)!.has(fid)) {
+        farmerLatestByGroup.get(key)!.set(fid, r);
+      }
+    });
+
+    // Calculate member counts
+    for (const [key, group] of groupMap) {
+      const farmerMap = farmerLatestByGroup.get(key);
+      if (farmerMap) {
+        let memberCount = 0;
+        let rtpCount = 0;
+        let kusukaCount = 0;
+        for (const r of farmerMap.values()) {
+          memberCount += r.farmerCount;
+          rtpCount += r.rtpCount;
+          if (/^\d{16}$/.test(String(r.kusuka || '').trim())) kusukaCount++;
+        }
+        group.memberCount = memberCount;
+        group.rtpCount = rtpCount;
+        group.kusukaCount = kusukaCount;
+      }
+    }
+
+    // Search for matching groups
+    for (const term of searchTerms) {
+      const q = term.toLowerCase();
+      for (const [key, group] of groupMap) {
+        if (
+          group.name.toLowerCase().includes(q) ||
+          group.kecamatan.toLowerCase().includes(q) ||
+          group.desa.toLowerCase().includes(q)
+        ) {
+          if (!matchedGroupKeys.has(key)) {
+            matchedGroupKeys.add(key);
+
+            // Get ALL farmers in this group
+            const groupFarmers = farmerLatestByGroup.get(key);
+            const farmerList: Array<Record<string, unknown>> = [];
+            if (groupFarmers) {
+              for (const r of groupFarmers.values()) {
+                farmerList.push({
+                  namaPembudidaya: r.farmerName,
+                  jenisIkan: r.fishType,
+                  jenisUsaha: r.businessType,
+                  jenisWadah: r.containerType,
+                  punyaKUSUKA: !!r.kusuka && /^\d{16}$/.test(String(r.kusuka || '').trim()),
+                  CPIB: r.cpib,
+                  CBIB: r.cbib,
+                });
+              }
+            }
+
+            results.kelompokDitemukan.push({
+              namaKelompok: group.name,
+              kecamatan: group.kecamatan,
+              desa: group.desa,
+              jenisUsaha: Array.from(group.businessTypes),
+              jenisIkan: Array.from(group.fishTypes),
+              jumlahAnggota: group.memberCount,
+              jumlahRTP: group.rtpCount,
+              jumlahKUSUKA: group.kusukaCount,
+              daftarAnggota: farmerList.sort((a, b) =>
+                String(a.namaPembudidaya).localeCompare(String(b.namaPembudidaya))
+              ),
+            });
+          }
+        }
+      }
+
+      // Search for matching farmers by name
+      const allFarmerLatest = new Map<string, typeof records[0]>();
+      for (const r of sortedDesc) {
+        const fid = r.farmerId || generateFarmerId({
+          farmerName: r.farmerName || '', groupName: r.groupName || '',
+          kecamatan: r.kecamatan || '', desa: r.desa || '',
+        });
+        if (!allFarmerLatest.has(fid)) allFarmerLatest.set(fid, r);
+      }
+
+      for (const r of allFarmerLatest.values()) {
+        if (
+          (r.farmerName && r.farmerName.toLowerCase().includes(q)) ||
+          (r.kecamatan && r.kecamatan.toLowerCase().includes(q)) ||
+          (r.desa && r.desa.toLowerCase().includes(q))
+        ) {
+          // Check if already in results
+          const alreadyExists = results.pembudidayaDitemukan.some(
+            f => f.namaPembudidaya === r.farmerName && f.namaKelompok === r.groupName
+          );
+          if (!alreadyExists) {
+            results.pembudidayaDitemukan.push({
+              namaPembudidaya: r.farmerName,
+              namaKelompok: r.groupName,
+              kecamatan: r.kecamatan,
+              desa: r.desa,
+              jenisIkan: r.fishType,
+              jenisUsaha: r.businessType,
+              jenisWadah: r.containerType,
+              punyaKUSUKA: !!r.kusuka && /^\d{16}$/.test(String(r.kusuka || '').trim()),
+              CPIB: r.cpib,
+              CBIB: r.cbib,
+            });
+          }
+        }
+      }
+    }
+
+    // If no targeted results found but we have search terms, return empty with note
+    if (results.kelompokDitemukan.length === 0 && results.pembudidayaDitemukan.length === 0) {
+      return {
+        catatan: `Tidak ditemukan data yang cocok untuk pencarian: "${searchTerms.join(', ')}"`,
+        saran: 'Coba gunakan nama yang lebih spesifik atau periksa ejaan nama kelompok/pembudidaya.',
+      };
+    }
+
+    return results;
+  } catch (error) {
+    console.error('Failed to fetch targeted results:', error);
+    return { error: 'Gagal melakukan pencarian spesifik' };
+  }
 }
 
 /**
@@ -88,7 +346,6 @@ async function fetchDataContext(filters: {
   fishType: string[];
   containerType: string[];
   businessType: string[];
-  search?: string;
 }): Promise<Record<string, unknown>> {
   try {
     const where: Record<string, unknown> = {};
@@ -176,7 +433,7 @@ async function fetchDataContext(filters: {
     }
 
     // Convert groups
-    let groups = Array.from(groupMap.values()).map(g => ({
+    const groups = Array.from(groupMap.values()).map(g => ({
       namaKelompok: g.name,
       kecamatan: g.kecamatan,
       desa: g.desa,
@@ -187,21 +444,11 @@ async function fetchDataContext(filters: {
       jumlahKUSUKA: g.kusukaCount,
     }));
 
-    // Apply search filter if provided
-    if (filters.search) {
-      const q = filters.search.toLowerCase();
-      groups = groups.filter(g =>
-        g.namaKelompok.toLowerCase().includes(q) ||
-        g.kecamatan.toLowerCase().includes(q) ||
-        g.desa.toLowerCase().includes(q)
-      );
-    }
-
     groups.sort((a, b) => a.namaKelompok.localeCompare(b.namaKelompok));
     const totalGroups = groups.length;
     const limitedGroups = groups.slice(0, 80);
 
-    // === Farmer Summary ===
+    // === Farmer Summary (limited) ===
     const allFarmerLatest = new Map<string, typeof records[0]>();
     for (const r of sortedDesc) {
       const fid = r.farmerId || generateFarmerId({
@@ -211,7 +458,7 @@ async function fetchDataContext(filters: {
       if (!allFarmerLatest.has(fid)) allFarmerLatest.set(fid, r);
     }
 
-    let farmers = Array.from(allFarmerLatest.values()).map(r => ({
+    const farmers = Array.from(allFarmerLatest.values()).map(r => ({
       namaPembudidaya: r.farmerName,
       namaKelompok: r.groupName,
       kecamatan: r.kecamatan,
@@ -223,15 +470,6 @@ async function fetchDataContext(filters: {
       CPIB: r.cpib,
       CBIB: r.cbib,
     }));
-
-    if (filters.search) {
-      const q = filters.search.toLowerCase();
-      farmers = farmers.filter(f =>
-        f.namaPembudidaya.toLowerCase().includes(q) ||
-        f.namaKelompok.toLowerCase().includes(q) ||
-        f.kecamatan.toLowerCase().includes(q)
-      );
-    }
 
     farmers.sort((a, b) => a.namaPembudidaya.localeCompare(b.namaPembudidaya));
     const totalFarmers = farmers.length;
@@ -305,13 +543,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Fetch data context from database (server-side, no HTTP overhead)
+    // Extract search terms from the user's message for targeted lookup
+    const searchTerms = extractSearchTerms(message);
+
+    // Fetch general data context from database
     const dataContext = await fetchDataContext(filters || {
       years: [], kecamatan: [], desa: [], fishType: [],
       containerType: [], businessType: [],
     });
 
-    const systemPrompt = buildSystemPrompt(statsContext, dataContext);
+    // Fetch targeted results based on search terms (specific groups/farmers)
+    const targetedResults = searchTerms.length > 0
+      ? await fetchTargetedResults(searchTerms)
+      : {};
+
+    const systemPrompt = buildSystemPrompt(statsContext, dataContext, targetedResults);
 
     // Build conversation messages for Hugging Face API
     const chatMessages = [

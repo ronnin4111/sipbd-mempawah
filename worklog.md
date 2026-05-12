@@ -110,5 +110,5 @@ Stage Summary:
 - AI integration switched from z-ai-web-dev-sdk → @huggingface/inference
 - Works locally with HF_API_KEY env var
 - NEEDS: User to set HF_API_KEY environment variable on Vercel dashboard
-- Token: [REDACTED]
+- Token: [REDACTED - set in Vercel env vars]
 - Model env var: HF_MODEL=Qwen/Qwen2.5-7B-Instruct (optional, has default)
