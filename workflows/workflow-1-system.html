@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SIPBD - Arsitektur Sistem</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: #F8FAFC;
+    padding: 48px 60px;
+    width: 1400px;
+  }
+
+  .title {
+    text-align: center;
+    margin-bottom: 8px;
+  }
+  .title h1 {
+    font-size: 28px;
+    font-weight: 800;
+    color: #0F172A;
+    letter-spacing: -0.5px;
+  }
+  .title .subtitle {
+    font-size: 14px;
+    color: #64748B;
+    margin-top: 4px;
+  }
+
+  .badge {
+    display: inline-block;
+    background: #EFF6FF;
+    color: #2563EB;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 20px;
+    margin-bottom: 16px;
+  }
+
+  .phase-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    margin-top: 28px;
+  }
+
+  .phase {
+    background: white;
+    border-radius: 16px;
+    border: 1px solid #E2E8F0;
+    overflow: hidden;
+  }
+
+  .phase-header {
+    padding: 14px 24px;
+    border-bottom: 1px solid #E2E8F0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .phase-number {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 700;
+    color: white;
+  }
+
+  .phase-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #0F172A;
+  }
+
+  .phase-desc {
+    font-size: 12px;
+    color: #94A3B8;
+    margin-left: auto;
+  }
+
+  .phase-body {
+    padding: 20px 24px;
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .node {
+    background: #F8FAFC;
+    border: 1.5px solid #E2E8F0;
+    border-radius: 12px;
+    padding: 14px 18px;
+    min-width: 180px;
+    flex: 1;
+    position: relative;
+  }
+
+  .node-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    margin-bottom: 8px;
+  }
+
+  .node-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #0F172A;
+    margin-bottom: 3px;
+  }
+
+  .node-desc {
+    font-size: 11px;
+    color: #64748B;
+    line-height: 1.5;
+  }
+
+  .node-tag {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 6px;
+    margin-top: 6px;
+  }
+
+  .p1 .phase-number { background: #3B82F6; }
+  .p1 .node-icon { background: #EFF6FF; }
+  .p1 .node { border-color: #BFDBFE; }
+  .p1 .node-tag { background: #EFF6FF; color: #2563EB; }
+
+  .p2 .phase-number { background: #06B6D4; }
+  .p2 .node-icon { background: #ECFEFF; }
+  .p2 .node { border-color: #A5F3FC; }
+  .p2 .node-tag { background: #ECFEFF; color: #0891B2; }
+
+  .p3 .phase-number { background: #8B5CF6; }
+  .p3 .node-icon { background: #F5F3FF; }
+  .p3 .node { border-color: #DDD6FE; }
+  .p3 .node-tag { background: #F5F3FF; color: #7C3AED; }
+
+  .p4 .phase-number { background: #F59E0B; }
+  .p4 .node-icon { background: #FFFBEB; }
+  .p4 .node { border-color: #FDE68A; }
+  .p4 .node-tag { background: #FFFBEB; color: #D97706; }
+
+  .p5 .phase-number { background: #10B981; }
+  .p5 .node-icon { background: #ECFDF5; }
+  .p5 .node { border-color: #A7F3D0; }
+  .p5 .node-tag { background: #ECFDF5; color: #059669; }
+
+  .connector {
+    display: flex;
+    justify-content: center;
+    padding: 4px 0;
+  }
+  .connector .arrow {
+    width: 2px;
+    height: 16px;
+    background: #CBD5E1;
+    position: relative;
+  }
+  .connector .arrow::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 6px solid #CBD5E1;
+  }
+
+  .flow-label {
+    font-size: 10px;
+    color: #94A3B8;
+    text-align: center;
+    margin-top: 2px;
+  }
+
+  .tech-bar {
+    margin-top: 28px;
+    background: #0F172A;
+    border-radius: 14px;
+    padding: 20px 28px;
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  .tech-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .tech-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+  .tech-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: #CBD5E1;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .tech-val {
+    font-size: 12px;
+    font-weight: 600;
+    color: #F1F5F9;
+  }
+</style>
+</head>
+<body>
+
+<div class="title">
+  <span class="badge">WORKFLOW DOCUMENTATION</span>
+  <h1>SIPBD V1 — Arsitektur & Alur Sistem</h1>
+  <div class="subtitle">Sistem Informasi Perikanan Budidaya — Dinas Pertanian Ketahanan Pangan dan Perikanan Kab. Mempawah</div>
+</div>
+
+<div class="phase-container">
+
+  <div class="phase p1">
+    <div class="phase-header">
+      <div class="phase-number">1</div>
+      <div class="phase-title">Frontend — User Interface Layer</div>
+      <div class="phase-desc">Next.js 16 · React 19 · Tailwind CSS 4 · shadcn/ui</div>
+    </div>
+    <div class="phase-body">
+      <div class="node">
+        <div class="node-icon">📊</div>
+        <div class="node-title">Ringkasan Produksi</div>
+        <div class="node-desc">Dashboard utama: hero banner, 4 kartu statistik, 3 chart interaktif (Trend, Produksi, Kecamatan)</div>
+        <div class="node-tag">Dashboard</div>
+      </div>
+      <div class="node">
+        <div class="node-icon">📋</div>
+        <div class="node-title">Data Pembudidaya</div>
+        <div class="node-desc">Tabel CRUD lengkap dengan 7 dimensi filter, pagination, kolom dinamis, inline edit/delete</div>
+        <div class="node-tag">Data Table</div>
+      </div>
+      <div class="node">
+        <div class="node-icon">🗺️</div>
+        <div class="node-title">Peta Lokasi</div>
+        <div class="node-desc">Peta Leaflet interaktif, 4 layer, GeoJSON batas kecamatan, marker clustering, navigasi Google</div>
+        <div class="node-tag">Map</div>
+      </div>
+      <div class="node">
+        <div class="node-icon">📈</div>
+        <div class="node-title">Tren & Laporan</div>
+        <div class="node-desc">4 tabel laporan: Tren 5 Tahun, Target vs Realisasi, Produksi/Kecamatan, Produksi/Jenis Ikan</div>
+        <div class="node-tag">Reports</div>
+      </div>
+      <div class="node">
+        <div class="node-icon">💲</div>
+        <div class="node-title">Harga Komoditas</div>
+        <div class="node-desc">Matriks harga editable (Pembesaran Rp/Kg & Pembenihan Rp/Ekor), 9 jenis x 11 wadah</div>
+        <div class="node-tag">Prices</div>
+      </div>
+      <div class="node">
+        <div class="node-icon">📤</div>
+        <div class="node-title">Import / Export</div>
+        <div class="node-desc">Import Excel (preview + validasi), Export Excel 6 sheet, Export PDF client + server side</div>
+        <div class="node-tag">I/O</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="connector"><div class="arrow"></div></div>
+  <div class="flow-label">State management via Zustand + React Query</div>
+
+  <div class="phase p2">
+    <div class="phase-header">
+      <div class="phase-number">2</div>
+      <div class="phase-title">State Management & Data Layer</div>
+      <div class="phase-desc">Zustand · React Query · LocalStorage + DB Sync</div>
+    </div>
+    <div class="phase-body">
+      <div class="node">
+        <div class="node-icon">🗂️</div>
+        <div class="node-title">Zustand Store</div>
+        <div class="node-desc">7 dimensi filter (Tahun, Kecamatan, Desa, Jenis Ikan, Wadah, Jenis Usaha, Pencarian), activeSection, isAdmin</div>
+        <div class="node-tag">Global State</div>
+      </div>
+      <div class="node">
+        <div class="node-icon">🔄</div>
+        <div class="node-title">React Query</div>
+        <div class="node-desc">Auto-fetch & cache: Stats, FishFarms, Years. Auto-invalidate on CRUD mutations</div>
+        <div class="node-tag">Server State</div>
+      </div>
+      <div class="node">
+        <div class="node-icon">💾</div>
+        <div class="node-title">Persistence Layer</div>
+        <div class="node-desc">LocalStorage (fast init) lalu Database sync (cross-device) untuk column visibility & settings</div>
+        <div class="node-tag">Sync</div>
+      </div>
+      <div class="node">
+        <div class="node-icon">🎨</div>
+        <div class="node-title">Theme System</div>
+        <div class="node-desc">next-themes dark/light mode, CSS variables, SSR-safe mounted check</div>
+        <div class="node-tag">UI State</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="connector"><div class="arrow"></div></div>
+  <div class="flow-label">API calls via fetch ke Next.js Route Handlers</div>
+
+  <div class="phase p3">
+    <div class="phase-header">
+      <div class="phase-number">3</div>
+      <div class="phase-title">Backend — API Route Handlers</div>
+      <div class="phase-desc">Next.js API Routes · Password-Protected Writes · Aggregation Engine</div>
+    </div>
+    <div class="phase-body">
+      <div class="node">
+        <div class="node-icon">🔐</div>
+        <div class="node-title">Auth & Security</div>
+        <div class="node-desc">Password gate pada semua write endpoint. Client-side isAdmin + server-side verification</div>
+        <div class="node-tag">Auth</div>
+      </div>
+      <div class="node">
+        <div class="node-icon">🧮</div>
+        <div class="node-title">Stats Engine</div>
+        <div class="node-desc">/stats: 20+ agregasi (produksi per ikan/kecamatan/tahun, tren, target vs realisasi, cross-tabs)</div>
+        <div class="node-tag">Aggregation</div>
+      </div>
+      <div class="node">
+        <div class="node-icon">📝</div>
+        <div class="node-title">CRUD Operations</div>
+        <div class="node-desc">Create, Read (paginated+filtered), Update, Delete record. Batch delete. Auto farmerId</div>
+        <div class="node-tag">CRUD</div>
+      </div>
+      <div class="node">
+        <div class="node-icon">📥</div>
+        <div class="node-title">Import Pipeline</div>
+        <div class="node-desc">JSON import (replace/merge), Excel import (server-side), container aliasing, KUSUKA precision fix</div>
+        <div class="node-tag">Import</div>
+      </div>
+      <div class="node">
+        <div class="node-icon">📤</div>
+        <div class="node-title">Export Pipeline</div>
+        <div class="node-desc">Excel 6-sheet, PDF client (charts+tables), PDF server (Iktisar+Kecamatan+Target)</div>
+        <div class="node-tag">Export</div>
+      </div>
+      <div class="node">
+        <div class="node-icon">🔀</div>
+        <div class="node-title">Disagregasi</div>
+        <div class="node-desc">Wizard 3 langkah: pilih data agregat, preview distribusi proporsional, simpan record individual</div>
+        <div class="node-tag">Admin Only</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="connector"><div class="arrow"></div></div>
+  <div class="flow-label">Prisma ORM queries</div>
+
+  <div class="phase p4">
+    <div class="phase-header">
+      <div class="phase-number">4</div>
+      <div class="phase-title">Database — Prisma ORM</div>
+      <div class="phase-desc">SQLite (dev) · Turso libSQL (prod) · Auto-detect connection</div>
+    </div>
+    <div class="phase-body">
+      <div class="node">
+        <div class="node-icon">🐟</div>
+        <div class="node-title">FishFarm</div>
+        <div class="node-desc">Data utama: 20+ field (farmerId, year, kecamatan, desa, fishType, container, production, RTP, target, coords, KUSUKA)</div>
+        <div class="node-tag">Core Table</div>
+      </div>
+      <div class="node">
+        <div class="node-icon">📦</div>
+        <div class="node-title">DisaggregationBatch</div>
+        <div class="node-desc">Batch disagregasi: year, triwulan, kecamatan, fishType, totalQty, notes. Relasi 1:N ke FishFarm</div>
+        <div class="node-tag">Disaggregation</div>
+      </div>
+      <div class="node">
+        <div class="node-icon">💰</div>
+        <div class="node-title">CommodityPrice</div>
+        <div class="node-desc">Matriks harga: fishType x containerType. Unique constraint (fishType, containerType)</div>
+        <div class="node-tag">Prices</div>
+      </div>
+      <div class="node">
+        <div class="node-icon">⚙️</div>
+        <div class="node-title">AppSetting</div>
+        <div class="node-desc">Key-value store untuk konfigurasi (columnVisibility). Cross-device sync via API</div>
+        <div class="node-tag">Settings</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="connector"><div class="arrow"></div></div>
+  <div class="flow-label">External services & deployment</div>
+
+  <div class="phase p5">
+    <div class="phase-header">
+      <div class="phase-number">5</div>
+      <div class="phase-title">External Services & Deployment</div>
+      <div class="phase-desc">Vercel · Turso · Leaflet · GitHub Auto-Deploy</div>
+    </div>
+    <div class="phase-body">
+      <div class="node">
+        <div class="node-icon">🚀</div>
+        <div class="node-title">Vercel Deployment</div>
+        <div class="node-desc">Auto-deploy dari GitHub main branch. Serverless API functions. Edge-optimized</div>
+        <div class="node-tag">Hosting</div>
+      </div>
+      <div class="node">
+        <div class="node-icon">🗄️</div>
+        <div class="node-title">Turso Database</div>
+        <div class="node-desc">libSQL cloud database (AWS eu-west-1). Replica reads, low-latency edge access</div>
+        <div class="node-tag">Database</div>
+      </div>
+      <div class="node">
+        <div class="node-icon">🗺️</div>
+        <div class="node-title">Map Services</div>
+        <div class="node-desc">Leaflet + OSM/Esri tiles (4 layer), GeoJSON batas desa, MarkerCluster, Google Maps nav</div>
+        <div class="node-tag">Maps</div>
+      </div>
+      <div class="node">
+        <div class="node-icon">🔗</div>
+        <div class="phase-title">GitHub Pipeline</div>
+        <div class="node-desc">Push ke main branch auto trigger Vercel build, deploy ke production 1-2 menit</div>
+        <div class="node-tag">CI/CD</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="tech-bar">
+  <div class="tech-item">
+    <div class="tech-dot" style="background:#3B82F6"></div>
+    <div class="tech-label">Framework</div>
+    <div class="tech-val">Next.js 16</div>
+  </div>
+  <div class="tech-item">
+    <div class="tech-dot" style="background:#06B6D4"></div>
+    <div class="tech-label">Language</div>
+    <div class="tech-val">TypeScript 5</div>
+  </div>
+  <div class="tech-item">
+    <div class="tech-dot" style="background:#8B5CF6"></div>
+    <div class="tech-label">Styling</div>
+    <div class="tech-val">Tailwind CSS 4 + shadcn/ui</div>
+  </div>
+  <div class="tech-item">
+    <div class="tech-dot" style="background:#F59E0B"></div>
+    <div class="tech-label">Database</div>
+    <div class="tech-val">Prisma 6 + Turso</div>
+  </div>
+  <div class="tech-item">
+    <div class="tech-dot" style="background:#10B981"></div>
+    <div class="tech-label">Charts</div>
+    <div class="tech-val">Recharts</div>
+  </div>
+  <div class="tech-item">
+    <div class="tech-dot" style="background:#EF4444"></div>
+    <div class="tech-label">Maps</div>
+    <div class="tech-val">React-Leaflet</div>
+  </div>
+  <div class="tech-item">
+    <div class="tech-dot" style="background:#EC4899"></div>
+    <div class="tech-label">State</div>
+    <div class="tech-val">Zustand + React Query</div>
+  </div>
+  <div class="tech-item">
+    <div class="tech-dot" style="background:#64748B"></div>
+    <div class="tech-label">PDF</div>
+    <div class="tech-val">jsPDF + autoTable</div>
+  </div>
+  <div class="tech-item">
+    <div class="tech-dot" style="background:#0EA5E9"></div>
+    <div class="tech-label">Excel</div>
+    <div class="tech-val">SheetJS (xlsx)</div>
+  </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SIPBD - API & Navigation Map</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: #F8FAFC;
+    padding: 48px 60px;
+    width: 1500px;
+  }
+
+  .title { text-align: center; margin-bottom: 8px; }
+  .title h1 { font-size: 26px; font-weight: 800; color: #0F172A; letter-spacing: -0.5px; }
+  .title .subtitle { font-size: 13px; color: #64748B; margin-top: 4px; }
+  .badge { display: inline-block; background: #ECFEFF; color: #0891B2; font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 20px; margin-bottom: 16px; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-top: 28px;
+  }
+
+  .card {
+    background: white;
+    border-radius: 16px;
+    border: 1px solid #E2E8F0;
+    overflow: hidden;
+  }
+
+  .card-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid #E2E8F0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .card-icon { font-size: 18px; }
+  .card-title { font-size: 14px; font-weight: 700; color: #0F172A; }
+  .card-count { font-size: 10px; color: #94A3B8; margin-left: auto; }
+
+  .card-body { padding: 16px 20px; }
+
+  /* API route table */
+  .api-table { width: 100%; border-collapse: collapse; }
+  .api-table th {
+    text-align: left;
+    font-size: 9px;
+    font-weight: 600;
+    color: #64748B;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 6px 8px;
+    border-bottom: 1px solid #F1F5F9;
+  }
+  .api-table td {
+    padding: 7px 8px;
+    border-bottom: 1px solid #F8FAFC;
+    font-size: 11px;
+    vertical-align: top;
+  }
+  .api-table tr:last-child td { border-bottom: none; }
+  .api-table tr:hover { background: #F8FAFC; }
+
+  .method-badge {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .method-get { background: #DCFCE7; color: #166534; }
+  .method-post { background: #DBEAFE; color: #1E40AF; }
+  .method-put { background: #FEF3C7; color: #92400E; }
+  .method-delete { background: #FEE2E2; color: #991B1B; }
+
+  .path-text {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: #334155;
+  }
+
+  .lock-icon { color: #F59E0B; font-size: 10px; }
+
+  /* Nav section */
+  .nav-section {
+    margin-bottom: 16px;
+  }
+
+  .nav-section-title {
+    font-size: 10px;
+    font-weight: 700;
+    color: #94A3B8;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #F1F5F9;
+  }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    margin-bottom: 4px;
+    transition: background 0.15s;
+  }
+
+  .nav-item:hover { background: #F8FAFC; }
+
+  .nav-icon-box {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+
+  .nav-label { font-size: 12px; font-weight: 600; color: #0F172A; }
+  .nav-id { font-size: 9px; font-family: 'JetBrains Mono', monospace; color: #94A3B8; }
+  .nav-desc { font-size: 10px; color: #64748B; }
+
+  .admin-badge {
+    font-size: 8px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: #FEF3C7;
+    color: #92400E;
+    margin-left: auto;
+  }
+
+  /* Feature checklist */
+  .feature-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 24px;
+  }
+
+  .feature-card {
+    background: white;
+    border-radius: 14px;
+    border: 1px solid #E2E8F0;
+    padding: 16px;
+  }
+
+  .feature-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: #0F172A;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .feature-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 0;
+    font-size: 10px;
+    color: #475569;
+  }
+
+  .check { color: #10B981; font-size: 12px; }
+  .partial { color: #F59E0B; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<div class="title">
+  <span class="badge">API & NAVIGATION MAP</span>
+  <h1>SIPBD V1 — Peta API & Navigasi</h1>
+  <div class="subtitle">Endpoint Reference · Navigation Structure · Feature Checklist</div>
+</div>
+
+<div class="grid">
+
+  <!-- API Endpoints -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-icon">🔌</span>
+      <span class="card-title">API Endpoints</span>
+      <span class="card-count">14 routes</span>
+    </div>
+    <div class="card-body" style="max-height:700px;overflow-y:auto">
+      <table class="api-table">
+        <thead>
+          <tr><th>Method</th><th>Endpoint</th><th>Desc</th><th></th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="method-badge method-get">GET</span></td>
+            <td><span class="path-text">/api/fish-farms</span></td>
+            <td>Paginated list + 7 filters</td>
+            <td></td>
+          </tr>
+          <tr>
+            <td><span class="method-badge method-post">POST</span></td>
+            <td><span class="path-text">/api/fish-farms/create</span></td>
+            <td>Create single record</td>
+            <td><span class="lock-icon">🔒</span></td>
+          </tr>
+          <tr>
+            <td><span class="method-badge method-put">PUT</span></td>
+            <td><span class="path-text">/api/fish-farms/[id]</span></td>
+            <td>Update record by ID</td>
+            <td><span class="lock-icon">🔒</span></td>
+          </tr>
+          <tr>
+            <td><span class="method-badge method-delete">DEL</span></td>
+            <td><span class="path-text">/api/fish-farms/[id]</span></td>
+            <td>Delete record by ID</td>
+            <td><span class="lock-icon">🔒</span></td>
+          </tr>
+          <tr>
+            <td><span class="method-badge method-post">POST</span></td>
+            <td><span class="path-text">/api/fish-farms/delete-all</span></td>
+            <td>Delete all records</td>
+            <td><span class="lock-icon">🔒</span></td>
+          </tr>
+          <tr>
+            <td><span class="method-badge method-post">POST</span></td>
+            <td><span class="path-text">/api/fish-farms/import</span></td>
+            <td>Import JSON payload</td>
+            <td><span class="lock-icon">🔒</span></td>
+          </tr>
+          <tr>
+            <td><span class="method-badge method-post">POST</span></td>
+            <td><span class="path-text">/api/fish-farms/import-file</span></td>
+            <td>Import Excel file</td>
+            <td><span class="lock-icon">🔒</span></td>
+          </tr>
+          <tr>
+            <td><span class="method-badge method-get">GET</span></td>
+            <td><span class="path-text">/api/fish-farms/export</span></td>
+            <td>Export Excel 6-sheet</td>
+            <td><span class="lock-icon">🔒</span></td>
+          </tr>
+          <tr>
+            <td><span class="method-badge method-get">GET</span></td>
+            <td><span class="path-text">/api/fish-farms/export-pdf</span></td>
+            <td>Export server PDF</td>
+            <td></td>
+          </tr>
+          <tr>
+            <td><span class="method-badge method-get">GET</span></td>
+            <td><span class="path-text">/api/fish-farms/stats</span></td>
+            <td>20+ aggregation stats</td>
+            <td></td>
+          </tr>
+          <tr>
+            <td><span class="method-badge method-get">GET</span></td>
+            <td><span class="path-text">/api/fish-farms/years</span></td>
+            <td>Distinct years</td>
+            <td></td>
+          </tr>
+          <tr>
+            <td><span class="method-badge method-get">GET</span></td>
+            <td><span class="path-text">/api/fish-farms/disaggregate</span></td>
+            <td>Preview disaggregation</td>
+            <td></td>
+          </tr>
+          <tr>
+            <td><span class="method-badge method-post">POST</span></td>
+            <td><span class="path-text">/api/fish-farms/disaggregate</span></td>
+            <td>Save disaggregated data</td>
+            <td><span class="lock-icon">🔒</span></td>
+          </tr>
+          <tr>
+            <td><span class="method-badge method-get">GET</span></td>
+            <td><span class="path-text">/api/commodity-prices</span></td>
+            <td>Get price matrix</td>
+            <td></td>
+          </tr>
+          <tr>
+            <td><span class="method-badge method-put">PUT</span></td>
+            <td><span class="path-text">/api/commodity-prices</span></td>
+            <td>Update prices</td>
+            <td><span class="lock-icon">🔒</span></td>
+          </tr>
+          <tr>
+            <td><span class="method-badge method-post">POST</span></td>
+            <td><span class="path-text">/api/commodity-prices</span></td>
+            <td>Import prices from Excel</td>
+            <td><span class="lock-icon">🔒</span></td>
+          </tr>
+          <tr>
+            <td><span class="method-badge method-get">GET</span></td>
+            <td><span class="path-text">/api/settings</span></td>
+            <td>Get app setting</td>
+            <td></td>
+          </tr>
+          <tr>
+            <td><span class="method-badge method-put">PUT</span></td>
+            <td><span class="path-text">/api/settings</span></td>
+            <td>Save app setting</td>
+            <td><span class="lock-icon">🔒</span></td>
+          </tr>
+          <tr>
+            <td><span class="method-badge method-post">POST</span></td>
+            <td><span class="path-text">/api/auth/verify</span></td>
+            <td>Verify admin password</td>
+            <td></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Navigation & Pages -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-icon">🧭</span>
+      <span class="card-title">Navigation Structure</span>
+      <span class="card-count">8 sections</span>
+    </div>
+    <div class="card-body" style="max-height:700px;overflow-y:auto">
+
+      <div class="nav-section">
+        <div class="nav-section-title">Header Tabs (Desktop)</div>
+
+        <div class="nav-item">
+          <div class="nav-icon-box" style="background:#EFF6FF">📊</div>
+          <div>
+            <div class="nav-label">Ringkasan Produksi <span class="nav-id">dashboard</span></div>
+            <div class="nav-desc">Hero banner, 4 stat cards, 3 charts</div>
+          </div>
+        </div>
+
+        <div class="nav-item">
+          <div class="nav-icon-box" style="background:#F0FDF4">📋</div>
+          <div>
+            <div class="nav-label">Data Pembudidaya <span class="nav-id">data-produksi</span></div>
+            <div class="nav-desc">CRUD table, 7-dim filter, pagination</div>
+          </div>
+        </div>
+
+        <div class="nav-item">
+          <div class="nav-icon-box" style="background:#ECFEFF">🗺️</div>
+          <div>
+            <div class="nav-label">Peta Lokasi <span class="nav-id">peta-lokasi</span></div>
+            <div class="nav-desc">Leaflet map, 4 layers, GeoJSON, clustering</div>
+          </div>
+        </div>
+
+        <div class="nav-item">
+          <div class="nav-icon-box" style="background:#F5F3FF">📈</div>
+          <div>
+            <div class="nav-label">Tren & Laporan <span class="nav-id">tren-laporan</span></div>
+            <div class="nav-desc">4 report tables + PDF export</div>
+          </div>
+        </div>
+
+        <div class="nav-item">
+          <div class="nav-icon-box" style="background:#FFFBEB">↗️</div>
+          <div>
+            <div class="nav-label">Tren V2 (Triwulan) <span class="nav-id">tren-v2</span></div>
+            <div class="nav-desc">External iframe (sipbd-mempawah-v2)</div>
+          </div>
+        </div>
+
+        <div class="nav-item">
+          <div class="nav-icon-box" style="background:#FEF3C7">💲</div>
+          <div>
+            <div class="nav-label">Harga Komoditas <span class="nav-id">harga-komoditas</span></div>
+            <div class="nav-desc">Editable price matrix (admin)</div>
+          </div>
+        </div>
+
+        <div class="nav-item">
+          <div class="nav-icon-box" style="background:#FEE2E2">🔀</div>
+          <div>
+            <div class="nav-label">Disagregasi Data <span class="nav-id">disagregasi</span></div>
+            <div class="nav-desc">3-step disaggregation wizard</div>
+          </div>
+          <span class="admin-badge">ADMIN</span>
+        </div>
+
+        <div class="nav-item">
+          <div class="nav-icon-box" style="background:#E0E7FF">📤</div>
+          <div>
+            <div class="nav-label">Import / Export <span class="nav-id">import-export</span></div>
+            <div class="nav-desc">Excel I/O + PDF export</div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-section-title">Mobile Navigation</div>
+        <div class="nav-item">
+          <div class="nav-icon-box" style="background:#F1F5F9">☰</div>
+          <div>
+            <div class="nav-label">Hamburger Menu → Sidebar</div>
+            <div class="nav-desc">Slide-out sidebar with all nav items + admin login. Footer flex layout prevents overlap</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-section-title">Filter Bar (Shared)</div>
+        <div class="nav-item">
+          <div class="nav-icon-box" style="background:#F0FDF4">🔍</div>
+          <div>
+            <div class="nav-label">7-Dimension Filter</div>
+            <div class="nav-desc">Tahun · Kecamatan · Desa · Jenis Ikan · Wadah · Jenis Usaha · Pencarian. Active on all pages, global state via Zustand</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<!-- Feature Checklist -->
+<div class="feature-grid">
+
+  <div class="feature-card">
+    <div class="feature-title">📊 Dashboard Features</div>
+    <div class="feature-item"><span class="check">✓</span> Hero banner with animated stats</div>
+    <div class="feature-item"><span class="check">✓</span> 4 stat cards (Pembesaran/Pembenihan/Nilai/RTP)</div>
+    <div class="feature-item"><span class="check">✓</span> Trend line chart (5-year by business type)</div>
+    <div class="feature-item"><span class="check">✓</span> Production bar chart (by fish type)</div>
+    <div class="feature-item"><span class="check">✓</span> Kecamatan comparison chart</div>
+    <div class="feature-item"><span class="check">✓</span> Dark/light theme support</div>
+  </div>
+
+  <div class="feature-card">
+    <div class="feature-title">📋 Data Table Features</div>
+    <div class="feature-item"><span class="check">✓</span> @tanstack/react-table with sorting</div>
+    <div class="feature-item"><span class="check">✓</span> Server-side pagination</div>
+    <div class="feature-item"><span class="check">✓</span> 7-dimension multi-select filters</div>
+    <div class="feature-item"><span class="check">✓</span> Column visibility toggle (DB-synced)</div>
+    <div class="feature-item"><span class="check">✓</span> Inline create/edit/delete (admin)</div>
+    <div class="feature-item"><span class="check">✓</span> Search across all fields</div>
+  </div>
+
+  <div class="feature-card">
+    <div class="feature-title">🗺️ Map Features</div>
+    <div class="feature-item"><span class="check">✓</span> 4 tile layers (Street/Sat/Hybrid/Terrain)</div>
+    <div class="feature-item"><span class="check">✓</span> Marker clustering (MarkerCluster)</div>
+    <div class="feature-item"><span class="check">✓</span> 9 GeoJSON kecamatan boundaries</div>
+    <div class="feature-item"><span class="check">✓</span> 3-tier coordinate accuracy</div>
+    <div class="feature-item"><span class="check">✓</span> Google Maps navigation link</div>
+    <div class="feature-item"><span class="check">✓</span> Google Street View link</div>
+    <div class="feature-item"><span class="check">✓</span> Hideable coordinate legend (mobile)</div>
+  </div>
+
+  <div class="feature-card">
+    <div class="feature-title">📈 Report & Export Features</div>
+    <div class="feature-item"><span class="check">✓</span> Tren 5 Tahun table (split Pembesaran/Pembenihan)</div>
+    <div class="feature-item"><span class="check">✓</span> Target vs Realisasi table</div>
+    <div class="feature-item"><span class="check">✓</span> Produksi per Kecamatan (split columns + TOTAL)</div>
+    <div class="feature-item"><span class="check">✓</span> Produksi per Jenis Ikan (split RTP/Kelompok)</div>
+    <div class="feature-item"><span class="check">✓</span> Client-side PDF (charts + tables)</div>
+    <div class="feature-item"><span class="check">✓</span> Server-side PDF (Iktisar + tables)</div>
+    <div class="feature-item"><span class="check">✓</span> Excel export (6-sheet workbook)</div>
+  </div>
+
+  <div class="feature-card">
+    <div class="feature-title">🔐 Admin Features</div>
+    <div class="feature-item"><span class="check">✓</span> Password-based auth (diskan2026)</div>
+    <div class="feature-item"><span class="check">✓</span> Sidebar login/logout UI</div>
+    <div class="feature-item"><span class="check">✓</span> CRUD operations on data</div>
+    <div class="feature-item"><span class="check">✓</span> Excel import with preview</div>
+    <div class="feature-item"><span class="check">✓</span> Disagregasi data agregat wizard</div>
+    <div class="feature-item"><span class="check">✓</span> Edit commodity prices</div>
+    <div class="feature-item"><span class="check">✓</span> Column visibility management</div>
+  </div>
+
+  <div class="feature-card">
+    <div class="feature-title">🏗️ Technical Features</div>
+    <div class="feature-item"><span class="check">✓</span> Next.js 16 App Router + React 19</div>
+    <div class="feature-item"><span class="check">✓</span> TypeScript strict mode</div>
+    <div class="feature-item"><span class="check">✓</span> Turso libSQL edge database</div>
+    <div class="feature-item"><span class="check">✓</span> Auto-deploy via GitHub → Vercel</div>
+    <div class="feature-item"><span class="check">✓</span> Responsive mobile design</div>
+    <div class="feature-item"><span class="check">✓</span> Dark/light theme</div>
+    <div class="feature-item"><span class="check">✓</span> Cross-device settings sync</div>
+  </div>
+
+</div>
+
+</body>
+</html>

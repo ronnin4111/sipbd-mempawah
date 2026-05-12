@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SIPBD - Alur Pengguna</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: #F8FAFC;
+    padding: 48px 60px;
+    width: 1400px;
+  }
+
+  .title { text-align: center; margin-bottom: 8px; }
+  .title h1 { font-size: 26px; font-weight: 800; color: #0F172A; letter-spacing: -0.5px; }
+  .title .subtitle { font-size: 13px; color: #64748B; margin-top: 4px; }
+
+  .badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 20px; margin-bottom: 16px; }
+  .badge-blue { background: #EFF6FF; color: #2563EB; }
+  .badge-green { background: #ECFDF5; color: #059669; }
+  .badge-amber { background: #FFFBEB; color: #D97706; }
+
+  /* Two column layout */
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+    margin-top: 28px;
+  }
+
+  .col {
+    background: white;
+    border-radius: 16px;
+    border: 1px solid #E2E8F0;
+    overflow: hidden;
+  }
+
+  .col-header {
+    padding: 18px 24px;
+    border-bottom: 1px solid #E2E8F0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .col-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+  }
+
+  .col-title { font-size: 16px; font-weight: 700; color: #0F172A; }
+  .col-desc { font-size: 11px; color: #94A3B8; }
+
+  .col-body { padding: 24px; }
+
+  /* Flow steps */
+  .step {
+    display: flex;
+    gap: 14px;
+    margin-bottom: 4px;
+    position: relative;
+  }
+
+  .step-line {
+    width: 32px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .step-dot {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: white;
+    z-index: 1;
+    flex-shrink: 0;
+  }
+
+  .step-connector {
+    width: 2px;
+    flex: 1;
+    min-height: 20px;
+  }
+
+  .step-content {
+    flex: 1;
+    padding-bottom: 16px;
+  }
+
+  .step-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #0F172A;
+    margin-bottom: 2px;
+  }
+
+  .step-desc {
+    font-size: 11px;
+    color: #64748B;
+    line-height: 1.6;
+  }
+
+  .step-detail {
+    margin-top: 6px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .step-chip {
+    font-size: 9px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 6px;
+  }
+
+  /* Blue theme (public) */
+  .blue .col-icon { background: #EFF6FF; }
+  .blue .col-header { background: linear-gradient(135deg, #EFF6FF, #F8FAFC); }
+  .blue .step-dot { background: #3B82F6; }
+  .blue .step-connector { background: #BFDBFE; }
+  .blue .step-chip { background: #EFF6FF; color: #2563EB; }
+
+  /* Green theme (admin) */
+  .green .col-icon { background: #ECFDF5; }
+  .green .col-header { background: linear-gradient(135deg, #ECFDF5, #F8FAFC); }
+  .green .step-dot { background: #10B981; }
+  .green .step-connector { background: #A7F3D0; }
+  .green .step-chip { background: #ECFDF5; color: #059669; }
+
+  /* Decision diamond */
+  .decision {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 0;
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1.5px dashed;
+  }
+  .decision .q { font-size: 11px; font-weight: 600; }
+  .decision .opts { display: flex; gap: 8px; margin-left: auto; }
+  .decision .opt {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+
+  .blue .decision { border-color: #93C5FD; background: #F0F7FF; }
+  .blue .decision .q { color: #1D4ED8; }
+  .blue .decision .opt { background: #3B82F6; color: white; }
+
+  .green .decision { border-color: #6EE7B7; background: #F0FDF4; }
+  .green .decision .q { color: #047857; }
+  .green .decision .opt { background: #10B981; color: white; }
+</style>
+</head>
+<body>
+
+<div class="title">
+  <span class="badge badge-blue">USER JOURNEY</span>
+  <h1>SIPBD V1 — Alur Pengguna Publik & Admin</h1>
+  <div class="subtitle">Dua peran utama: Pengguna Publik (view-only) dan Admin (full CRUD + fitur khusus)</div>
+</div>
+
+<div class="two-col">
+
+  <!-- Public User Journey -->
+  <div class="col blue">
+    <div class="col-header">
+      <div class="col-icon">👤</div>
+      <div>
+        <div class="col-title">Pengguna Publik</div>
+        <div class="col-desc">View-only access · Tidak perlu login</div>
+      </div>
+    </div>
+    <div class="col-body">
+
+      <div class="step">
+        <div class="step-line">
+          <div class="step-dot">1</div>
+          <div class="step-connector"></div>
+        </div>
+        <div class="step-content">
+          <div class="step-title">Buka Aplikasi SIPBD</div>
+          <div class="step-desc">Mengakses website SIPBD via browser. Langsung melihat halaman Ringkasan Produksi (dashboard default)</div>
+          <div class="step-detail">
+            <span class="step-chip">Auto-load Dashboard</span>
+            <span class="step-chip">Hero Banner + Stats</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-line">
+          <div class="step-dot">2</div>
+          <div class="step-connector"></div>
+        </div>
+        <div class="step-content">
+          <div class="step-title">Atur Filter Data</div>
+          <div class="step-desc">Memilih tahun, kecamatan, desa, jenis ikan, wadah, atau jenis usaha. Filter berlaku di seluruh halaman</div>
+          <div class="step-detail">
+            <span class="step-chip">7 Dimensi Filter</span>
+            <span class="step-chip">Multi-Select</span>
+            <span class="step-chip">Reset Filter</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-line">
+          <div class="step-dot">3</div>
+          <div class="step-connector"></div>
+        </div>
+        <div class="step-content">
+          <div class="step-title">Jelajahi Dashboard</div>
+          <div class="step-desc">Melihat 4 kartu statistik (Pembesaran, Pembenihan, Nilai Produksi, RTP) dan 3 chart interaktif</div>
+          <div class="step-detail">
+            <span class="step-chip">Trend Chart</span>
+            <span class="step-chip">Produksi Chart</span>
+            <span class="step-chip">Kecamatan Chart</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-line">
+          <div class="step-dot">4</div>
+          <div class="step-connector"></div>
+        </div>
+        <div class="step-content">
+          <div class="step-title">Lihat Data Pembudidaya</div>
+          <div class="step-desc">Tabel data lengkap dengan pagination, sorting, dan filter. Bisa toggle visibilitas kolom</div>
+          <div class="step-detail">
+            <span class="step-chip">Paginated Table</span>
+            <span class="step-chip">Column Visibility</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-line">
+          <div class="step-dot">5</div>
+          <div class="step-connector"></div>
+        </div>
+        <div class="step-content">
+          <div class="step-title">Eksplorasi Peta Lokasi</div>
+          <div class="step-desc">Peta interaktif dengan 4 layer (Street, Satellite, Hybrid, Terrain). Klik marker untuk detail + navigasi Google</div>
+          <div class="step-detail">
+            <span class="step-chip">4 Tile Layers</span>
+            <span class="step-chip">GeoJSON Boundaries</span>
+            <span class="step-chip">Google Nav</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-line">
+          <div class="step-dot">6</div>
+          <div class="step-connector"></div>
+        </div>
+        <div class="step-content">
+          <div class="step-title">Analisis Tren & Laporan</div>
+          <div class="step-desc">4 tabel analisis: Tren 5 Tahun, Target vs Realisasi, Produksi per Kecamatan, Produksi per Jenis Ikan</div>
+          <div class="step-detail">
+            <span class="step-chip">Trend 5-Year</span>
+            <span class="step-chip">Target vs Real</span>
+            <span class="step-chip">PDF Export</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-line">
+          <div class="step-dot">7</div>
+          <div class="step-connector"></div>
+        </div>
+        <div class="step-content">
+          <div class="step-title">Cek Harga Komoditas</div>
+          <div class="step-desc">Melihat matriks harga ikan per jenis dan wadah budidaya (view-only untuk pengguna publik)</div>
+          <div class="step-detail">
+            <span class="step-chip">9 Jenis Ikan</span>
+            <span class="step-chip">11 Wadah</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-line">
+          <div class="step-dot">8</div>
+        </div>
+        <div class="step-content">
+          <div class="step-title">Export Laporan</div>
+          <div class="step-desc">Mengunduh laporan dalam format PDF (ringkasan, kecamatan, target) dari halaman Tren & Laporan</div>
+          <div class="step-detail">
+            <span class="step-chip">Client PDF</span>
+            <span class="step-chip">Server PDF</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Admin User Journey -->
+  <div class="col green">
+    <div class="col-header">
+      <div class="col-icon">🛡️</div>
+      <div>
+        <div class="col-title">Admin (Pengelola)</div>
+        <div class="col-desc">Full CRUD · Import/Export · Disagregasi · Harga</div>
+      </div>
+    </div>
+    <div class="col-body">
+
+      <div class="step">
+        <div class="step-line">
+          <div class="step-dot">1</div>
+          <div class="step-connector"></div>
+        </div>
+        <div class="step-content">
+          <div class="step-title">Login Admin</div>
+          <div class="step-desc">Klik "Login Admin" di sidebar, masukkan password (diskan2026). Status admin aktif ditampilkan di sidebar</div>
+          <div class="step-detail">
+            <span class="step-chip">Password Gate</span>
+            <span class="step-chip">Session Browser</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-line">
+          <div class="step-dot">2</div>
+          <div class="step-connector"></div>
+        </div>
+        <div class="step-content">
+          <div class="step-title">Kelola Data Pembudidaya (CRUD)</div>
+          <div class="step-desc">Tambah record baru, edit inline, hapus record. Tombol kunci admin muncul di tabel data</div>
+          <div class="step-detail">
+            <span class="step-chip">Create</span>
+            <span class="step-chip">Update</span>
+            <span class="step-chip">Delete</span>
+            <span class="step-chip">Batch Delete</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-line">
+          <div class="step-dot">3</div>
+          <div class="step-connector"></div>
+        </div>
+        <div class="step-content">
+          <div class="step-title">Import Data Excel</div>
+          <div class="step-desc">Upload file Excel .xlsx, preview data + validasi, lalu import ke database. Mode replace atau merge</div>
+          <div class="step-detail">
+            <span class="step-chip">File Upload</span>
+            <span class="step-chip">Preview & Validasi</span>
+            <span class="step-chip">Replace/Merge</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-line">
+          <div class="step-dot">4</div>
+          <div class="step-connector"></div>
+        </div>
+        <div class="step-content">
+          <div class="step-title">Export Data Excel (6 Sheet)</div>
+          <div class="step-desc">Mengunduh workbook Excel lengkap: Data Pembudidaya, Produksi/Kecamatan, Target, Tren, RTP, Harga</div>
+          <div class="step-detail">
+            <span class="step-chip">6-Sheet Workbook</span>
+            <span class="step-chip">Filtered Export</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-line">
+          <div class="step-dot">5</div>
+          <div class="step-connector"></div>
+        </div>
+        <div class="step-content">
+          <div class="step-title">Disagregasi Data Agregat</div>
+          <div class="step-desc">Wizard 3 langkah: pilih data agregat, preview distribusi proporsional ke pembudidaya, simpan ke database</div>
+          <div class="step-detail">
+            <span class="step-chip">Step 1: Pilih Data</span>
+            <span class="step-chip">Step 2: Preview</span>
+            <span class="step-chip">Step 3: Simpan</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-line">
+          <div class="step-dot">6</div>
+          <div class="step-connector"></div>
+        </div>
+        <div class="step-content">
+          <div class="step-title">Kelola Harga Komoditas</div>
+          <div class="step-desc">Edit matriks harga ikan (Pembesaran Rp/Kg dan Pembenihan Rp/Ekor). Import harga dari Excel</div>
+          <div class="step-detail">
+            <span class="step-chip">Inline Edit</span>
+            <span class="step-chip">Batch Update</span>
+            <span class="step-chip">Excel Import</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-line">
+          <div class="step-dot">7</div>
+          <div class="step-connector"></div>
+        </div>
+        <div class="step-content">
+          <div class="step-title">Atur Visibilitas Kolom</div>
+          <div class="step-desc">Toggle kolom tabel yang ditampilkan. Pengaturan tersimpan di database (sync antar perangkat)</div>
+          <div class="step-detail">
+            <span class="step-chip">Column Toggle</span>
+            <span class="step-chip">DB Sync</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-line">
+          <div class="step-dot">8</div>
+        </div>
+        <div class="step-content">
+          <div class="step-title">Logout Admin</div>
+          <div class="step-desc">Klik tombol Logout di sidebar. Kembali ke mode pengguna publik. Akses fitur khusus ditutup</div>
+          <div class="step-detail">
+            <span class="step-chip">Clear Session</span>
+            <span class="step-chip">Revoke Access</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SIPBD - Alur Data</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: #F8FAFC;
+    padding: 48px 60px;
+    width: 1600px;
+  }
+
+  .title { text-align: center; margin-bottom: 8px; }
+  .title h1 { font-size: 26px; font-weight: 800; color: #0F172A; letter-spacing: -0.5px; }
+  .title .subtitle { font-size: 13px; color: #64748B; margin-top: 4px; }
+  .badge { display: inline-block; background: #F5F3FF; color: #7C3AED; font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 20px; margin-bottom: 16px; }
+
+  /* 3-column layout for data flows */
+  .flow-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 24px;
+    margin-top: 28px;
+  }
+
+  .flow-card {
+    background: white;
+    border-radius: 16px;
+    border: 1px solid #E2E8F0;
+    overflow: hidden;
+  }
+
+  .flow-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid #E2E8F0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .flow-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+  }
+
+  .flow-title { font-size: 14px; font-weight: 700; color: #0F172A; }
+  .flow-subtitle { font-size: 10px; color: #94A3B8; }
+
+  .flow-body { padding: 20px; }
+
+  /* Pipeline steps */
+  .pipe-step {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+    margin-bottom: 4px;
+  }
+
+  .pipe-marker {
+    width: 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .pipe-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 6px;
+  }
+
+  .pipe-line {
+    width: 2px;
+    flex: 1;
+    min-height: 12px;
+  }
+
+  .pipe-box {
+    flex: 1;
+    padding: 10px 14px;
+    border-radius: 10px;
+    border: 1.5px solid;
+    margin-bottom: 4px;
+  }
+
+  .pipe-box-title {
+    font-size: 11px;
+    font-weight: 700;
+    margin-bottom: 2px;
+  }
+
+  .pipe-box-desc {
+    font-size: 10px;
+    line-height: 1.5;
+  }
+
+  .pipe-box-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    margin-top: 4px;
+  }
+
+  .pipe-tag {
+    font-size: 8px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 4px;
+  }
+
+  /* Arrow between steps */
+  .pipe-arrow {
+    text-align: center;
+    font-size: 14px;
+    color: #CBD5E1;
+    padding: 2px 0;
+  }
+
+  /* Purple theme - Import */
+  .import .flow-icon { background: #F5F3FF; }
+  .import .flow-header { background: linear-gradient(135deg, #F5F3FF, #FAFAFE); }
+  .import .pipe-dot { background: #8B5CF6; }
+  .import .pipe-line { background: #DDD6FE; }
+  .import .pipe-box { border-color: #DDD6FE; background: #FAF5FF; }
+  .import .pipe-box-title { color: #6D28D9; }
+  .import .pipe-box-desc { color: #6B7280; }
+  .import .pipe-tag { background: #EDE9FE; color: #7C3AED; }
+
+  /* Cyan theme - Stats */
+  .stats .flow-icon { background: #ECFEFF; }
+  .stats .flow-header { background: linear-gradient(135deg, #ECFEFF, #F8FAFC); }
+  .stats .pipe-dot { background: #06B6D4; }
+  .stats .pipe-line { background: #A5F3FC; }
+  .stats .pipe-box { border-color: #A5F3FC; background: #F0FDFA; }
+  .stats .pipe-box-title { color: #0E7490; }
+  .stats .pipe-box-desc { color: #6B7280; }
+  .stats .pipe-tag { background: #CFFAFE; color: #0891B2; }
+
+  /* Amber theme - Export */
+  .export .flow-icon { background: #FFFBEB; }
+  .export .flow-header { background: linear-gradient(135deg, #FFFBEB, #FEFCE8); }
+  .export .pipe-dot { background: #F59E0B; }
+  .export .pipe-line { background: #FDE68A; }
+  .export .pipe-box { border-color: #FDE68A; background: #FFFBEB; }
+  .export .pipe-box-title { color: #B45309; }
+  .export .pipe-box-desc { color: #6B7280; }
+  .export .pipe-tag { background: #FEF3C7; color: #D97706; }
+
+  /* Disaggregation sub-flow */
+  .sub-flow {
+    margin-top: 24px;
+    background: white;
+    border-radius: 16px;
+    border: 1px solid #E2E8F0;
+    overflow: hidden;
+  }
+
+  .sub-flow-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid #E2E8F0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: linear-gradient(135deg, #ECFDF5, #F8FAFC);
+  }
+
+  .sub-flow-body {
+    padding: 20px;
+    display: flex;
+    gap: 16px;
+  }
+
+  .wizard-step {
+    flex: 1;
+    padding: 16px;
+    border-radius: 12px;
+    border: 1.5px solid #A7F3D0;
+    background: #F0FDF4;
+    position: relative;
+  }
+
+  .wizard-step-num {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #10B981;
+    color: white;
+    font-size: 11px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 8px;
+  }
+
+  .wizard-step-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: #065F46;
+    margin-bottom: 4px;
+  }
+
+  .wizard-step-desc {
+    font-size: 10px;
+    color: #6B7280;
+    line-height: 1.5;
+  }
+
+  .wizard-arrow {
+    display: flex;
+    align-items: center;
+    font-size: 18px;
+    color: #A7F3D0;
+    flex-shrink: 0;
+  }
+
+  /* Data model mini diagram */
+  .data-model {
+    margin-top: 24px;
+    background: white;
+    border-radius: 16px;
+    border: 1px solid #E2E8F0;
+    overflow: hidden;
+  }
+
+  .data-model-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid #E2E8F0;
+    background: linear-gradient(135deg, #EFF6FF, #F8FAFC);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .data-model-body {
+    padding: 24px;
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .db-table {
+    border: 1.5px solid #BFDBFE;
+    border-radius: 12px;
+    overflow: hidden;
+    min-width: 200px;
+    background: white;
+  }
+
+  .db-table-header {
+    padding: 10px 14px;
+    background: #3B82F6;
+    color: white;
+    font-size: 12px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .db-table-body {
+    padding: 8px 14px;
+    font-size: 10px;
+    color: #374151;
+    line-height: 1.8;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .db-field-pk { color: #2563EB; font-weight: 600; }
+  .db-field-fk { color: #D97706; font-weight: 600; }
+  .db-field { color: #6B7280; }
+  .db-type { color: #9CA3AF; font-size: 9px; }
+
+  .db-relation {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: #94A3B8;
+    font-weight: 600;
+  }
+</style>
+</head>
+<body>
+
+<div class="title">
+  <span class="badge">DATA FLOW</span>
+  <h1>SIPBD V1 — Alur Data & Pemrosesan</h1>
+  <div class="subtitle">Import Pipeline · Stats Aggregation Engine · Export Pipeline · Disagregasi Wizard · Data Model</div>
+</div>
+
+<div class="flow-grid">
+
+  <!-- Import Pipeline -->
+  <div class="flow-card import">
+    <div class="flow-header">
+      <div class="flow-icon">📥</div>
+      <div>
+        <div class="flow-title">Import Pipeline</div>
+        <div class="flow-subtitle">Excel → Preview → Database</div>
+      </div>
+    </div>
+    <div class="flow-body">
+
+      <div class="pipe-step">
+        <div class="pipe-marker"><div class="pipe-dot"></div><div class="pipe-line"></div></div>
+        <div class="pipe-box">
+          <div class="pipe-box-title">1. Upload File Excel</div>
+          <div class="pipe-box-desc">Admin upload file .xlsx melalui dialog import. File dikirim via FormData ke server</div>
+          <div class="pipe-box-tags"><span class="pipe-tag">FormData</span><span class="pipe-tag">.xlsx</span></div>
+        </div>
+      </div>
+
+      <div class="pipe-step">
+        <div class="pipe-marker"><div class="pipe-dot"></div><div class="pipe-line"></div></div>
+        <div class="pipe-box">
+          <div class="pipe-box-title">2. Server-Side Parsing</div>
+          <div class="pipe-box-desc">XLSX library parse file di server. Normalisasi container type alias, fix KUSUKA 16-digit precision</div>
+          <div class="pipe-box-tags"><span class="pipe-tag">SheetJS</span><span class="pipe-tag">Normalization</span></div>
+        </div>
+      </div>
+
+      <div class="pipe-step">
+        <div class="pipe-marker"><div class="pipe-dot"></div><div class="pipe-line"></div></div>
+        <div class="pipe-box">
+          <div class="pipe-box-title">3. Preview & Validasi</div>
+          <div class="pipe-box-desc">Data dipreview di tabel. Validasi field wajib, auto-fill kecamatan/desa, cek duplikat farmerId</div>
+          <div class="pipe-box-tags"><span class="pipe-tag">Preview</span><span class="pipe-tag">Validation</span></div>
+        </div>
+      </div>
+
+      <div class="pipe-step">
+        <div class="pipe-marker"><div class="pipe-dot"></div><div class="pipe-line"></div></div>
+        <div class="pipe-box">
+          <div class="pipe-box-title">4. Pilih Mode Import</div>
+          <div class="pipe-box-desc">Replace (hapus semua lalu insert) atau Merge (upsert berdasarkan farmerId + year + fishType)</div>
+          <div class="pipe-box-tags"><span class="pipe-tag">Replace</span><span class="pipe-tag">Merge</span></div>
+        </div>
+      </div>
+
+      <div class="pipe-step">
+        <div class="pipe-marker"><div class="pipe-dot"></div></div>
+        <div class="pipe-box">
+          <div class="pipe-box-title">5. Batch Insert ke DB</div>
+          <div class="pipe-box-desc">Prisma createMany batch insert. Auto-generate farmerId (djb2 hash). Cache di-invalidate</div>
+          <div class="pipe-box-tags"><span class="pipe-tag">Prisma</span><span class="pipe-tag">Batch</span><span class="pipe-tag">Cache Invalidate</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Stats Aggregation -->
+  <div class="flow-card stats">
+    <div class="flow-header">
+      <div class="flow-icon">🧮</div>
+      <div>
+        <div class="flow-title">Stats Aggregation Engine</div>
+        <div class="flow-subtitle">Database → 20+ Agregasi → Frontend</div>
+      </div>
+    </div>
+    <div class="flow-body">
+
+      <div class="pipe-step">
+        <div class="pipe-marker"><div class="pipe-dot"></div><div class="pipe-line"></div></div>
+        <div class="pipe-box">
+          <div class="pipe-box-title">1. Filter Parameters</div>
+          <div class="pipe-box-desc">7 dimensi filter (years[], kecamatan[], desa[], fishType[], containerType[], businessType[], search)</div>
+          <div class="pipe-box-tags"><span class="pipe-tag">Query Params</span><span class="pipe-tag">Multi-Filter</span></div>
+        </div>
+      </div>
+
+      <div class="pipe-step">
+        <div class="pipe-marker"><div class="pipe-dot"></div><div class="pipe-line"></div></div>
+        <div class="pipe-box">
+          <div class="pipe-box-title">2. Prisma Aggregation</div>
+          <div class="pipe-box-desc">groupBy queries: produksi per fishType, per kecamatan, per tahun, per container. Cross-tab queries</div>
+          <div class="pipe-box-tags"><span class="pipe-tag">groupBy</span><span class="pipe-tag">sum</span><span class="pipe-tag">count</span></div>
+        </div>
+      </div>
+
+      <div class="pipe-step">
+        <div class="pipe-marker"><div class="pipe-dot"></div><div class="pipe-line"></div></div>
+        <div class="pipe-box">
+          <div class="pipe-box-title">3. Compute Derived Stats</div>
+          <div class="pipe-box-desc">Trend 5 tahun (% change), target vs realisasi, unique farmers/groups, KUSUKA counts, price calculations</div>
+          <div class="pipe-box-tags"><span class="pipe-tag">Trend %</span><span class="pipe-tag">Cross-Tab</span><span class="pipe-tag">Dedup</span></div>
+        </div>
+      </div>
+
+      <div class="pipe-step">
+        <div class="pipe-marker"><div class="pipe-dot"></div><div class="pipe-line"></div></div>
+        <div class="pipe-box">
+          <div class="pipe-box-title">4. Cache & Deliver</div>
+          <div class="pipe-box-desc">React Query cache (auto-refetch on filter change). Single /stats endpoint serves all views</div>
+          <div class="pipe-box-tags"><span class="pipe-tag">React Query</span><span class="pipe-tag">Auto-Refresh</span></div>
+        </div>
+      </div>
+
+      <div class="pipe-step">
+        <div class="pipe-marker"><div class="pipe-dot"></div></div>
+        <div class="pipe-box">
+          <div class="pipe-box-title">5. Frontend Rendering</div>
+          <div class="pipe-box-desc">Charts (Recharts), Tables (TanStack), Cards, Map markers. Semua terupdate real-time saat filter berubah</div>
+          <div class="pipe-box-tags"><span class="pipe-tag">Recharts</span><span class="pipe-tag">TanStack</span><span class="pipe-tag">Leaflet</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Export Pipeline -->
+  <div class="flow-card export">
+    <div class="flow-header">
+      <div class="flow-icon">📤</div>
+      <div>
+        <div class="flow-title">Export Pipeline</div>
+        <div class="flow-subtitle">Database → Excel/PDF → Download</div>
+      </div>
+    </div>
+    <div class="flow-body">
+
+      <div class="pipe-step">
+        <div class="pipe-marker"><div class="pipe-dot"></div><div class="pipe-line"></div></div>
+        <div class="pipe-box">
+          <div class="pipe-box-title">1. Export Excel (6 Sheet)</div>
+          <div class="pipe-box-desc">Server-side: Data Pembudidaya, Produksi/Kecamatan, Target/Realisasi, Tren 5 Tahun, RTP, Harga Komoditas</div>
+          <div class="pipe-box-tags"><span class="pipe-tag">xlsx</span><span class="pipe-tag">6 Sheets</span><span class="pipe-tag">Password Required</span></div>
+        </div>
+      </div>
+
+      <div class="pipe-step">
+        <div class="pipe-marker"><div class="pipe-dot"></div><div class="pipe-line"></div></div>
+        <div class="pipe-box">
+          <div class="pipe-box-title">2. Export PDF Client-Side</div>
+          <div class="pipe-box-desc">Pilih section (Dashboard, Kecamatan, Jenis Ikan, Target). Charts → html2canvas → PNG. Tables → jsPDF autoTable</div>
+          <div class="pipe-box-tags"><span class="pipe-tag">html2canvas</span><span class="pipe-tag">jsPDF</span><span class="pipe-tag">autoTable</span></div>
+        </div>
+      </div>
+
+      <div class="pipe-step">
+        <div class="pipe-marker"><div class="pipe-dot"></div><div class="pipe-line"></div></div>
+        <div class="pipe-box">
+          <div class="pipe-box-title">3. Export PDF Server-Side</div>
+          <div class="pipe-box-desc">GET /export-pdf: Iktisar ringkasan, Tabel Kecamatan (split Pembesaran/Pembenihan), Target vs Realisasi</div>
+          <div class="pipe-box-tags"><span class="pipe-tag">Server PDF</span><span class="pipe-tag">autoTable</span></div>
+        </div>
+      </div>
+
+      <div class="pipe-step">
+        <div class="pipe-marker"><div class="pipe-dot"></div><div class="pipe-line"></div></div>
+        <div class="pipe-box">
+          <div class="pipe-box-title">4. Filter-Aware Export</div>
+          <div class="pipe-box-desc">Semua export mengikuti filter aktif (tahun, kecamatan, dll). Hanya data terfilter yang di-export</div>
+          <div class="pipe-box-tags"><span class="pipe-tag">Filter Params</span><span class="pipe-tag">Scoped Data</span></div>
+        </div>
+      </div>
+
+      <div class="pipe-step">
+        <div class="pipe-marker"><div class="pipe-dot"></div></div>
+        <div class="pipe-box">
+          <div class="pipe-box-title">5. Download File</div>
+          <div class="pipe-box-desc">File dikirim sebagai attachment (.xlsx atau .pdf). Auto-naming dengan timestamp dan parameter filter</div>
+          <div class="pipe-box-tags"><span class="pipe-tag">Attachment</span><span class="pipe-tag">Auto-Name</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<!-- Disaggregation Wizard -->
+<div class="sub-flow">
+  <div class="sub-flow-header">
+    <div class="flow-icon" style="background:#ECFDF5">🔀</div>
+    <div>
+      <div class="flow-title">Disagregasi Data Agregat (Admin Only)</div>
+      <div class="flow-subtitle">Pecah data agregat menjadi record individual per pembudidaya</div>
+    </div>
+  </div>
+  <div class="sub-flow-body">
+    <div class="wizard-step">
+      <div class="wizard-step-num">1</div>
+      <div class="wizard-step-title">Pilih Data Agregat</div>
+      <div class="wizard-step-desc">Pilih tahun, triwulan, kecamatan, jenis ikan, wadah, jenis usaha. Sistem mencari data agregat (totalQty) yang belum di-disagregasi</div>
+    </div>
+    <div class="wizard-arrow">→</div>
+    <div class="wizard-step">
+      <div class="wizard-step-num">2</div>
+      <div class="wizard-step-title">Preview Distribusi</div>
+      <div class="wizard-step-desc">Sistem menghitung distribusi proporsional berdasarkan RTP per kelompok pembudidaya. Tabel preview menunjukkan alokasi per individu</div>
+    </div>
+    <div class="wizard-arrow">→</div>
+    <div class="wizard-step">
+      <div class="wizard-step-num">3</div>
+      <div class="wizard-step-title">Simpan ke Database</div>
+      <div class="wizard-step-desc">Buat DisaggregationBatch + individual FishFarm records. Data agregat ditandai sudah diproses. Cache di-invalidate</div>
+    </div>
+  </div>
+</div>
+
+<!-- Data Model -->
+<div class="data-model">
+  <div class="data-model-header">
+    <div style="font-size:18px">🗄️</div>
+    <div>
+      <div style="font-size:14px;font-weight:700;color:#0F172A">Database Schema — Prisma ORM</div>
+      <div style="font-size:10px;color:#94A3B8">SQLite (dev) · Turso libSQL (prod) · 4 Tables</div>
+    </div>
+  </div>
+  <div class="data-model-body">
+
+    <div class="db-table">
+      <div class="db-table-header">🐟 FishFarm</div>
+      <div class="db-table-body">
+        <div><span class="db-field-pk">id</span> <span class="db-type">String @id</span></div>
+        <div><span class="db-field-fk">farmerId</span> <span class="db-type">String</span></div>
+        <div><span class="db-field">year</span> <span class="db-type">Int</span></div>
+        <div><span class="db-field">triwulan</span> <span class="db-type">String</span></div>
+        <div><span class="db-field">kecamatan</span> <span class="db-type">String</span></div>
+        <div><span class="db-field">desa</span> <span class="db-type">String</span></div>
+        <div><span class="db-field">fishType</span> <span class="db-type">String</span></div>
+        <div><span class="db-field">containerType</span> <span class="db-type">String</span></div>
+        <div><span class="db-field">businessType</span> <span class="db-type">String</span></div>
+        <div><span class="db-field">farmerName</span> <span class="db-type">String</span></div>
+        <div><span class="db-field">groupName</span> <span class="db-type">String</span></div>
+        <div><span class="db-field">productionQty</span> <span class="db-type">Float</span></div>
+        <div><span class="db-field">rtpCount</span> <span class="db-type">Int</span></div>
+        <div><span class="db-field">farmerCount</span> <span class="db-type">Int</span></div>
+        <div><span class="db-field">groupCount</span> <span class="db-type">Int</span></div>
+        <div><span class="db-field">targetQty</span> <span class="db-type">Float</span></div>
+        <div><span class="db-field">productionValue</span> <span class="db-type">Float</span></div>
+        <div><span class="db-field">latitude/longitude</span> <span class="db-type">Float?</span></div>
+        <div><span class="db-field">kusuka</span> <span class="db-type">String?</span></div>
+        <div><span class="db-field">cpib/cbib</span> <span class="db-type">Boolean</span></div>
+        <div><span class="db-field-fk">disaggregationId</span> <span class="db-type">String?</span></div>
+      </div>
+    </div>
+
+    <div class="db-relation">1:N ←</div>
+
+    <div class="db-table">
+      <div class="db-table-header">📦 DisaggregationBatch</div>
+      <div class="db-table-body">
+        <div><span class="db-field-pk">id</span> <span class="db-type">String @id</span></div>
+        <div><span class="db-field">year</span> <span class="db-type">Int</span></div>
+        <div><span class="db-field">triwulan</span> <span class="db-type">String</span></div>
+        <div><span class="db-field">kecamatan</span> <span class="db-type">String</span></div>
+        <div><span class="db-field">fishType</span> <span class="db-type">String</span></div>
+        <div><span class="db-field">containerType</span> <span class="db-type">String</span></div>
+        <div><span class="db-field">businessType</span> <span class="db-type">String</span></div>
+        <div><span class="db-field">totalQty</span> <span class="db-type">Float</span></div>
+        <div><span class="db-field">notes</span> <span class="db-type">String?</span></div>
+        <div><span class="db-field">fishFarms[]</span> <span class="db-type">FishFarm[]</span></div>
+      </div>
+    </div>
+
+    <div class="db-table">
+      <div class="db-table-header">💰 CommodityPrice</div>
+      <div class="db-table-body">
+        <div><span class="db-field-pk">id</span> <span class="db-type">String @id</span></div>
+        <div><span class="db-field">fishType</span> <span class="db-type">String</span></div>
+        <div><span class="db-field">containerType</span> <span class="db-type">String</span></div>
+        <div><span class="db-field">price</span> <span class="db-type">Float</span></div>
+        <div style="margin-top:4px;font-style:italic;color:#9CA3AF">@@unique(fishType, containerType)</div>
+      </div>
+    </div>
+
+    <div class="db-table">
+      <div class="db-table-header">⚙️ AppSetting</div>
+      <div class="db-table-body">
+        <div><span class="db-field-pk">key</span> <span class="db-type">String @id</span></div>
+        <div><span class="db-field">value</span> <span class="db-type">String</span></div>
+        <div><span class="db-field">updatedAt</span> <span class="db-type">DateTime</span></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</body>
+</html>
