@@ -57,11 +57,11 @@ export async function GET(request: NextRequest) {
     const records = await db.fishFarm.findMany({ where });
 
     // === Group Summary ===
-    // Aggregate by group name + kecamatan + desa
+    // Aggregate by group name + kecamatan (NOT desa — desa is farmer's address)
     interface GroupInfo {
       name: string;
       kecamatan: string;
-      desa: string;
+      desaList: Set<string>;
       businessTypes: Set<string>;
       fishTypes: Set<string>;
       containerTypes: Set<string>;
@@ -79,13 +79,14 @@ export async function GET(request: NextRequest) {
     records.forEach(r => {
       if (!r.groupName || !r.groupName.trim()) return;
       const normalizedName = r.groupName.trim();
-      const key = `${normalizedName.toLowerCase()}|${r.kecamatan}|${r.desa}`;
+      // Group by name + kecamatan — desa is farmer's address, not group's
+      const key = `${normalizedName.toLowerCase()}|${r.kecamatan}`;
 
       if (!groupMap.has(key)) {
         groupMap.set(key, {
           name: normalizedName,
           kecamatan: r.kecamatan,
-          desa: r.desa,
+          desaList: new Set(),
           businessTypes: new Set(),
           fishTypes: new Set(),
           containerTypes: new Set(),
@@ -100,6 +101,7 @@ export async function GET(request: NextRequest) {
       }
 
       const group = groupMap.get(key)!;
+      group.desaList.add(r.desa);
       group.businessTypes.add(r.businessType);
       group.fishTypes.add(r.fishType);
       group.containerTypes.add(r.containerType);
@@ -121,7 +123,7 @@ export async function GET(request: NextRequest) {
 
     for (const r of sortedDesc) {
       if (!r.groupName || !r.groupName.trim()) continue;
-      const key = `${r.groupName.trim().toLowerCase()}|${r.kecamatan}|${r.desa}`;
+      const key = `${r.groupName.trim().toLowerCase()}|${r.kecamatan}`;
       if (!farmerLatestByGroup.has(key)) {
         farmerLatestByGroup.set(key, new Map());
       }
@@ -160,7 +162,7 @@ export async function GET(request: NextRequest) {
     let groups = Array.from(groupMap.values()).map(g => ({
       name: g.name,
       kecamatan: g.kecamatan,
-      desa: g.desa,
+      desaList: Array.from(g.desaList).sort(),
       businessTypes: Array.from(g.businessTypes),
       fishTypes: Array.from(g.fishTypes),
       containerTypes: Array.from(g.containerTypes),
@@ -176,7 +178,7 @@ export async function GET(request: NextRequest) {
       groups = groups.filter(g =>
         g.name.toLowerCase().includes(q) ||
         g.kecamatan.toLowerCase().includes(q) ||
-        g.desa.toLowerCase().includes(q) ||
+        g.desaList.some(d => d.toLowerCase().includes(q)) ||
         g.fishTypes.some(f => f.toLowerCase().includes(q))
       );
     }

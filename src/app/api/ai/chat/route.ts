@@ -36,7 +36,9 @@ Aturan respons SANGAT PENTING:
 Istilah:
 - RTP=Rumah Tangga Perikanan, KUSUKA=Kartu Identitas Usaha Perikanan
 - CPIB=Cara Pembenihan Ikan Baik, CBIB=Cara Budidaya Ikan Baik
-- Kelompok=poktan/pokdakan (kelompok pembudidaya ikan), Anggota=jumlah anggota kelompok`;
+- Kelompok=poktan/pokdakan (kelompok pembudidaya ikan), Anggota=jumlah anggota kelompok
+- PENTING: "Desa" adalah alamat tempat tinggal pembudidaya, BUKAN alamat kelompok
+  Satu kelompok bisa memiliki anggota dari beberapa desa`;
 
 /**
  * Classify the user's question type to determine what data to include.
@@ -159,8 +161,11 @@ async function fetchFullDataContext(filters: {
     }
 
     // Build comprehensive group data
+    // IMPORTANT: Grouping key is groupName + kecamatan ONLY (not desa).
+    // "Desa" is the farmer's residential address, NOT the group's address.
+    // A single kelompok can have members living in multiple desa.
     const groupMap = new Map<string, {
-      name: string; kec: string; desa: string;
+      name: string; kec: string; desaList: Set<string>;
       fishTypes: Set<string>; businessTypes: Set<string>;
       memberCount: number; rtpCount: number; kusukaCount: number;
     }>();
@@ -172,14 +177,16 @@ async function fetchFullDataContext(filters: {
 
     records.forEach(r => {
       if (!r.groupName?.trim()) return;
-      const key = `${r.groupName.trim().toLowerCase()}|${r.kecamatan}|${r.desa}`;
+      // Group by name + kecamatan — desa is farmer's address, not group's
+      const key = `${r.groupName.trim().toLowerCase()}|${r.kecamatan}`;
       if (!groupMap.has(key)) {
         groupMap.set(key, {
-          name: r.groupName.trim(), kec: r.kecamatan, desa: r.desa,
+          name: r.groupName.trim(), kec: r.kecamatan, desaList: new Set(),
           fishTypes: new Set(), businessTypes: new Set(),
           memberCount: 0, rtpCount: 0, kusukaCount: 0,
         });
       }
+      groupMap.get(key)!.desaList.add(r.desa);
       groupMap.get(key)!.fishTypes.add(r.fishType);
       groupMap.get(key)!.businessTypes.add(r.businessType);
 
@@ -233,31 +240,19 @@ async function fetchFullDataContext(filters: {
         return a.name.localeCompare(b.name);
       });
 
-    // Numbered format so AI can clearly count the exact total
-    const groupLines = sortedGroups.map((g, i) =>
-      `${i + 1}. ${g.name} (${g.kec}/${g.desa}) ${g.memberCount}org [${[...g.fishTypes].join(',')}]`
-    );
+    // Numbered format — show kecamatan and all desa where members live
+    const groupLines = sortedGroups.map((g, i) => {
+      const desaStr = [...g.desaList].sort().join(', ');
+      return `${i + 1}. ${g.name} (Kec: ${g.kec}, Desa anggota: ${desaStr}) ${g.memberCount}org [${[...g.fishTypes].join(',')}]`;
+    });
 
     const totalGroups = groupMap.size;
     const totalFarmers = allFarmerLatest.size;
-
-    // Check for duplicate group names across different desa
-    const nameCounts = new Map<string, number>();
-    sortedGroups.forEach(g => {
-      const c = nameCounts.get(g.name) || 0;
-      nameCounts.set(g.name, c + 1);
-    });
-    const duplicateNames = [...nameCounts.entries()].filter(([, c]) => c > 1).map(([n]) => n);
 
     // Build kecamatan → desa mapping
     const kecDesaLines: string[] = [];
     for (const [kec, desas] of desaByKec) {
       kecDesaLines.push(`${kec}: ${[...desas].sort().join(', ')}`);
-    }
-
-    let duplicateNote = '';
-    if (duplicateNames.length > 0) {
-      duplicateNote = `\nCATATAN: Nama kelompok yang sama di desa berbeda dihitung terpisah: ${duplicateNames.join(', ')}`;
     }
 
     const dataContext = `\n=== DATA CONTEXT (WAJIB: gunakan HANYA data ini, jangan mengarang) ===
@@ -268,9 +263,9 @@ Desa per kecamatan:
 ${kecDesaLines.join('\n')}
 Jenis ikan: ${fishTypeList.join(', ')}
 Jenis usaha: ${businessTypeList.join(', ')}
-Wadah budidaya: ${containerTypeList.join(', ')}${duplicateNote}
+Wadah budidaya: ${containerTypeList.join(', ')}
 
-DAFTAR KELOMPOK LENGKAP (${totalGroups} kelompok — nomor | nama | kec/desa | anggota | ikan):
+DAFTAR KELOMPOK LENGKAP (${totalGroups} kelompok — nomor | nama | kec | desa anggota | anggota | ikan):
 ${groupLines.join('\n')}`;
 
     return { dataContext, kecamatanList: kecList, totalGroups, totalFarmers };
@@ -299,7 +294,7 @@ async function fetchTargetedResults(searchTerms: string[]): Promise<string> {
     const records = await db.fishFarm.findMany({ where });
 
     const groupMap = new Map<string, {
-      name: string; kecamatan: string; desa: string;
+      name: string; kecamatan: string; desaList: Set<string>;
       fishTypes: Set<string>; businessTypes: Set<string>;
       memberCount: number; rtpCount: number;
     }>();
@@ -308,14 +303,16 @@ async function fetchTargetedResults(searchTerms: string[]): Promise<string> {
 
     records.forEach(r => {
       if (!r.groupName?.trim()) return;
-      const key = `${r.groupName.trim().toLowerCase()}|${r.kecamatan}|${r.desa}`;
+      // Group by name + kecamatan — desa is farmer's address, not group's
+      const key = `${r.groupName.trim().toLowerCase()}|${r.kecamatan}`;
       if (!groupMap.has(key)) {
         groupMap.set(key, {
-          name: r.groupName.trim(), kecamatan: r.kecamatan, desa: r.desa,
+          name: r.groupName.trim(), kecamatan: r.kecamatan, desaList: new Set(),
           fishTypes: new Set(), businessTypes: new Set(),
           memberCount: 0, rtpCount: 0,
         });
       }
+      groupMap.get(key)!.desaList.add(r.desa);
       groupMap.get(key)!.fishTypes.add(r.fishType);
       groupMap.get(key)!.businessTypes.add(r.businessType);
 
@@ -355,7 +352,7 @@ async function fetchTargetedResults(searchTerms: string[]): Promise<string> {
         if (
           group.name.toLowerCase().includes(q) ||
           group.kecamatan.toLowerCase().includes(q) ||
-          group.desa.toLowerCase().includes(q) ||
+          [...group.desaList].some(d => d.toLowerCase().includes(q)) ||
           [...group.fishTypes].some(f => f.toLowerCase().includes(q))
         ) {
           if (matchedGroupKeys.has(key)) continue;
@@ -366,12 +363,13 @@ async function fetchTargetedResults(searchTerms: string[]): Promise<string> {
           const memberNames: string[] = [];
           if (groupFarmers) {
             for (const r of groupFarmers.values()) {
-              memberNames.push(`${r.farmerName} (${r.fishType}/${r.businessType})`);
+              memberNames.push(`${r.farmerName} (${r.fishType}/${r.businessType}, Desa: ${r.desa})`);
             }
           }
 
+          const desaStr = [...group.desaList].sort().join(', ');
           foundGroups.push(
-            `Kelompok: ${group.name} | Kec: ${group.kecamatan} | Desa: ${group.desa} | Anggota: ${group.memberCount} | RTP: ${group.rtpCount} | Ikan: ${[...group.fishTypes].join(',')} | Usaha: ${[...group.businessTypes].join(',')}\n  Daftar anggota: ${memberNames.join('; ')}`
+            `Kelompok: ${group.name} | Kec: ${group.kecamatan} | Desa anggota: ${desaStr} | Anggota: ${group.memberCount} | RTP: ${group.rtpCount} | Ikan: ${[...group.fishTypes].join(',')} | Usaha: ${[...group.businessTypes].join(',')}\n  Daftar anggota: ${memberNames.join('; ')}`
           );
         }
       }
