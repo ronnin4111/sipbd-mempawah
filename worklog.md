@@ -134,3 +134,34 @@ Stage Summary:
 - Tested on Vercel: "siapa saja anggota kelompok kawan sejati" → returns full 19-member list
 - HF API token removed from git history (push protection passed)
 - All features working on production: https://sipbd-mempawah.vercel.app/
+
+---
+Task ID: 4
+Agent: main
+Task: Switch AI from HuggingFace (credits exhausted) to Google Gemini API with z-ai fallback
+
+Work Log:
+- Diagnosed: HF Inference API credits exhausted ("Anda telah menghabiskan kredit bulanan")
+- Installed @google/generative-ai SDK (v0.24.1)
+- Created src/lib/gemini-ai.ts: Google Gemini AI client
+  - Uses GoogleGenerativeAI SDK
+  - Supports systemInstruction natively (Gemini models)
+  - Default model: gemini-2.0-flash (free tier: 15 RPM, 1500 RPD)
+  - Comprehensive error handling (401, 429, SAFETY, BAD_REQUEST)
+- Updated src/lib/ai-sdk.ts: Multi-provider with automatic fallback
+  - Primary: Google Gemini API (if GEMINI_API_KEY set) — works on Vercel
+  - Fallback: z-ai-web-dev-sdk (dynamic import) — works locally/sandbox
+- Updated /api/ai/chat/route.ts: Uses callAI() from ai-sdk.ts
+- Updated /api/ai/narrate/route.ts: Uses callAI() from ai-sdk.ts
+- Updated /api/ai/route.ts: Shows multi-provider status
+- Tested locally: AI chat works via z-ai fallback (no Gemini key needed locally)
+- Pushed to GitHub (commit 7e887ae)
+
+Stage Summary:
+- AI provider switched from HF → Google Gemini (primary) + z-ai (fallback)
+- Gemini free tier has NO monthly credit limit (only rate limits per minute/day)
+- User needs to create Gemini API key at https://aistudio.google.com/apikey
+- Set GEMINI_API_KEY environment variable on Vercel dashboard
+- Optional: GEMINI_MODEL env var (default: gemini-2.0-flash)
+- Locally: z-ai fallback works automatically (no config needed)
+- On Vercel: Gemini API key is required (z-ai not available)
