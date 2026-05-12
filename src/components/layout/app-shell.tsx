@@ -1,8 +1,15 @@
 'use client';
 
 import { useState } from 'react';
+import dynamic from 'next/dynamic';
 import { Header } from './header';
 import { Sidebar } from './sidebar';
+
+// Dynamic import AI chat widget to avoid SSR issues
+const AIChatWidget = dynamic(
+  () => import('@/components/ai/ai-chat-widget').then((m) => ({ default: m.AIChatWidget })),
+  { ssr: false }
+);
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -40,6 +47,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </footer>
+
+      {/* AI Chat Widget */}
+      <AIChatWidget />
     </div>
   );
 }

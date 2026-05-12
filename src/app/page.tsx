@@ -18,6 +18,7 @@ import { CommodityPricesTable } from '@/components/commodity-prices/commodity-pr
 import { ExternalIframe } from '@/components/external-iframe';
 import { Button } from '@/components/ui/button';
 import { Upload } from 'lucide-react';
+import { SmartNarrator } from '@/components/ai/smart-narrator';
 
 // Dynamic import PdfDashboardCharts with ssr:false to avoid recharts SSR crash on Vercel
 const PdfDashboardCharts = dynamic(
@@ -31,6 +32,7 @@ function DashboardSection() {
       <HeroBanner />
       <FilterBar />
       <DashboardCharts />
+      <SmartNarrator />
     </div>
   );
 }
