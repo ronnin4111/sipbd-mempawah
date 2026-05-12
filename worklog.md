@@ -86,3 +86,29 @@ Stage Summary:
   - Vercel cannot access it directly
   - Need either: public proxy, VPN, or different AI provider
   - Alternative: deploy on server that has access to internal network
+
+---
+Task ID: 1
+Agent: main
+Task: Switch AI from z-ai-web-dev-sdk to Hugging Face Inference API
+
+Work Log:
+- Investigated z-ai-web-dev-sdk config issue: requires .z-ai-config file that doesn't exist on Vercel
+- Created /src/lib/hf-ai.ts: Hugging Face Inference API client using @huggingface/inference SDK
+- Rewrote /src/app/api/ai/chat/route.ts: Uses HF API instead of z-ai-web-dev-sdk
+- Rewrote /src/app/api/ai/narrate/route.ts: Uses HF API instead of z-ai-web-dev-sdk
+- Updated /src/lib/ai-sdk.ts: Unified AI helper pointing to HF API
+- Fixed lint error in zai-proxy route (require import)
+- Added @huggingface/inference package dependency
+- Untracked .env from git (security measure)
+- System prompt set to Option B (flexible: prioritize fishery, can answer general)
+- Model: Qwen/Qwen2.5-7B-Instruct (free tier, auto-routed to Qwen2.5-72B-Instruct-Turbo by HF)
+- Pushed to GitHub (2 commits)
+- Tested locally: AI chat and narrate both work
+
+Stage Summary:
+- AI integration switched from z-ai-web-dev-sdk → @huggingface/inference
+- Works locally with HF_API_KEY env var
+- NEEDS: User to set HF_API_KEY environment variable on Vercel dashboard
+- Token: [REDACTED]
+- Model env var: HF_MODEL=Qwen/Qwen2.5-7B-Instruct (optional, has default)
