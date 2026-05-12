@@ -59,3 +59,30 @@ Stage Summary:
 - Data context includes group listings with member counts, farmer details, kecamatan/desa lists
 - Error messages now show the actual error detail instead of generic message
 - Pending name changes were already applied in previous sessions (confirmed)
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: Fix AI chatbot Vercel deployment error (ZAI config not found)
+
+Work Log:
+- Diagnosed: ZAI SDK reads config from .z-ai-config file which exists at /etc/.z-ai-config locally but not on Vercel
+- Created /lib/ai-sdk.ts: unified ZAI SDK initialization with dual strategy (config file → env vars → null)
+- Created /api/ai/zai-proxy/route.ts: Next.js API proxy that reads config from env vars OR /etc/.z-ai-config
+- Created mini-services/zai-proxy: Bun proxy service on port 3050 (for Caddy gateway access)
+- Updated /api/ai/chat/route.ts: dual-strategy approach
+  - Primary: ZAI SDK direct (when config available)
+  - Fallback: /api/ai/zai-proxy route (reads /etc/.z-ai-config)
+- Updated /api/ai/narrate/route.ts: null ZAI handling with 503 response
+- Tested: AI chat works locally via both SDK and proxy fallback
+
+Stage Summary:
+- AI chat works on preview panel (local dev server with /etc/.z-ai-config)
+- For Vercel deployment, user needs to set environment variables:
+  - ZAI_BASE_URL (public ZAI API URL)
+  - ZAI_API_KEY (default: Z.ai)
+  - ZAI_CHAT_ID, ZAI_USER_ID, ZAI_TOKEN
+- CRITICAL: ZAI API (172.25.136.193:8080) is on internal network only
+  - Vercel cannot access it directly
+  - Need either: public proxy, VPN, or different AI provider
+  - Alternative: deploy on server that has access to internal network
