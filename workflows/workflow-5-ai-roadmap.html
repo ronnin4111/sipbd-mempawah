@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SIPBD - AI Feature Roadmap</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: #0F172A;
+    color: #E2E8F0;
+    padding: 48px 60px;
+    width: 1500px;
+  }
+
+  .title { text-align: center; margin-bottom: 8px; }
+  .title h1 { font-size: 30px; font-weight: 800; color: #F8FAFC; letter-spacing: -0.5px; }
+  .title h1 span { background: linear-gradient(135deg, #06B6D4, #8B5CF6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .title .subtitle { font-size: 14px; color: #94A3B8; margin-top: 6px; }
+
+  .badge { display: inline-block; background: rgba(6,182,212,0.15); color: #22D3EE; font-size: 11px; font-weight: 600; padding: 4px 12px; border-radius: 20px; margin-bottom: 16px; border: 1px solid rgba(6,182,212,0.3); }
+
+  /* Priority phases */
+  .phase-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-top: 32px;
+  }
+
+  .phase-card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .phase-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+  }
+
+  .phase-header {
+    padding: 18px 24px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .phase-badge {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .phase-title { font-size: 16px; font-weight: 700; color: #F1F5F9; }
+  .phase-subtitle { font-size: 11px; color: #64748B; }
+
+  .phase-body { padding: 20px 24px; }
+
+  /* Feature items */
+  .feature {
+    display: flex;
+    gap: 14px;
+    padding: 14px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+  .feature:last-child { border-bottom: none; }
+
+  .feature-icon-box {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    flex-shrink: 0;
+  }
+
+  .feature-content { flex: 1; }
+
+  .feature-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #F1F5F9;
+    margin-bottom: 3px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .feature-skill {
+    font-size: 9px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .feature-desc {
+    font-size: 11px;
+    color: #94A3B8;
+    line-height: 1.6;
+  }
+
+  .feature-examples {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+  }
+
+  .feature-chip {
+    font-size: 9px;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.1);
+    color: #94A3B8;
+    background: rgba(255,255,255,0.03);
+  }
+
+  /* Phase colors */
+  .p1::before { background: linear-gradient(90deg, #06B6D4, #0891B2); }
+  .p1 .phase-badge { background: rgba(6,182,212,0.15); color: #22D3EE; }
+  .p1 .feature-icon-box { background: rgba(6,182,212,0.1); border: 1px solid rgba(6,182,212,0.2); }
+  .p1 .feature-skill { background: rgba(6,182,212,0.15); color: #22D3EE; }
+
+  .p2::before { background: linear-gradient(90deg, #8B5CF6, #7C3AED); }
+  .p2 .phase-badge { background: rgba(139,92,246,0.15); color: #A78BFA; }
+  .p2 .feature-icon-box { background: rgba(139,92,246,0.1); border: 1px solid rgba(139,92,246,0.2); }
+  .p2 .feature-skill { background: rgba(139,92,246,0.15); color: #A78BFA; }
+
+  .p3::before { background: linear-gradient(90deg, #F59E0B, #D97706); }
+  .p3 .phase-badge { background: rgba(245,158,11,0.15); color: #FBBF24; }
+  .p3 .feature-icon-box { background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.2); }
+  .p3 .feature-skill { background: rgba(245,158,11,0.15); color: #FBBF24; }
+
+  .p4::before { background: linear-gradient(90deg, #10B981, #059669); }
+  .p4 .phase-badge { background: rgba(16,185,129,0.15); color: #34D399; }
+  .p4 .feature-icon-box { background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.2); }
+  .p4 .feature-skill { background: rgba(16,185,129,0.15); color: #34D399; }
+
+  /* Value matrix */
+  .matrix {
+    margin-top: 32px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    overflow: hidden;
+  }
+
+  .matrix-header {
+    padding: 18px 24px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    font-size: 16px;
+    font-weight: 700;
+    color: #F1F5F9;
+  }
+
+  .matrix-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .matrix-table th {
+    text-align: left;
+    font-size: 10px;
+    font-weight: 600;
+    color: #64748B;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 10px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+
+  .matrix-table td {
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    font-size: 12px;
+    color: #CBD5E1;
+  }
+
+  .matrix-table tr:last-child td { border-bottom: none; }
+
+  .bar-container { width: 100px; height: 6px; background: rgba(255,255,255,0.06); border-radius: 3px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 3px; }
+
+  .tag-p1 { background: rgba(6,182,212,0.15); color: #22D3EE; font-size: 9px; font-weight: 600; padding: 2px 6px; border-radius: 4px; }
+  .tag-p2 { background: rgba(139,92,246,0.15); color: #A78BFA; font-size: 9px; font-weight: 600; padding: 2px 6px; border-radius: 4px; }
+  .tag-p3 { background: rgba(245,158,11,0.15); color: #FBBF24; font-size: 9px; font-weight: 600; padding: 2px 6px; border-radius: 4px; }
+  .tag-p4 { background: rgba(16,185,129,0.15); color: #34D399; font-size: 9px; font-weight: 600; padding: 2px 6px; border-radius: 4px; }
+
+  /* Architecture diagram */
+  .arch {
+    margin-top: 32px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    overflow: hidden;
+    padding: 28px;
+  }
+
+  .arch-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #F1F5F9;
+    margin-bottom: 20px;
+    text-align: center;
+  }
+
+  .arch-flow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .arch-box {
+    padding: 14px 20px;
+    border-radius: 12px;
+    border: 1.5px solid;
+    text-align: center;
+    min-width: 140px;
+  }
+
+  .arch-box-icon { font-size: 24px; margin-bottom: 4px; }
+  .arch-box-title { font-size: 11px; font-weight: 700; color: #F1F5F9; }
+  .arch-box-sub { font-size: 9px; color: #64748B; }
+
+  .arch-arrow { font-size: 18px; color: #475569; }
+
+  .a1 { border-color: rgba(6,182,212,0.3); background: rgba(6,182,212,0.05); }
+  .a2 { border-color: rgba(139,92,246,0.3); background: rgba(139,92,246,0.05); }
+  .a3 { border-color: rgba(245,158,11,0.3); background: rgba(245,158,11,0.05); }
+  .a4 { border-color: rgba(16,185,129,0.3); background: rgba(16,185,129,0.05); }
+</style>
+</head>
+<body>
+
+<div class="title">
+  <span class="badge">AI AGENT ROADMAP</span>
+  <h1>SIPBD V2 — <span>AI-Powered Features</span></h1>
+  <div class="subtitle">6 AI Skills tersedia · 4 Fase Pengembangan · Dari Chatbot hingga Prediksi Cerdas</div>
+</div>
+
+<!-- Phase 1 & 2 -->
+<div class="phase-grid">
+
+  <div class="phase-card p1">
+    <div class="phase-header">
+      <span class="phase-badge">Phase 1</span>
+      <div>
+        <div class="phase-title">Asisten AI Perikanan</div>
+        <div class="phase-subtitle">LLM + Konteks Data SIPBD · Prioritas Tertinggi</div>
+      </div>
+    </div>
+    <div class="phase-body">
+
+      <div class="feature">
+        <div class="feature-icon-box">🤖</div>
+        <div class="feature-content">
+          <div class="feature-title">Chatbot Asisten Perikanan <span class="feature-skill">LLM</span></div>
+          <div class="feature-desc">AI chatbot yang memahami data SIPBD. Bisa menjawab pertanyaan tentang produksi, tren, harga, dan rekomendasi budidaya berdasarkan data real-time</div>
+          <div class="feature-examples">
+            <span class="feature-chip">"Produksi ikan nila di Mempawah tahun ini?"</span>
+            <span class="feature-chip">"Kecamatan mana yang perlu perhatian?"</span>
+            <span class="feature-chip">"Bandingkan tren 3 tahun terakhir"</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="feature">
+        <div class="feature-icon-box">📊</div>
+        <div class="feature-content">
+          <div class="feature-title">Smart Report Narrator <span class="feature-skill">LLM</span></div>
+          <div class="feature-desc">AI yang otomatis membuat narasi laporan dari data statistik. Mengubah angka-angka menjadi cerita yang mudah dipahami untuk stakeholder</div>
+          <div class="feature-examples">
+            <span class="feature-chip">Auto narasi ringkasan produksi</span>
+            <span class="feature-chip">Highlight anomali & insight</span>
+            <span class="feature-chip">Email report otomatis</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="feature">
+        <div class="feature-icon-box">🔍</div>
+        <div class="feature-content">
+          <div class="feature-title">Natural Language Query <span class="feature-skill">LLM</span></div>
+          <div class="feature-desc">Cari data dengan bahasa natural. Tidak perlu filter manual — cukup ketik pertanyaan, AI akan memfilter dan menampilkan data yang relevan</div>
+          <div class="feature-examples">
+            <span class="feature-chip">"Tampilkan RTP Lele di Sungai Pinyuh"</span>
+            <span class="feature-chip">"Data bioflok 2024"</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="phase-card p2">
+    <div class="phase-header">
+      <span class="phase-badge">Phase 2</span>
+      <div>
+        <div class="phase-title">Input Suara & Visi AI</div>
+        <div class="phase-subtitle">ASR + VLM · Aksesibilitas & Identifikasi Cerdas</div>
+      </div>
+    </div>
+    <div class="phase-body">
+
+      <div class="feature">
+        <div class="feature-icon-box">🎤</div>
+        <div class="feature-content">
+          <div class="feature-title">Voice Data Entry <span class="feature-skill">ASR</span></div>
+          <div class="feature-desc">Petugas lapangan input data cukup dengan suara. Ideal untuk petugas di tambak/kolam yang sulit mengetik. Transkrip otomatis ke form</div>
+          <div class="feature-examples">
+            <span class="feature-chip">"Tambah data: Nila, KJA, Mempawah Hulu, 500 kg"</span>
+            <span class="feature-chip">Hands-free field reporting</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="feature">
+        <div class="feature-icon-box">🔊</div>
+        <div class="feature-content">
+          <div class="feature-title">Voice Response & Alerts <span class="feature-skill">TTS</span></div>
+          <div class="feature-desc">Chatbot merespons dengan suara. Peringatan cuaca & alert produksi dibacakan. Aksesibilitas untuk pembudidaya dengan keterbatasan membaca</div>
+          <div class="feature-examples">
+            <span class="feature-chip">Audio summary laporan</span>
+            <span class="feature-chip">Weather alert voice notification</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="feature">
+        <div class="feature-icon-box">👁️</div>
+        <div class="feature-content">
+          <div class="feature-title">Fish Disease Detection <span class="feature-skill">VLM</span></div>
+          <div class="feature-desc">Upload foto ikan → AI identifikasi penyakit/parasit. Rekomendasi penanganan otomatis. Bangun database kasus penyakit per wilayah</div>
+          <div class="feature-examples">
+            <span class="feature-chip">Upload foto ikan sakit</span>
+            <span class="feature-chip">Deteksi penyakit + rekomendasi</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="feature">
+        <div class="feature-icon-box">🐟</div>
+        <div class="feature-content">
+          <div class="feature-title">Species Identification <span class="feature-skill">VLM</span></div>
+          <div class="feature-desc">Foto ikan → AI identifikasi jenis ikan. Verifikasi otomatis saat input data. Mendukung edukasi pembudidaya pemula</div>
+          <div class="feature-examples">
+            <span class="feature-chip">Snap & identify</span>
+            <span class="feature-chip">Auto-fill fishType field</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<!-- Phase 3 & 4 -->
+<div class="phase-grid" style="margin-top:24px">
+
+  <div class="phase-card p3">
+    <div class="phase-header">
+      <span class="phase-badge">Phase 3</span>
+      <div>
+        <div class="phase-title">Web Intelligence</div>
+        <div class="phase-subtitle">Web Search + Reader · Data Real-Time & Pasar</div>
+      </div>
+    </div>
+    <div class="phase-body">
+
+      <div class="feature">
+        <div class="feature-icon-box">🌐</div>
+        <div class="feature-content">
+          <div class="feature-title">Market Price Tracker <span class="feature-skill">Web Search + Reader</span></div>
+          <div class="feature-desc">Cari & bandingkan harga ikan dari berbagai pasar online. Update otomatis harga komoditas dari sumber eksternal. Alert jika harga naik/turun signifikan</div>
+          <div class="feature-examples">
+            <span class="feature-chip">Auto-update harga dari web</span>
+            <span class="feature-chip">Price comparison dashboard</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="feature">
+        <div class="feature-icon-box">📰</div>
+        <div class="feature-content">
+          <div class="feature-title">Regulatory Monitor <span class="feature-skill">Web Search + Reader</span></div>
+          <div class="feature-desc">Monitor update regulasi perikanan dari KKP, dinas provinsi, dll. Notifikasi otomatis jika ada kebijakan baru yang mempengaruhi pembudidaya</div>
+          <div class="feature-examples">
+            <span class="feature-chip">Scrape KKP website</span>
+            <span class="feature-chip">Regulatory change alerts</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="feature">
+        <div class="feature-icon-box">🌤️</div>
+        <div class="feature-content">
+          <div class="feature-title">Weather & Environment Alerts <span class="feature-skill">Web Search</span></div>
+          <div class="feature-desc">Cari info cuaca terkini untuk wilayah budidaya. Peringatan banjir, kekeringan, atau kondisi yang mempengaruhi produksi tambak/kolam</div>
+          <div class="feature-examples">
+            <span class="feature-chip">Cuaca Mempawah real-time</span>
+            <span class="feature-chip">Flood risk assessment</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="feature">
+        <div class="feature-icon-box">📚</div>
+        <div class="feature-content">
+          <div class="feature-title">Best Practice Recommender <span class="feature-skill">Web Search + LLM</span></div>
+          <div class="feature-desc">Cari teknik budidaya terbaru berdasarkan konteks pembudidaya (jenis ikan, wadah, lokasi). AI rangkum dan rekomendasikan</div>
+          <div class="feature-examples">
+            <span class="feature-chip">"Teknik bioflok untuk Lele 2024"</span>
+            <span class="feature-chip">Personalized recommendations</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="phase-card p4">
+    <div class="phase-header">
+      <span class="phase-badge">Phase 4</span>
+      <div>
+        <div class="phase-title">Predictive & Creative AI</div>
+        <div class="phase-subtitle">LLM Thinking + Image Gen · Analisis Prediktif</div>
+      </div>
+    </div>
+    <div class="phase-body">
+
+      <div class="feature">
+        <div class="feature-icon-box">📈</div>
+        <div class="feature-content">
+          <div class="feature-title">Production Forecast <span class="feature-skill">LLM Thinking</span></div>
+          <div class="feature-desc">AI menganalisis tren historis dan memprediksi produksi masa depan per kecamatan/jenis ikan. Early warning jika prediksi turun di bawah target</div>
+          <div class="feature-examples">
+            <span class="feature-chip">Prediksi Q1 2025</span>
+            <span class="feature-chip">Gap analysis vs target</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="feature">
+        <div class="feature-icon-box">⚠️</div>
+        <div class="feature-content">
+          <div class="feature-title">Anomaly Detection <span class="feature-skill">LLM Thinking</span></div>
+          <div class="feature-desc">AI mendeteksi data yang tidak biasa (produksi tiba-tiba naik/turun drastis, RTP tidak konsisten). Flag data yang perlu verifikasi lapangan</div>
+          <div class="feature-examples">
+            <span class="feature-chip">Auto-flag suspicious data</span>
+            <span class="feature-chip">Quality score per record</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="feature">
+        <div class="feature-icon-box">🎨</div>
+        <div class="feature-content">
+          <div class="feature-title">Infographic Generator <span class="feature-skill">Image Gen</span></div>
+          <div class="feature-desc">Generate infografis otomatis dari data produksi. Visual untuk laporan dinas, presentasi bupati, atau media sosial dinas</div>
+          <div class="feature-examples">
+            <span class="feature-chip">Auto-generate report images</span>
+            <span class="feature-chip">Social media ready graphics</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="feature">
+        <div class="feature-icon-box">🎬</div>
+        <div class="feature-content">
+          <div class="feature-title">Training Video Generator <span class="feature-skill">Video Gen</span></div>
+          <div class="feature-desc">Generate video pelatihan budidaya dari teks. Konten edukasi untuk pembudidaya baru. Personalisasi per jenis ikan/wadah</div>
+          <div class="feature-examples">
+            <span class="feature-chip">"Cara budidaya Nila di KJA"</span>
+            <span class="feature-chip">Auto-captioned tutorials</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<!-- Value Matrix -->
+<div class="matrix">
+  <div class="matrix-header">📊 Matriks Prioritas: Business Value vs Implementation Effort</div>
+  <table class="matrix-table">
+    <thead>
+      <tr>
+        <th>Fitur</th>
+        <th>AI Skill</th>
+        <th>Business Value</th>
+        <th>Effort</th>
+        <th>Phase</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>🤖 Chatbot Asisten Perikanan</td>
+        <td>LLM</td>
+        <td><div class="bar-container"><div class="bar-fill" style="width:95%;background:#06B6D4"></div></div></td>
+        <td><div class="bar-container"><div class="bar-fill" style="width:30%;background:#8B5CF6"></div></div></td>
+        <td><span class="tag-p1">Phase 1</span></td>
+      </tr>
+      <tr>
+        <td>📊 Smart Report Narrator</td>
+        <td>LLM</td>
+        <td><div class="bar-container"><div class="bar-fill" style="width:85%;background:#06B6D4"></div></div></td>
+        <td><div class="bar-container"><div class="bar-fill" style="width:25%;background:#8B5CF6"></div></div></td>
+        <td><span class="tag-p1">Phase 1</span></td>
+      </tr>
+      <tr>
+        <td>🔍 Natural Language Query</td>
+        <td>LLM</td>
+        <td><div class="bar-container"><div class="bar-fill" style="width:80%;background:#06B6D4"></div></div></td>
+        <td><div class="bar-container"><div class="bar-fill" style="width:40%;background:#8B5CF6"></div></div></td>
+        <td><span class="tag-p1">Phase 1</span></td>
+      </tr>
+      <tr>
+        <td>🎤 Voice Data Entry</td>
+        <td>ASR</td>
+        <td><div class="bar-container"><div class="bar-fill" style="width:90%;background:#06B6D4"></div></div></td>
+        <td><div class="bar-container"><div class="bar-fill" style="width:50%;background:#8B5CF6"></div></div></td>
+        <td><span class="tag-p2">Phase 2</span></td>
+      </tr>
+      <tr>
+        <td>👁️ Fish Disease Detection</td>
+        <td>VLM</td>
+        <td><div class="bar-container"><div class="bar-fill" style="width:85%;background:#06B6D4"></div></div></td>
+        <td><div class="bar-container"><div class="bar-fill" style="width:60%;background:#8B5CF6"></div></div></td>
+        <td><span class="tag-p2">Phase 2</span></td>
+      </tr>
+      <tr>
+        <td>🔊 Voice Response</td>
+        <td>TTS</td>
+        <td><div class="bar-container"><div class="bar-fill" style="width:60%;background:#06B6D4"></div></div></td>
+        <td><div class="bar-container"><div class="bar-fill" style="width:35%;background:#8B5CF6"></div></div></td>
+        <td><span class="tag-p2">Phase 2</span></td>
+      </tr>
+      <tr>
+        <td>🌐 Market Price Tracker</td>
+        <td>Web Search + Reader</td>
+        <td><div class="bar-container"><div class="bar-fill" style="width:80%;background:#06B6D4"></div></div></td>
+        <td><div class="bar-container"><div class="bar-fill" style="width:55%;background:#8B5CF6"></div></div></td>
+        <td><span class="tag-p3">Phase 3</span></td>
+      </tr>
+      <tr>
+        <td>📰 Regulatory Monitor</td>
+        <td>Web Search + Reader</td>
+        <td><div class="bar-container"><div class="bar-fill" style="width:70%;background:#06B6D4"></div></div></td>
+        <td><div class="bar-container"><div class="bar-fill" style="width:65%;background:#8B5CF6"></div></div></td>
+        <td><span class="tag-p3">Phase 3</span></td>
+      </tr>
+      <tr>
+        <td>📈 Production Forecast</td>
+        <td>LLM Thinking</td>
+        <td><div class="bar-container"><div class="bar-fill" style="width:90%;background:#06B6D4"></div></div></td>
+        <td><div class="bar-container"><div class="bar-fill" style="width:70%;background:#8B5CF6"></div></div></td>
+        <td><span class="tag-p4">Phase 4</span></td>
+      </tr>
+      <tr>
+        <td>⚠️ Anomaly Detection</td>
+        <td>LLM Thinking</td>
+        <td><div class="bar-container"><div class="bar-fill" style="width:75%;background:#06B6D4"></div></div></td>
+        <td><div class="bar-container"><div class="bar-fill" style="width:55%;background:#8B5CF6"></div></div></td>
+        <td><span class="tag-p4">Phase 4</span></td>
+      </tr>
+      <tr>
+        <td>🎨 Infographic Generator</td>
+        <td>Image Gen</td>
+        <td><div class="bar-container"><div class="bar-fill" style="width:50%;background:#06B6D4"></div></div></td>
+        <td><div class="bar-container"><div class="bar-fill" style="width:35%;background:#8B5CF6"></div></div></td>
+        <td><span class="tag-p4">Phase 4</span></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- Architecture -->
+<div class="arch">
+  <div class="arch-title">🏗️ Arsitektur AI Agent — SIPBD V2</div>
+  <div class="arch-flow">
+    <div class="arch-box a1">
+      <div class="arch-box-icon">👤</div>
+      <div class="arch-box-title">User Input</div>
+      <div class="arch-box-sub">Text · Voice · Image</div>
+    </div>
+    <div class="arch-arrow">→</div>
+    <div class="arch-box a2">
+      <div class="arch-box-icon">🧠</div>
+      <div class="arch-box-title">AI Orchestrator</div>
+      <div class="arch-box-sub">Route ke skill yang tepat</div>
+    </div>
+    <div class="arch-arrow">→</div>
+    <div class="arch-box a3">
+      <div class="arch-box-icon">⚡</div>
+      <div class="arch-box-title">AI Skills</div>
+      <div class="arch-box-sub">LLM · VLM · ASR · TTS · Search</div>
+    </div>
+    <div class="arch-arrow">→</div>
+    <div class="arch-box a1">
+      <div class="arch-box-icon">🗄️</div>
+      <div class="arch-box-title">SIPBD Data</div>
+      <div class="arch-box-sub">Stats API · DB Context</div>
+    </div>
+    <div class="arch-arrow">→</div>
+    <div class="arch-box a4">
+      <div class="arch-box-icon">💬</div>
+      <div class="arch-box-title">Smart Response</div>
+      <div class="arch-box-sub">Text · Audio · Visual</div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
