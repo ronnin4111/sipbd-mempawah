@@ -252,3 +252,32 @@ Stage Summary:
   2. Add GROQ_API_KEY env var on Vercel
   3. Also update GEMINI_MODEL from flash-lite to flash on Vercel
 - Fallback chain: Gemini → Groq → z-ai ensures maximum uptime
+
+---
+Task ID: 3
+Agent: main
+Task: Fix AI chatbot data accuracy — prevent hallucinated kecamatan and limited kelompok data
+
+Work Log:
+- Identified 3 major problems from user's screenshot:
+  1. System prompt hardcoded WRONG kecamatan: "Siantan, Sengah Temila, Mempawah Hulu, Ledo, Mandor, Jawai" 
+  2. Data context limited to 30 kelompok (total ~55), causing AI to say "tidak bisa menampilkan semua"
+  3. No anti-hallucination rules — AI freely invented data not in database
+- Fixed system prompt: removed ALL hardcoded kecamatan/fish types, now derived from DB dynamically
+- Added strict anti-hallucination rules:
+  - JANGAN MENGARANG DATA — HANYA gunakan data dari DATA CONTEXT
+  - JANGAN menyebutkan kecamatan/kelompok yang TIDAK ada di data
+- Changed fetchCompactDataContext → fetchFullDataContext:
+  - Now includes ALL kelompok (no 30-item limit)
+  - Includes kecamatan list, desa per kecamatan, fish types, business types, container types
+  - Includes total kelompok and total pembudidaya counts
+- Changed data context to ALWAYS be included (not just for non-general questions)
+- Improved search term extraction: added patterns like "semua kelompok", "seluruh kelompok", etc.
+- Increased targeted search farmer limit from 20 to 50
+- Committed and pushed (48e6842)
+
+Stage Summary:
+- AI will now use ONLY data from database, no more hallucinated kecamatan
+- AI can now list ALL kelompok when asked, not just 30
+- Total counts will be accurate (derived from actual DB query)
+- User should see correct responses after Vercel redeploy
