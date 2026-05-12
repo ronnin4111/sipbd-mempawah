@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { hfChatCompletion, isHfConfigured } from '@/lib/hf-ai';
+import { callAI } from '@/lib/ai-sdk';
 import { db } from '@/lib/db';
 import { generateFarmerId } from '@/lib/farmer-id';
 
@@ -504,18 +504,6 @@ async function fetchDataContext(filters: {
 
 export async function POST(request: NextRequest) {
   try {
-    // Check if Hugging Face API is configured
-    if (!isHfConfigured()) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Layanan AI belum dikonfigurasi',
-          detail: 'HF_API_KEY belum diset. Silakan tambahkan token Hugging Face API di environment variables.',
-        },
-        { status: 503 }
-      );
-    }
-
     const body = await request.json();
     const {
       message,
@@ -571,15 +559,15 @@ export async function POST(request: NextRequest) {
       { role: 'user' as const, content: message },
     ];
 
-    // Call Hugging Face Inference API
-    const result = await hfChatCompletion({
+    // Call AI (Gemini primary, z-ai fallback)
+    const result = await callAI({
       messages: chatMessages,
       temperature: 0.7,
-      max_tokens: 2048,
+      max_tokens: 4096,
     });
 
     if (!result.success) {
-      console.error('HF Chat error:', result.error);
+      console.error('AI Chat error:', result.error);
       return NextResponse.json(
         {
           success: false,
@@ -594,6 +582,7 @@ export async function POST(request: NextRequest) {
       success: true,
       response: result.content || 'Maaf, saya tidak dapat memproses pertanyaan Anda saat ini.',
       model: result.model,
+      provider: result.provider,
     });
   } catch (error: unknown) {
     console.error('AI Chat error:', error);

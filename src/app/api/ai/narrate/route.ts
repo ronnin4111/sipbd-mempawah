@@ -1,20 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { hfChatCompletion, isHfConfigured } from '@/lib/hf-ai';
+import { callAI } from '@/lib/ai-sdk';
 
 export async function POST(request: NextRequest) {
   try {
-    // Check if Hugging Face API is configured
-    if (!isHfConfigured()) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Layanan AI belum dikonfigurasi',
-          detail: 'HF_API_KEY belum diset. Silakan tambahkan token Hugging Face API di environment variables.',
-        },
-        { status: 503 }
-      );
-    }
-
     const body = await request.json();
     const { statsContext, type = 'summary' } = body as {
       statsContext?: Record<string, unknown>;
@@ -69,7 +57,7 @@ Fokuskan pada:
 
     const systemPrompt = prompts[type] || prompts.summary;
 
-    const result = await hfChatCompletion({
+    const result = await callAI({
       messages: [
         { role: 'system', content: systemPrompt },
         {
@@ -78,11 +66,11 @@ Fokuskan pada:
         },
       ],
       temperature: 0.7,
-      max_tokens: 2048,
+      max_tokens: 4096,
     });
 
     if (!result.success) {
-      console.error('HF Narrate error:', result.error);
+      console.error('AI Narrate error:', result.error);
       return NextResponse.json(
         {
           success: false,
@@ -99,6 +87,7 @@ Fokuskan pada:
       success: true,
       narrative,
       type,
+      provider: result.provider,
     });
   } catch (error: unknown) {
     console.error('AI Narrator error:', error);
