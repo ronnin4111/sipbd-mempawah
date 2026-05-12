@@ -29,6 +29,9 @@ Aturan respons SANGAT PENTING:
 - Jika data tidak tersedia di konteks, katakan jujur "Data tidak tersedia"
 - Jika nama kelompok/pembudidaya tidak ditemukan, sarankan nama mirip dari DATA CONTEXT
 - Daftar kelompok/kecamatan/desa HANYA dari data yang disediakan — JANGAN tebak
+- Saat diminta daftar kelompok, GUNAKAN nomor urut sesuai DATA CONTEXT
+- Jika ada nama kelompok yang sama di desa berbeda, SEBUTKAN keduanya dengan lokasinya
+- JANGAN bilang "data tidak lengkap" — semua data kelompok sudah disediakan lengkap
 
 Istilah:
 - RTP=Rumah Tangga Perikanan, KUSUKA=Kartu Identitas Usaha Perikanan
@@ -51,12 +54,13 @@ function classifyQuestion(message: string): 'specific' | 'stats' | 'general' {
   ];
   if (specificPatterns.some(p => p.test(lower))) return 'specific';
 
-  // Stats/production/trend questions
+  // Stats/production/trend questions (but NOT kelompok listing questions)
   const statsPatterns = [
-    /produksi/i, /tren/i, /statistik/i, /total/i, /jumlah/i,
+    /produksi/i, /tren/i, /statistik/i,
     /kecamatan.*tinggi/i, /kecamatan.*rendah/i, /perbandingan/i,
     /rtp/i, /kusuka/i, /cpib/i, /cbib/i, /pencapaian/i, /target/i,
     /naik/i, /turun/i, /kenaikan/i, /penurunan/i, /pertumbuhan/i,
+    /jumlah\s+(pembudidaya|rtp|produksi)/i, /total\s+(pembudidaya|rtp|produksi)/i,
   ];
   if (statsPatterns.some(p => p.test(lower))) return 'stats';
 
@@ -220,21 +224,40 @@ async function fetchFullDataContext(filters: {
     const businessTypeList = [...new Set(records.map(r => r.businessType))].sort();
     const containerTypeList = [...new Set(records.map(r => r.containerType))].sort();
 
-    // Build COMPLETE group list — one line per group (compact format)
+    // Build COMPLETE numbered group list — so AI knows exact count
+    // Sort: primary sort by kecamatan, secondary by name for consistency
     const sortedGroups = Array.from(groupMap.values())
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .sort((a, b) => {
+        const kecDiff = a.kec.localeCompare(b.kec);
+        if (kecDiff !== 0) return kecDiff;
+        return a.name.localeCompare(b.name);
+      });
 
-    const groupLines = sortedGroups.map(g =>
-      `${g.name} (${g.kec}/${g.desa}) ${g.memberCount}org ${g.rtpCount}rtp ${g.kusukaCount}kusuka [${[...g.fishTypes].join(',')}]`
+    // Numbered format so AI can clearly count the exact total
+    const groupLines = sortedGroups.map((g, i) =>
+      `${i + 1}. ${g.name} (${g.kec}/${g.desa}) ${g.memberCount}org [${[...g.fishTypes].join(',')}]`
     );
 
     const totalGroups = groupMap.size;
     const totalFarmers = allFarmerLatest.size;
 
+    // Check for duplicate group names across different desa
+    const nameCounts = new Map<string, number>();
+    sortedGroups.forEach(g => {
+      const c = nameCounts.get(g.name) || 0;
+      nameCounts.set(g.name, c + 1);
+    });
+    const duplicateNames = [...nameCounts.entries()].filter(([, c]) => c > 1).map(([n]) => n);
+
     // Build kecamatan → desa mapping
     const kecDesaLines: string[] = [];
     for (const [kec, desas] of desaByKec) {
       kecDesaLines.push(`${kec}: ${[...desas].sort().join(', ')}`);
+    }
+
+    let duplicateNote = '';
+    if (duplicateNames.length > 0) {
+      duplicateNote = `\nCATATAN: Nama kelompok yang sama di desa berbeda dihitung terpisah: ${duplicateNames.join(', ')}`;
     }
 
     const dataContext = `\n=== DATA CONTEXT (WAJIB: gunakan HANYA data ini, jangan mengarang) ===
@@ -245,9 +268,9 @@ Desa per kecamatan:
 ${kecDesaLines.join('\n')}
 Jenis ikan: ${fishTypeList.join(', ')}
 Jenis usaha: ${businessTypeList.join(', ')}
-Wadah budidaya: ${containerTypeList.join(', ')}
+Wadah budidaya: ${containerTypeList.join(', ')}${duplicateNote}
 
-DAFTAR KELOMPOK LENGKAP (${totalGroups} kelompok — nama | kec/desa | anggota | rtp | kusuka | ikan):
+DAFTAR KELOMPOK LENGKAP (${totalGroups} kelompok — nomor | nama | kec/desa | anggota | ikan):
 ${groupLines.join('\n')}`;
 
     return { dataContext, kecamatanList: kecList, totalGroups, totalFarmers };
@@ -542,10 +565,14 @@ export async function POST(request: NextRequest) {
     ];
 
     // Call AI (Gemini primary → Groq fallback → z-ai last resort)
+    // Use higher max_tokens for listing questions to avoid truncated responses
+    const isListingQuestion = /semua|seluruh|daftar|tampilkan|sebutkan/i.test(message);
+    const maxTokens = isListingQuestion ? 4096 : 2048;
+
     const result = await callAI({
       messages: chatMessages,
       temperature: 0.7,
-      max_tokens: 2048,
+      max_tokens: maxTokens,
     });
 
     if (!result.success) {
