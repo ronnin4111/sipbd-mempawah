@@ -1,36 +1,99 @@
 import { NextRequest, NextResponse } from 'next/server';
+import fs from 'fs';
+import path from 'path';
 
 /**
  * ZAI API Proxy Route
  *
- * This route proxies requests to the ZAI API.
- * - On local dev: forwards to 172.25.136.193:8080 (internal ZAI API)
- * - On Vercel: forwards to ZAI_PROXY_URL env var (must be set to a public proxy)
+ * Proxies chat completion requests to the ZAI API.
+ * Configuration is read from:
+ * 1. Environment variables (ZAI_BASE_URL, ZAI_API_KEY, etc.)
+ * 2. /etc/.z-ai-config file (fallback for local dev)
  *
- * The z-ai-web-dev-sdk reads config from a file, which doesn't exist on Vercel.
- * This proxy route allows the AI features to work on both environments.
+ * This allows the AI features to work on both:
+ * - Local dev (where .z-ai-config exists)
+ * - Vercel (where env vars must be set)
  */
 
-const INTERNAL_ZAI_BASE = 'http://172.25.136.193:8080';
+interface ZAIConfig {
+  baseUrl: string;
+  apiKey: string;
+  chatId?: string;
+  userId?: string;
+  token?: string;
+}
+
+function loadZAIConfig(): ZAIConfig | null {
+  // Try environment variables first
+  const envBaseUrl = process.env.ZAI_BASE_URL;
+  const envApiKey = process.env.ZAI_API_KEY;
+  if (envBaseUrl && envApiKey) {
+    return {
+      baseUrl: envBaseUrl,
+      apiKey: envApiKey,
+      chatId: process.env.ZAI_CHAT_ID,
+      userId: process.env.ZAI_USER_ID,
+      token: process.env.ZAI_TOKEN,
+    };
+  }
+
+  // Try reading from config file (local dev)
+  const configPaths = [
+    path.join(process.cwd(), '.z-ai-config'),
+    path.join(require('os').homedir(), '.z-ai-config'),
+    '/etc/.z-ai-config',
+  ];
+
+  for (const configPath of configPaths) {
+    try {
+      const configStr = fs.readFileSync(configPath, 'utf-8');
+      const config = JSON.parse(configStr);
+      if (config.baseUrl && config.apiKey) {
+        return config as ZAIConfig;
+      }
+    } catch {
+      // File doesn't exist or can't be parsed, try next
+    }
+  }
+
+  return null;
+}
+
+let cachedConfig: ZAIConfig | null = null;
+
+function getConfig(): ZAIConfig | null {
+  if (cachedConfig) return cachedConfig;
+  cachedConfig = loadZAIConfig();
+  return cachedConfig;
+}
 
 export async function POST(request: NextRequest) {
   try {
+    const config = getConfig();
+
+    if (!config) {
+      return NextResponse.json(
+        {
+          error: 'ZAI API configuration not found',
+          detail: 'Set ZAI_BASE_URL and ZAI_API_KEY environment variables, or create .z-ai-config file.',
+        },
+        { status: 503 }
+      );
+    }
+
     const body = await request.json();
+    const targetUrl = `${config.baseUrl}/chat/completions`;
 
-    // Determine the ZAI API base URL
-    const zaiBase = process.env.ZAI_PROXY_URL || INTERNAL_ZAI_BASE;
-    const targetUrl = `${zaiBase}/v1/chat/completions`;
-
-    // Build headers
+    // Build headers from config
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${process.env.ZAI_API_KEY || 'Z.ai'}`,
+      'Authorization': `Bearer ${config.apiKey}`,
       'X-Z-AI-From': 'Z',
     };
 
-    if (process.env.ZAI_CHAT_ID) headers['X-Chat-Id'] = process.env.ZAI_CHAT_ID;
-    if (process.env.ZAI_USER_ID) headers['X-User-Id'] = process.env.ZAI_USER_ID;
-    if (process.env.ZAI_TOKEN) headers['X-Token'] = process.env.ZAI_TOKEN;
+    if (config.chatId) headers['X-Chat-Id'] = config.chatId;
+    if (config.userId) headers['X-User-Id'] = config.userId;
+    if (config.token) headers['X-Token'] = config.token;
 
     const response = await fetch(targetUrl, {
       method: 'POST',
@@ -49,3 +112,6 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+// Force dynamic rendering (no caching)
+export const dynamic = 'force-dynamic';

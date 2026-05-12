@@ -290,17 +290,6 @@ export async function POST(request: NextRequest) {
 
     const zai = await getZAI();
 
-    if (!zai) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Layanan AI tidak tersedia',
-          detail: 'Konfigurasi ZAI SDK tidak ditemukan. Fitur AI hanya tersedia di lingkungan yang memiliki akses ke ZAI API.',
-        },
-        { status: 503 }
-      );
-    }
-
     // Fetch data context from database (server-side, no HTTP overhead)
     const dataContext = await fetchDataContext(filters || {
       years: [], kecamatan: [], desa: [], fishType: [],
@@ -324,13 +313,54 @@ export async function POST(request: NextRequest) {
       { role: 'user', content: message },
     ];
 
-    const completion = await zai.chat.completions.create({
-      messages: chatMessages,
-    });
+    let aiResponse: string;
 
-    const aiResponse =
-      completion.choices[0]?.message?.content ||
-      'Maaf, saya tidak dapat memproses pertanyaan Anda saat ini. Silakan coba lagi.';
+    if (zai) {
+      // Use ZAI SDK directly (local dev with config file, or Vercel with env vars)
+      const completion = await zai.chat.completions.create({
+        messages: chatMessages,
+      });
+
+      aiResponse =
+        completion.choices[0]?.message?.content ||
+        'Maaf, saya tidak dapat memproses pertanyaan Anda saat ini. Silakan coba lagi.';
+    } else {
+      // Fallback: use the /api/ai/zai-proxy route
+      // This works because the Next.js server can read /etc/.z-ai-config
+      try {
+        const proxyResponse = await fetch(
+          `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/ai/zai-proxy`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              messages: chatMessages,
+              thinking: { type: 'disabled' },
+            }),
+          }
+        );
+
+        if (!proxyResponse.ok) {
+          const errorData = await proxyResponse.json().catch(() => ({}));
+          throw new Error(errorData.detail || errorData.error || `Proxy returned ${proxyResponse.status}`);
+        }
+
+        const proxyData = await proxyResponse.json();
+        aiResponse =
+          proxyData.choices?.[0]?.message?.content ||
+          'Maaf, saya tidak dapat memproses pertanyaan Anda saat ini. Silakan coba lagi.';
+      } catch (proxyError) {
+        console.error('ZAI Proxy fallback also failed:', proxyError);
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Layanan AI tidak tersedia',
+            detail: 'Tidak dapat terhubung ke layanan AI. Silakan coba lagi nanti.',
+          },
+          { status: 503 }
+        );
+      }
+    }
 
     return NextResponse.json({
       success: true,

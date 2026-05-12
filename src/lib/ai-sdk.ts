@@ -6,12 +6,11 @@ import ZAI from 'z-ai-web-dev-sdk';
  * Strategy:
  * 1. Try ZAI.create() first (reads from .z-ai-config file on local dev)
  * 2. If that fails, try instantiating with environment variables
- * 3. If no config at all, return null (AI features will be disabled gracefully)
+ * 3. If no config at all, return null (AI features will use /api/ai/zai-proxy as fallback)
  *
  * For Vercel deployment:
- * - Set ZAI_BASE_URL, ZAI_API_KEY (and optionally ZAI_CHAT_ID, ZAI_USER_ID, ZAI_TOKEN)
- *   as environment variables in Vercel dashboard
- * - The ZAI API must be accessible from Vercel's servers
+ * - Set these environment variables in Vercel dashboard:
+ *   ZAI_BASE_URL, ZAI_API_KEY, ZAI_CHAT_ID, ZAI_USER_ID, ZAI_TOKEN
  */
 
 interface ZAIConfig {
@@ -23,15 +22,13 @@ interface ZAIConfig {
 }
 
 let zaiInstance: InstanceType<typeof ZAI> | null = null;
-let initError: string | null = null;
+let initAttempted = false;
 
 export async function getZAI(): Promise<InstanceType<typeof ZAI> | null> {
   if (zaiInstance) return zaiInstance;
-  if (initError) {
-    // Already tried and failed - don't keep retrying
-    console.warn('ZAI SDK previously failed to init:', initError);
-    return null;
-  }
+  if (initAttempted) return null; // Already tried, don't retry
+
+  initAttempted = true;
 
   // Strategy 1: Try the default method (reads from .z-ai-config file)
   try {
@@ -59,23 +56,13 @@ export async function getZAI(): Promise<InstanceType<typeof ZAI> | null> {
       console.log('ZAI SDK initialized from environment variables');
       return zaiInstance;
     } catch (err) {
-      initError = `Failed to init ZAI from env vars: ${err instanceof Error ? err.message : String(err)}`;
-      console.error(initError);
+      console.error('Failed to init ZAI from env vars:', err);
       return null;
     }
   }
 
-  initError = 'No ZAI configuration available (neither config file nor env vars)';
-  console.warn(initError);
+  console.warn('No ZAI configuration available (neither config file nor env vars). AI features will use proxy fallback.');
   return null;
-}
-
-/**
- * Check if ZAI is available (for health checks)
- */
-export async function isZAIAvailable(): Promise<boolean> {
-  const zai = await getZAI();
-  return zai !== null;
 }
 
 /**
@@ -83,5 +70,5 @@ export async function isZAIAvailable(): Promise<boolean> {
  */
 export function resetZAI(): void {
   zaiInstance = null;
-  initError = null;
+  initAttempted = false;
 }
