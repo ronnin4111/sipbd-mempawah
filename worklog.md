@@ -313,3 +313,28 @@ Stage Summary:
 - Groups with same name in different desa will be clearly distinguished
 - Listing questions get more tokens (4096 vs 2048) to avoid truncation
 - Committed and pushed (76b5d78)
+
+---
+Task ID: 5
+Agent: main
+Task: Fix group counting — desa is farmer's address, not group's address
+
+Work Log:
+- User explained: "Desa" in the database = alamat pembudidaya (farmer's address),
+  NOT alamat kelompok (group's address)
+- Therefore "Gemura" in Anjungan Melancar and "Gemura" in Pak Bulu = 1 kelompok
+  with members from 2 desa, not 2 separate kelompok
+- Changed grouping key from `groupName|kecamatan|desa` to `groupName|kecamatan`
+- Updated data structures: `desa: string` → `desaList: Set<string>`
+- Applied fix to:
+  1. src/app/api/ai/chat/route.ts (fetchFullDataContext + fetchTargetedResults)
+  2. src/app/api/ai/data-context/route.ts
+- Updated system prompt to explain: desa = alamat pembudidaya, bukan alamat kelompok
+- Updated display format: "Kec: Anjongan, Desa anggota: Anjungan Melancar, Pak Bulu"
+- Updated member listing: each member shows their specific desa
+- Committed and pushed (a28e8e6)
+
+Stage Summary:
+- Total kelompok should now be 55 (was incorrectly 57)
+- Groups with members in multiple desa are now correctly counted as 1 group
+- Data model understanding is now correct and reflected in all AI code
