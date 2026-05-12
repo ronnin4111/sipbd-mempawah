@@ -1,74 +1,63 @@
-import ZAI from 'z-ai-web-dev-sdk';
+import { hfChatCompletion, isHfConfigured, getHfModel } from './hf-ai';
 
 /**
- * Initialize ZAI SDK with configuration.
+ * Unified AI SDK helper.
  *
  * Strategy:
- * 1. Try ZAI.create() first (reads from .z-ai-config file on local dev)
- * 2. If that fails, try instantiating with environment variables
- * 3. If no config at all, return null (AI features will use /api/ai/zai-proxy as fallback)
+ * 1. Try Hugging Face Inference API (works everywhere — local dev AND Vercel)
+ * 2. No more dependency on z-ai-web-dev-sdk for production
  *
- * For Vercel deployment:
- * - Set these environment variables in Vercel dashboard:
- *   ZAI_BASE_URL, ZAI_API_KEY, ZAI_CHAT_ID, ZAI_USER_ID, ZAI_TOKEN
+ * The z-ai-web-dev-sdk requires a .z-ai-config file which is not available on Vercel.
+ * Hugging Face API uses simple environment variables (HF_API_KEY) which work on Vercel.
  */
 
-interface ZAIConfig {
-  baseUrl: string;
-  apiKey: string;
-  chatId?: string;
-  userId?: string;
-  token?: string;
+export interface UnifiedAIOptions {
+  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
+  temperature?: number;
+  max_tokens?: number;
 }
 
-let zaiInstance: InstanceType<typeof ZAI> | null = null;
-let initAttempted = false;
-
-export async function getZAI(): Promise<InstanceType<typeof ZAI> | null> {
-  if (zaiInstance) return zaiInstance;
-  if (initAttempted) return null; // Already tried, don't retry
-
-  initAttempted = true;
-
-  // Strategy 1: Try the default method (reads from .z-ai-config file)
-  try {
-    zaiInstance = await ZAI.create();
-    console.log('ZAI SDK initialized from config file');
-    return zaiInstance;
-  } catch (fileError) {
-    console.log('ZAI config file not found, trying environment variables...');
-  }
-
-  // Strategy 2: Construct config from environment variables
-  const baseUrl = process.env.ZAI_BASE_URL;
-  const apiKey = process.env.ZAI_API_KEY;
-
-  if (baseUrl && apiKey) {
-    try {
-      const config: ZAIConfig = {
-        baseUrl,
-        apiKey,
-        chatId: process.env.ZAI_CHAT_ID,
-        userId: process.env.ZAI_USER_ID,
-        token: process.env.ZAI_TOKEN,
-      };
-      zaiInstance = new ZAI(config);
-      console.log('ZAI SDK initialized from environment variables');
-      return zaiInstance;
-    } catch (err) {
-      console.error('Failed to init ZAI from env vars:', err);
-      return null;
-    }
-  }
-
-  console.warn('No ZAI configuration available (neither config file nor env vars). AI features will use proxy fallback.');
-  return null;
+export interface UnifiedAIResult {
+  success: boolean;
+  content: string;
+  error?: string;
+  provider?: string;
+  model?: string;
 }
 
 /**
- * Reset the singleton instance (for testing)
+ * Call AI using the best available provider.
+ * Currently uses Hugging Face Inference API exclusively.
  */
-export function resetZAI(): void {
-  zaiInstance = null;
-  initAttempted = false;
+export async function callAI(options: UnifiedAIOptions): Promise<UnifiedAIResult> {
+  // Use Hugging Face API
+  if (isHfConfigured()) {
+    const result = await hfChatCompletion({
+      messages: options.messages,
+      temperature: options.temperature,
+      max_tokens: options.max_tokens,
+    });
+
+    return {
+      success: result.success,
+      content: result.content,
+      error: result.error,
+      provider: 'huggingface',
+      model: result.model || getHfModel(),
+    };
+  }
+
+  return {
+    success: false,
+    content: '',
+    error: 'Tidak ada provider AI yang tersedia. Set HF_API_KEY environment variable.',
+    provider: 'none',
+  };
+}
+
+/**
+ * Check if any AI provider is available
+ */
+export function isAIAvailable(): boolean {
+  return isHfConfigured();
 }

@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getZAI } from '@/lib/ai-sdk';
+import { hfChatCompletion, isHfConfigured } from '@/lib/hf-ai';
 import { db } from '@/lib/db';
 import { generateFarmerId } from '@/lib/farmer-id';
 
 /**
  * Build the system prompt for the SIPBD AI assistant.
- * If statsContext is provided, it is injected as structured data context
- * so the AI can answer data-specific questions about fishery production.
+ * Option B: Flexible — prioritize fishery, but can answer general questions.
  */
 function buildSystemPrompt(
   statsContext?: Record<string, unknown>,
@@ -14,18 +13,25 @@ function buildSystemPrompt(
 ): string {
   let prompt = `You are Asisten AI Perikanan Budidaya (SIPBD AI), an expert assistant for the Dinas Pertanian Ketahanan Pangan dan Perikanan Kabupaten Mempawah, Kalimantan Barat.
 
-Your role:
+Your primary role:
 - Answer questions about fish farming (perikanan budidaya) production data in Kabupaten Mempawah
 - Analyze trends, compare kecamatan, identify issues, and provide recommendations
+- When asked about a specific group (kelompok) or farmer (pembudidaya), search the provided groups/farmers data
+
+You are also flexible and helpful:
+- If asked general questions about fish farming techniques, aquaculture, fish species, water management, etc. — answer helpfully using your knowledge
+- If asked about agriculture, food security, or related government programs — answer helpfully
+- If asked about completely unrelated topics (weather, math, general knowledge) — you may answer briefly and politely, then gently redirect: "Untuk pertanyaan lebih lanjut tentang perikanan budidaya di Kab. Mempawah, saya siap membantu! 😊"
+
+Response rules:
 - Respond in Bahasa Indonesia
 - Be concise but informative
 - Format large numbers with thousand separators using Indonesian format (e.g., 1.234.567 kg, Rp 25.000)
 - When you see declining trends or underperforming areas, suggest potential actions
 - If data is not available in the provided context, say so honestly and do not fabricate numbers
 - When comparing data, highlight both positive and negative findings
-- Suggest relevant actions when identifying issues (e.g., low production areas, declining trends, missing KUSUKA registrations)
+- Suggest relevant actions when identifying issues
 - Use proper Indonesian terminology for fisheries terms
-- When asked about a specific group (kelompok) or farmer (pembudidaya), search the provided groups/farmers data
 - If a group or farmer name is not found, suggest similar names that exist in the data
 
 Key domain knowledge:
@@ -50,11 +56,11 @@ When analyzing data:
 5. Recommend actions for improvement where needed
 
 IMPORTANT RULES:
-- Always answer based on the provided data context. Do NOT fabricate or guess numbers.
+- Always answer based on the provided data context when data questions are asked. Do NOT fabricate or guess numbers.
 - If asked about a specific group, check the "groups" list in the data context section.
 - If asked about a specific farmer, check the "farmers" list in the data context section.
 - If a name is not found, try searching case-insensitively or suggest similar names.
-- For group member count questions, use "memberCount" from the groups data.
+- For group member count questions, use "jumlahAnggota" from the groups data.
 - Always format numbers with Indonesian thousand separators (dot separator, e.g., 1.234.567).`;
 
   if (statsContext && Object.keys(statsContext).length > 0) {
@@ -192,7 +198,6 @@ async function fetchDataContext(filters: {
     }
 
     groups.sort((a, b) => a.namaKelompok.localeCompare(b.namaKelompok));
-    // Limit to prevent context from being too large
     const totalGroups = groups.length;
     const limitedGroups = groups.slice(0, 80);
 
@@ -261,6 +266,18 @@ async function fetchDataContext(filters: {
 
 export async function POST(request: NextRequest) {
   try {
+    // Check if Hugging Face API is configured
+    if (!isHfConfigured()) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Layanan AI belum dikonfigurasi',
+          detail: 'HF_API_KEY belum diset. Silakan tambahkan token Hugging Face API di environment variables.',
+        },
+        { status: 503 }
+      );
+    }
+
     const body = await request.json();
     const {
       message,
@@ -288,8 +305,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const zai = await getZAI();
-
     // Fetch data context from database (server-side, no HTTP overhead)
     const dataContext = await fetchDataContext(filters || {
       years: [], kecamatan: [], desa: [], fishType: [],
@@ -298,73 +313,41 @@ export async function POST(request: NextRequest) {
 
     const systemPrompt = buildSystemPrompt(statsContext, dataContext);
 
-    // Build conversation messages:
-    // 1. System prompt with stats context + data context
-    // 2. Up to last 10 messages from conversation history for context window
-    // 3. The user's new message
-    const chatMessages: Array<{ role: 'system' | 'assistant' | 'user'; content: string }> = [
-      { role: 'system', content: systemPrompt },
+    // Build conversation messages for Hugging Face API
+    const chatMessages = [
+      { role: 'system' as const, content: systemPrompt },
       ...(Array.isArray(messages)
         ? messages.slice(-10).map((m) => ({
             role: m.role as 'user' | 'assistant',
             content: String(m.content),
           }))
         : []),
-      { role: 'user', content: message },
+      { role: 'user' as const, content: message },
     ];
 
-    let aiResponse: string;
+    // Call Hugging Face Inference API
+    const result = await hfChatCompletion({
+      messages: chatMessages,
+      temperature: 0.7,
+      max_tokens: 2048,
+    });
 
-    if (zai) {
-      // Use ZAI SDK directly (local dev with config file, or Vercel with env vars)
-      const completion = await zai.chat.completions.create({
-        messages: chatMessages,
-      });
-
-      aiResponse =
-        completion.choices[0]?.message?.content ||
-        'Maaf, saya tidak dapat memproses pertanyaan Anda saat ini. Silakan coba lagi.';
-    } else {
-      // Fallback: use the /api/ai/zai-proxy route
-      // This works because the Next.js server can read /etc/.z-ai-config
-      try {
-        const proxyResponse = await fetch(
-          `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/ai/zai-proxy`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              messages: chatMessages,
-              thinking: { type: 'disabled' },
-            }),
-          }
-        );
-
-        if (!proxyResponse.ok) {
-          const errorData = await proxyResponse.json().catch(() => ({}));
-          throw new Error(errorData.detail || errorData.error || `Proxy returned ${proxyResponse.status}`);
-        }
-
-        const proxyData = await proxyResponse.json();
-        aiResponse =
-          proxyData.choices?.[0]?.message?.content ||
-          'Maaf, saya tidak dapat memproses pertanyaan Anda saat ini. Silakan coba lagi.';
-      } catch (proxyError) {
-        console.error('ZAI Proxy fallback also failed:', proxyError);
-        return NextResponse.json(
-          {
-            success: false,
-            error: 'Layanan AI tidak tersedia',
-            detail: 'Tidak dapat terhubung ke layanan AI. Silakan coba lagi nanti.',
-          },
-          { status: 503 }
-        );
-      }
+    if (!result.success) {
+      console.error('HF Chat error:', result.error);
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Gagal memproses pesan AI',
+          detail: result.error,
+        },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({
       success: true,
-      response: aiResponse,
+      response: result.content || 'Maaf, saya tidak dapat memproses pertanyaan Anda saat ini.',
+      model: result.model,
     });
   } catch (error: unknown) {
     console.error('AI Chat error:', error);
@@ -380,3 +363,6 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+// Force dynamic rendering (no caching)
+export const dynamic = 'force-dynamic';

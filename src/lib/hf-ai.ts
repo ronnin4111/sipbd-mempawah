@@ -1,14 +1,15 @@
 /**
  * Hugging Face Inference API Client
  *
- * Uses the OpenAI-compatible endpoint for chat completions:
- * https://api-inference.huggingface.co/v1/chat/completions
+ * Uses the official @huggingface/inference SDK for reliable API access.
+ * This works on both local dev and Vercel deployment.
  *
  * Environment variables:
  * - HF_API_KEY: Your Hugging Face API token (required)
- * - HF_MODEL: Model ID to use (default: mistralai/Mistral-7B-Instruct-v0.3)
- * - HF_BASE_URL: Custom base URL (default: https://api-inference.huggingface.co)
+ * - HF_MODEL: Model ID to use (default: Qwen/Qwen2.5-7B-Instruct)
  */
+
+import { HfInference } from '@huggingface/inference';
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -34,10 +35,25 @@ export interface ChatCompletionResponse {
   };
 }
 
-const DEFAULT_MODEL = 'mistralai/Mistral-7B-Instruct-v0.3';
-const DEFAULT_BASE_URL = 'https://api-inference.huggingface.co';
+const DEFAULT_MODEL = 'Qwen/Qwen2.5-7B-Instruct';
 const DEFAULT_TEMPERATURE = 0.7;
 const DEFAULT_MAX_TOKENS = 2048;
+
+// Singleton instance
+let hfInstance: HfInference | null = null;
+
+/**
+ * Get or create the HfInference instance
+ */
+function getHfInstance(): HfInference | null {
+  if (hfInstance) return hfInstance;
+
+  const apiKey = process.env.HF_API_KEY;
+  if (!apiKey) return null;
+
+  hfInstance = new HfInference(apiKey);
+  return hfInstance;
+}
 
 /**
  * Check if Hugging Face API is configured (has API key)
@@ -55,18 +71,15 @@ export function getHfModel(): string {
 
 /**
  * Call the Hugging Face Inference API for chat completions.
- *
- * Uses the OpenAI-compatible endpoint, so the message format
- * is exactly the same as OpenAI's Chat API.
+ * Uses the official @huggingface/inference SDK which handles
+ * routing to the correct provider automatically.
  */
 export async function hfChatCompletion(
   options: ChatCompletionOptions
 ): Promise<ChatCompletionResponse> {
-  const apiKey = process.env.HF_API_KEY;
-  const model = getHfModel();
-  const baseUrl = process.env.HF_BASE_URL || DEFAULT_BASE_URL;
+  const hf = getHfInstance();
 
-  if (!apiKey) {
+  if (!hf) {
     return {
       success: false,
       content: '',
@@ -74,87 +87,60 @@ export async function hfChatCompletion(
     };
   }
 
-  const url = `${baseUrl}/v1/chat/completions`;
-
-  const body = {
-    model,
-    messages: options.messages,
-    temperature: options.temperature ?? DEFAULT_TEMPERATURE,
-    max_tokens: options.max_tokens ?? DEFAULT_MAX_TOKENS,
-    top_p: options.top_p ?? 0.95,
-  };
+  const model = getHfModel();
 
   try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(body),
+    const response = await hf.chatCompletion({
+      model,
+      messages: options.messages,
+      temperature: options.temperature ?? DEFAULT_TEMPERATURE,
+      max_tokens: options.max_tokens ?? DEFAULT_MAX_TOKENS,
+      top_p: options.top_p ?? 0.95,
     });
 
-    if (!response.ok) {
-      let errorDetail = `HTTP ${response.status}`;
-      try {
-        const errorData = await response.json();
-        errorDetail = errorData.error || errorData.message || errorDetail;
-      } catch {
-        // Use default error message
-      }
-
-      // Handle specific HF errors
-      if (response.status === 401) {
-        return {
-          success: false,
-          content: '',
-          error: 'Token Hugging Face tidak valid. Periksa HF_API_KEY Anda.',
-        };
-      }
-
-      if (response.status === 429) {
-        return {
-          success: false,
-          content: '',
-          error: 'Rate limit tercapai. Silakan tunggu beberapa saat dan coba lagi.',
-        };
-      }
-
-      if (response.status === 503) {
-        return {
-          success: false,
-          content: '',
-          error: 'Model sedang loading. Silakan coba lagi dalam beberapa detik.',
-        };
-      }
-
-      return {
-        success: false,
-        content: '',
-        error: `Hugging Face API error: ${errorDetail}`,
-      };
-    }
-
-    const data = await response.json();
-
-    const content = data.choices?.[0]?.message?.content || '';
-    const usage = data.usage
-      ? {
-          prompt_tokens: data.usage.prompt_tokens || 0,
-          completion_tokens: data.usage.completion_tokens || 0,
-          total_tokens: data.usage.total_tokens || 0,
-        }
-      : undefined;
+    const content = response.choices?.[0]?.message?.content || '';
 
     return {
       success: true,
       content,
-      model: data.model || model,
-      usage,
+      model: response.model || model,
+      usage: response.usage
+        ? {
+            prompt_tokens: response.usage.prompt_tokens || 0,
+            completion_tokens: response.usage.completion_tokens || 0,
+            total_tokens: response.usage.total_tokens || 0,
+          }
+        : undefined,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('HF Chat Completion error:', message);
+
+    // Handle specific HF errors
+    if (message.includes('401') || message.includes('Unauthorized')) {
+      return {
+        success: false,
+        content: '',
+        error: 'Token Hugging Face tidak valid. Periksa HF_API_KEY Anda.',
+      };
+    }
+
+    if (message.includes('429') || message.includes('Rate limit')) {
+      return {
+        success: false,
+        content: '',
+        error: 'Rate limit tercapai. Silakan tunggu beberapa saat dan coba lagi.',
+      };
+    }
+
+    if (message.includes('503') || message.includes('loading') || message.includes('Model is currently loading')) {
+      return {
+        success: false,
+        content: '',
+        error: 'Model sedang loading. Silakan coba lagi dalam beberapa detik.',
+      };
+    }
+
     return {
       success: false,
       content: '',

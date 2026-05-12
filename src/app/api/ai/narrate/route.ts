@@ -1,8 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getZAI } from '@/lib/ai-sdk';
+import { hfChatCompletion, isHfConfigured } from '@/lib/hf-ai';
 
 export async function POST(request: NextRequest) {
   try {
+    // Check if Hugging Face API is configured
+    if (!isHfConfigured()) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Layanan AI belum dikonfigurasi',
+          detail: 'HF_API_KEY belum diset. Silakan tambahkan token Hugging Face API di environment variables.',
+        },
+        { status: 503 }
+      );
+    }
+
     const body = await request.json();
     const { statsContext, type = 'summary' } = body as {
       statsContext?: Record<string, unknown>;
@@ -13,19 +25,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'statsContext is required' },
         { status: 400 }
-      );
-    }
-
-    const zai = await getZAI();
-
-    if (!zai) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Layanan AI tidak tersedia',
-          detail: 'Konfigurasi ZAI SDK tidak ditemukan.',
-        },
-        { status: 503 }
       );
     }
 
@@ -70,7 +69,7 @@ Fokuskan pada:
 
     const systemPrompt = prompts[type] || prompts.summary;
 
-    const completion = await zai.chat.completions.create({
+    const result = await hfChatCompletion({
       messages: [
         { role: 'system', content: systemPrompt },
         {
@@ -78,10 +77,23 @@ Fokuskan pada:
           content: `Berikut data produksi perikanan budidaya Kabupaten Mempawah:\n\n${JSON.stringify(statsContext, null, 2)}`,
         },
       ],
+      temperature: 0.7,
+      max_tokens: 2048,
     });
 
-    const narrative = completion.choices[0]?.message?.content ||
-      'Tidak dapat menghasilkan narasi saat ini.';
+    if (!result.success) {
+      console.error('HF Narrate error:', result.error);
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Gagal menghasilkan narasi',
+          detail: result.error,
+        },
+        { status: 500 }
+      );
+    }
+
+    const narrative = result.content || 'Tidak dapat menghasilkan narasi saat ini.';
 
     return NextResponse.json({
       success: true,
@@ -97,3 +109,6 @@ Fokuskan pada:
     );
   }
 }
+
+// Force dynamic rendering (no caching)
+export const dynamic = 'force-dynamic';
