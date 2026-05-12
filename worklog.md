@@ -220,3 +220,35 @@ Stage Summary:
 - Fix: Changed to gemini-2.0-flash (15 RPM, 1500 RPD free tier)
 - Added model fallback: primary → gemini-2.5-flash-preview → gemini-1.5-flash
 - User needs to update GEMINI_MODEL env var on Vercel from flash-lite to flash
+
+---
+Task ID: 2
+Agent: main
+Task: Add Groq as fallback AI provider
+
+Work Log:
+- Installed groq-sdk@1.2.0 package
+- Created src/lib/groq-ai.ts — Groq client module with:
+  - OpenAI-compatible API (uses standard system/user/assistant roles)
+  - Default model: llama-3.3-70b-versatile (30 RPM, 6000 RPD free tier)
+  - Fallback models: llama-3.1-8b-instant, gemma2-9b-it
+  - Retry logic with exponential backoff on rate limits
+  - Model fallback on 404/unavailable errors
+- Updated src/lib/ai-sdk.ts — 3-tier fallback chain:
+  1. Google Gemini (primary, works on Vercel)
+  2. Groq (ultra-fast fallback, works on Vercel)
+  3. z-ai (local dev only)
+  - Added getAIProviderStatus() helper
+  - Improved error collection across all providers
+- Updated src/app/api/ai/route.ts — shows both providers in status
+- Updated .env with GROQ_API_KEY and GROQ_MODEL placeholders
+- Tested /api/ai endpoint — working correctly
+- Committed and pushed (132a3b5)
+
+Stage Summary:
+- Groq integration complete, code pushed to GitHub
+- User needs to:
+  1. Create Groq API key at https://console.groq.com (free)
+  2. Add GROQ_API_KEY env var on Vercel
+  3. Also update GEMINI_MODEL from flash-lite to flash on Vercel
+- Fallback chain: Gemini → Groq → z-ai ensures maximum uptime
