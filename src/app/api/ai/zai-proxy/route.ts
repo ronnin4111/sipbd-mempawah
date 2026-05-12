@@ -1,18 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 
 /**
- * ZAI API Proxy Route
+ * ZAI API Proxy Route (Legacy - kept for backward compatibility)
  *
- * Proxies chat completion requests to the ZAI API.
+ * NOTE: The main AI features now use Hugging Face Inference API via @huggingface/inference.
+ * This proxy route is kept as a fallback for local development only.
+ *
  * Configuration is read from:
  * 1. Environment variables (ZAI_BASE_URL, ZAI_API_KEY, etc.)
  * 2. /etc/.z-ai-config file (fallback for local dev)
- *
- * This allows the AI features to work on both:
- * - Local dev (where .z-ai-config exists)
- * - Vercel (where env vars must be set)
  */
 
 interface ZAIConfig {
@@ -40,7 +39,7 @@ function loadZAIConfig(): ZAIConfig | null {
   // Try reading from config file (local dev)
   const configPaths = [
     path.join(process.cwd(), '.z-ai-config'),
-    path.join(require('os').homedir(), '.z-ai-config'),
+    path.join(os.homedir(), '.z-ai-config'),
     '/etc/.z-ai-config',
   ];
 
