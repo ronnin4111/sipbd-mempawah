@@ -14,11 +14,11 @@ interface Message {
 
 const QUICK_PROMPTS = [
   '📊 Ringkasan produksi tahun ini',
+  '👥 Daftar kelompok pembudidaya',
   '📈 Kecamatan mana yang produksinya tertinggi?',
   '🐟 Jenis ikan apa yang paling banyak diproduksi?',
-  '⚠️ Ada kecamatan yang perlu perhatian?',
   '📉 Bagaimana tren produksi 5 tahun terakhir?',
-  '🎯 Bagaimana pencapaian target?',
+  '🎯 Berapa jumlah RTP dan kelompok?',
 ];
 
 export function AIChatWidget() {
@@ -107,6 +107,16 @@ export function AIChatWidget() {
           }
         : null;
 
+      // Send filters so the backend can fetch data context server-side
+      const filters = {
+        years: years.length > 0 ? years : [],
+        kecamatan: kecamatan.length > 0 ? kecamatan : [],
+        desa: desa.length > 0 ? desa : [],
+        fishType: fishType.length > 0 ? fishType : [],
+        containerType: containerType.length > 0 ? containerType : [],
+        businessType: businessType.length > 0 ? businessType : [],
+      };
+
       const response = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -114,12 +124,13 @@ export function AIChatWidget() {
           message: text.trim(),
           messages: history,
           statsContext,
+          filters,
         }),
       });
 
       const data = await response.json();
 
-      if (data.success) {
+      if (data.success && data.response) {
         const aiMessage: Message = {
           role: 'assistant',
           content: data.response,
@@ -127,14 +138,18 @@ export function AIChatWidget() {
         };
         setMessages((prev) => [...prev, aiMessage]);
       } else {
+        const errorDetail = data.detail || data.error || '';
         const errorMessage: Message = {
           role: 'assistant',
-          content: 'Maaf, terjadi kesalahan saat memproses pertanyaan Anda. Silakan coba lagi. 🙏',
+          content: errorDetail
+            ? `Maaf, terjadi kesalahan: ${errorDetail}. Silakan coba lagi. 🙏`
+            : 'Maaf, terjadi kesalahan saat memproses pertanyaan Anda. Silakan coba lagi. 🙏',
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, errorMessage]);
       }
-    } catch {
+    } catch (err) {
+      console.error('Chat fetch error:', err);
       const errorMessage: Message = {
         role: 'assistant',
         content: 'Maaf, koneksi AI sedang bermasalah. Silakan coba lagi dalam beberapa saat. 🙏',
@@ -155,6 +170,39 @@ export function AIChatWidget() {
 
   const clearChat = () => {
     setMessages([]);
+  };
+
+  // Format message content with simple markdown-like rendering
+  const formatContent = (content: string) => {
+    // Split by newlines and handle bullet points
+    return content.split('\n').map((line, i) => {
+      // Bold text
+      const formattedLine = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+      // Bullet points
+      if (line.trimStart().startsWith('- ') || line.trimStart().startsWith('• ') || line.trimStart().startsWith('* ')) {
+        return (
+          <div key={i} className="flex gap-1.5 ml-1">
+            <span className="shrink-0">•</span>
+            <span dangerouslySetInnerHTML={{ __html: formattedLine.replace(/^[\s]*[-•*]\s*/, '') }} />
+          </div>
+        );
+      }
+      // Numbered lists
+      const numMatch = line.trimStart().match(/^(\d+)\.\s/);
+      if (numMatch) {
+        return (
+          <div key={i} className="flex gap-1.5 ml-1">
+            <span className="shrink-0">{numMatch[1]}.</span>
+            <span dangerouslySetInnerHTML={{ __html: formattedLine.replace(/^\s*\d+\.\s/, '') }} />
+          </div>
+        );
+      }
+      // Empty line = paragraph break
+      if (line.trim() === '') {
+        return <div key={i} className="h-2" />;
+      }
+      return <div key={i} dangerouslySetInnerHTML={{ __html: formattedLine }} />;
+    });
   };
 
   return (
@@ -189,9 +237,9 @@ export function AIChatWidget() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
             transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-            className="fixed bottom-6 right-6 z-50 w-[380px] max-w-[calc(100vw-48px)] flex flex-col rounded-2xl overflow-hidden border"
+            className="fixed bottom-6 right-6 z-50 w-[400px] max-w-[calc(100vw-48px)] flex flex-col rounded-2xl overflow-hidden border"
             style={{
-              height: 'min(600px, calc(100vh - 120px))',
+              height: 'min(620px, calc(100vh - 120px))',
               background: 'var(--background)',
               borderColor: 'var(--border)',
               boxShadow: '0 8px 40px rgba(0,0,0,0.15), 0 0 0 1px rgba(6,182,212,0.1)',
@@ -231,7 +279,7 @@ export function AIChatWidget() {
             <div className="flex-1 overflow-y-auto p-4 space-y-4" style={{ scrollbarWidth: 'thin' }}>
               {/* Welcome message */}
               {messages.length === 0 && (
-                <div className="text-center py-6">
+                <div className="text-center py-4">
                   <div
                     className="w-14 h-14 rounded-2xl mx-auto mb-3 flex items-center justify-center"
                     style={{ background: 'linear-gradient(135deg, #06B6D4, #0891B2)' }}
@@ -242,7 +290,7 @@ export function AIChatWidget() {
                     Halo! Saya Asisten AI 👋
                   </p>
                   <p className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
-                    Tanyakan apa saja tentang data perikanan budidaya Kab. Mempawah
+                    Tanyakan tentang data perikanan budidaya, kelompok, pembudidaya, dan produksi di Kab. Mempawah
                   </p>
 
                   {/* Quick prompts */}
@@ -292,7 +340,11 @@ export function AIChatWidget() {
                       color: msg.role === 'user' ? 'white' : 'var(--foreground)',
                     }}
                   >
-                    <div className="whitespace-pre-wrap">{msg.content}</div>
+                    {msg.role === 'user' ? (
+                      <div className="whitespace-pre-wrap">{msg.content}</div>
+                    ) : (
+                      <div className="space-y-0.5">{formatContent(msg.content)}</div>
+                    )}
                   </div>
                   {msg.role === 'user' && (
                     <div
@@ -346,7 +398,7 @@ export function AIChatWidget() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="Tanyakan tentang data perikanan..."
+                  placeholder="Tanyakan tentang kelompok, produksi, RTP..."
                   className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
                   style={{ color: 'var(--foreground)' }}
                   disabled={isLoading}

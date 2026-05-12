@@ -71,13 +71,12 @@ Fokuskan pada:
 
     const completion = await zai.chat.completions.create({
       messages: [
-        { role: 'assistant', content: systemPrompt },
+        { role: 'system', content: systemPrompt },
         {
           role: 'user',
           content: `Berikut data produksi perikanan budidaya Kabupaten Mempawah:\n\n${JSON.stringify(statsContext, null, 2)}`,
         },
       ],
-      thinking: { type: 'disabled' },
     });
 
     const narrative = completion.choices[0]?.message?.content ||
