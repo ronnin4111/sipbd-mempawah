@@ -7,11 +7,8 @@ import { generateFarmerId } from '@/lib/farmer-id';
  * Compact system prompt for SIPBD AI assistant.
  * Option B: Flexible — prioritize fishery, but can answer general questions.
  *
- * OPTIMIZED: Keep prompt under ~4000 tokens to stay within Gemini free tier limits.
- * Strategy: Only include relevant data based on the user's question type.
- * - General questions → summary stats only
- * - Specific group/farmer → targeted search results
- * - Production/trend → stats context
+ * IMPORTANT: Do NOT hardcode kecamatan/fish types/etc — derive from data context.
+ * The data context will provide the actual lists from the database.
  */
 const BASE_SYSTEM_PROMPT = `Anda adalah Asisten AI Perikanan Budidaya (SIPBD AI), asisten ahli Dinas Pertanian Ketahanan Pangan dan Perikanan Kabupaten Mempawah, Kalimantan Barat.
 
@@ -24,18 +21,18 @@ Anda juga fleksibel:
 - Pertanyaan umum tentang budidaya ikan, akuakultur, dll → jawab dengan pengetahuan Anda
 - Pertanyaan di luar topik → jawab singkat, arahkan kembali ke perikanan budidaya 😊
 
-Aturan respons:
+Aturan respons SANGAT PENTING:
 - WAJIB bahasa Indonesia
 - Angka format Indonesia (1.234.567 kg, Rp 25.000)
-- JANGAN mengarang angka — jika data tidak tersedia, katakan jujur
-- Jika nama kelompok/pembudidaya tidak ditemukan, sarankan nama mirip
+- ⚠️ JANGAN MENGARANG DATA — HANYA gunakan data yang ada di DATA CONTEXT
+- ⚠️ JANGAN menyebutkan nama kecamatan/kelompok/ikan yang TIDAK ada di DATA CONTEXT
+- Jika data tidak tersedia di konteks, katakan jujur "Data tidak tersedia"
+- Jika nama kelompok/pembudidaya tidak ditemukan, sarankan nama mirip dari DATA CONTEXT
+- Daftar kelompok/kecamatan/desa HANYA dari data yang disediakan — JANGAN tebak
 
-Pengetahuan domain:
-- 9 kecamatan: Siantan, Sengah Temila, Mempawah Hilir, Mempawah Hulu, Ledo, Toho, Mandor, Sungai Kunyit, Jawai
-- Jenis usaha: Pembesaran (Kg) & Pembenihan (Ekor)
-- Jenis ikan: Mas, Nila, Lele, Patin, Jelawat, Bawal Air Tawar, Gurame, Vaname, Lainnya
-- Wadah: KJA, Kolam Air Tenang, Tambak, Bioflok, KJT, Bak Semen, Bak Terpal, Kolam, Kolam Terpal, Keramba, Sawah
-- RTP=Rumah Tangga Perikanan, KUSUKA=Kartu Identitas Usaha Perikanan, CPIB=Cara Pembenihan Ikan Baik, CBIB=Cara Budidaya Ikan Baik
+Istilah:
+- RTP=Rumah Tangga Perikanan, KUSUKA=Kartu Identitas Usaha Perikanan
+- CPIB=Cara Pembenihan Ikan Baik, CBIB=Cara Budidaya Ikan Baik
 - Kelompok=poktan/pokdakan (kelompok pembudidaya ikan), Anggota=jumlah anggota kelompok`;
 
 /**
@@ -48,7 +45,9 @@ function classifyQuestion(message: string): 'specific' | 'stats' | 'general' {
   const specificPatterns = [
     /kelompok\s+\w+/i, /anggota\s+kelompok/i, /pembudidaya\s+\w+/i,
     /siapa\s+saja/i, /daftar\s+anggota/i, /nama\s+kelompok/i,
-    /grup\s+\w+/i,
+    /grup\s+\w+/i, /semua\s+kelompok/i, /seluruh\s+kelompok/i,
+    /tampilkan\s+semua/i, /tampilkan\s+seluruh/i, /daftar\s+kelompok/i,
+    /berapa\s+kelompok/i, /berapa\s+jumlah\s+kelompok/i,
   ];
   if (specificPatterns.some(p => p.test(lower))) return 'specific';
 
@@ -98,6 +97,7 @@ function extractSearchTerms(message: string): string[] {
     'kusuka', 'cpib', 'cbib', 'halo', 'hai', 'hello', 'hi', 'tolong',
     'bantu', 'jelaskan', 'sebutkan', 'daftar', 'informasi', 'tentang',
     'kabupaten', 'mempawah', 'dinas', 'perikanan', 'budidaya',
+    'seluruh', 'tampilkan', 'sebutkan',
   ]);
 
   const words = message.split(/\s+/);
@@ -112,8 +112,159 @@ function extractSearchTerms(message: string): string[] {
 }
 
 /**
- * Fetch targeted search results — compact format to save tokens.
- * Only called when user asks about specific group/farmer.
+ * Fetch comprehensive data context — includes ALL groups with full details.
+ * No artificial limit on group count so AI can answer "berapa total" and
+ * "tampilkan semua" accurately.
+ */
+async function fetchFullDataContext(filters: {
+  years: string[];
+  kecamatan: string[];
+  desa: string[];
+  fishType: string[];
+  containerType: string[];
+  businessType: string[];
+}): Promise<{
+  dataContext: string;
+  kecamatanList: string[];
+  totalGroups: number;
+  totalFarmers: number;
+}> {
+  try {
+    const where: Record<string, unknown> = {};
+
+    if (filters.years.length > 0) {
+      where.year = { in: filters.years.map(Number).filter(n => !isNaN(n)) };
+    } else {
+      where.year = new Date().getFullYear();
+    }
+
+    if (filters.kecamatan.length > 0) where.kecamatan = { in: filters.kecamatan };
+    if (filters.desa.length > 0) where.desa = { in: filters.desa };
+    if (filters.fishType.length > 0) where.fishType = { in: filters.fishType };
+    if (filters.businessType.length > 0) where.businessType = { in: filters.businessType };
+
+    const records = await db.fishFarm.findMany({ where });
+
+    if (records.length === 0) {
+      return {
+        dataContext: '\n=== DATA ===\nTidak ada data untuk filter yang dipilih.',
+        kecamatanList: [],
+        totalGroups: 0,
+        totalFarmers: 0,
+      };
+    }
+
+    // Build comprehensive group data
+    const groupMap = new Map<string, {
+      name: string; kec: string; desa: string;
+      fishTypes: Set<string>; businessTypes: Set<string>;
+      memberCount: number; rtpCount: number; kusukaCount: number;
+    }>();
+    const farmerLatestByGroup = new Map<string, Map<string, typeof records[0]>>();
+    const sortedDesc = [...records].sort((a, b) => b.year - a.year);
+
+    // Also build all-farmer latest map for total farmer count
+    const allFarmerLatest = new Map<string, typeof records[0]>();
+
+    records.forEach(r => {
+      if (!r.groupName?.trim()) return;
+      const key = `${r.groupName.trim().toLowerCase()}|${r.kecamatan}|${r.desa}`;
+      if (!groupMap.has(key)) {
+        groupMap.set(key, {
+          name: r.groupName.trim(), kec: r.kecamatan, desa: r.desa,
+          fishTypes: new Set(), businessTypes: new Set(),
+          memberCount: 0, rtpCount: 0, kusukaCount: 0,
+        });
+      }
+      groupMap.get(key)!.fishTypes.add(r.fishType);
+      groupMap.get(key)!.businessTypes.add(r.businessType);
+
+      if (!farmerLatestByGroup.has(key)) farmerLatestByGroup.set(key, new Map());
+      const fid = r.farmerId || generateFarmerId({
+        farmerName: r.farmerName || '', groupName: r.groupName || '',
+        kecamatan: r.kecamatan || '', desa: r.desa || '',
+      });
+      if (!farmerLatestByGroup.get(key)!.has(fid)) {
+        farmerLatestByGroup.get(key)!.set(fid, r);
+      }
+      if (!allFarmerLatest.has(fid)) {
+        allFarmerLatest.set(fid, r);
+      }
+    });
+
+    // Calculate member/rtp/kusuka counts per group
+    for (const [key, group] of groupMap) {
+      const farmerMap = farmerLatestByGroup.get(key);
+      if (farmerMap) {
+        let mc = 0, rc = 0, kc = 0;
+        for (const r of farmerMap.values()) {
+          mc += r.farmerCount;
+          rc += r.rtpCount;
+          if (/^\d{16}$/.test(String(r.kusuka || '').trim())) kc++;
+        }
+        group.memberCount = mc;
+        group.rtpCount = rc;
+        group.kusukaCount = kc;
+      }
+    }
+
+    // Derive kecamatan list from actual data
+    const kecList = [...new Set(records.map(r => r.kecamatan))].sort();
+    const desaByKec = new Map<string, Set<string>>();
+    records.forEach(r => {
+      if (!desaByKec.has(r.kecamatan)) desaByKec.set(r.kecamatan, new Set());
+      desaByKec.get(r.kecamatan)!.add(r.desa);
+    });
+
+    const fishTypeList = [...new Set(records.map(r => r.fishType))].sort();
+    const businessTypeList = [...new Set(records.map(r => r.businessType))].sort();
+    const containerTypeList = [...new Set(records.map(r => r.containerType))].sort();
+
+    // Build COMPLETE group list — one line per group (compact format)
+    const sortedGroups = Array.from(groupMap.values())
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    const groupLines = sortedGroups.map(g =>
+      `${g.name} (${g.kec}/${g.desa}) ${g.memberCount}org ${g.rtpCount}rtp ${g.kusukaCount}kusuka [${[...g.fishTypes].join(',')}]`
+    );
+
+    const totalGroups = groupMap.size;
+    const totalFarmers = allFarmerLatest.size;
+
+    // Build kecamatan → desa mapping
+    const kecDesaLines: string[] = [];
+    for (const [kec, desas] of desaByKec) {
+      kecDesaLines.push(`${kec}: ${[...desas].sort().join(', ')}`);
+    }
+
+    const dataContext = `\n=== DATA CONTEXT (WAJIB: gunakan HANYA data ini, jangan mengarang) ===
+Total kelompok: ${totalGroups}
+Total pembudidaya: ${totalFarmers}
+Kecamatan (${kecList.length}): ${kecList.join(', ')}
+Desa per kecamatan:
+${kecDesaLines.join('\n')}
+Jenis ikan: ${fishTypeList.join(', ')}
+Jenis usaha: ${businessTypeList.join(', ')}
+Wadah budidaya: ${containerTypeList.join(', ')}
+
+DAFTAR KELOMPOK LENGKAP (${totalGroups} kelompok — nama | kec/desa | anggota | rtp | kusuka | ikan):
+${groupLines.join('\n')}`;
+
+    return { dataContext, kecamatanList: kecList, totalGroups, totalFarmers };
+  } catch (error) {
+    console.error('Failed to fetch data context:', error);
+    return {
+      dataContext: '\n=== DATA ===\nGagal memuat data. Jawab berdasarkan pengetahuan umum saja.',
+      kecamatanList: [],
+      totalGroups: 0,
+      totalFarmers: 0,
+    };
+  }
+}
+
+/**
+ * Fetch targeted search results with FULL member details.
+ * Returns all matching groups and their members.
  */
 async function fetchTargetedResults(searchTerms: string[]): Promise<string> {
   if (searchTerms.length === 0) return '';
@@ -126,7 +277,8 @@ async function fetchTargetedResults(searchTerms: string[]): Promise<string> {
 
     const groupMap = new Map<string, {
       name: string; kecamatan: string; desa: string;
-      fishTypes: Set<string>; memberCount: number; rtpCount: number;
+      fishTypes: Set<string>; businessTypes: Set<string>;
+      memberCount: number; rtpCount: number;
     }>();
     const farmerLatestByGroup = new Map<string, Map<string, typeof records[0]>>();
     const sortedDesc = [...records].sort((a, b) => b.year - a.year);
@@ -137,10 +289,12 @@ async function fetchTargetedResults(searchTerms: string[]): Promise<string> {
       if (!groupMap.has(key)) {
         groupMap.set(key, {
           name: r.groupName.trim(), kecamatan: r.kecamatan, desa: r.desa,
-          fishTypes: new Set(), memberCount: 0, rtpCount: 0,
+          fishTypes: new Set(), businessTypes: new Set(),
+          memberCount: 0, rtpCount: 0,
         });
       }
       groupMap.get(key)!.fishTypes.add(r.fishType);
+      groupMap.get(key)!.businessTypes.add(r.businessType);
 
       if (!farmerLatestByGroup.has(key)) farmerLatestByGroup.set(key, new Map());
       const fid = r.farmerId || generateFarmerId({
@@ -156,18 +310,17 @@ async function fetchTargetedResults(searchTerms: string[]): Promise<string> {
     for (const [key, group] of groupMap) {
       const farmerMap = farmerLatestByGroup.get(key);
       if (farmerMap) {
-        let mc = 0, rc = 0, kc = 0;
+        let mc = 0, rc = 0;
         for (const r of farmerMap.values()) {
           mc += r.farmerCount;
           rc += r.rtpCount;
-          if (/^\d{16}$/.test(String(r.kusuka || '').trim())) kc++;
         }
         group.memberCount = mc;
         group.rtpCount = rc;
       }
     }
 
-    // Search for matching groups — COMPACT FORMAT
+    // Search for matching groups — FULL details with ALL members
     const foundGroups: string[] = [];
     const foundFarmers: string[] = [];
     const matchedGroupKeys = new Set<string>();
@@ -179,12 +332,13 @@ async function fetchTargetedResults(searchTerms: string[]): Promise<string> {
         if (
           group.name.toLowerCase().includes(q) ||
           group.kecamatan.toLowerCase().includes(q) ||
-          group.desa.toLowerCase().includes(q)
+          group.desa.toLowerCase().includes(q) ||
+          [...group.fishTypes].some(f => f.toLowerCase().includes(q))
         ) {
           if (matchedGroupKeys.has(key)) continue;
           matchedGroupKeys.add(key);
 
-          // Get members of this group
+          // Get ALL members of this group
           const groupFarmers = farmerLatestByGroup.get(key);
           const memberNames: string[] = [];
           if (groupFarmers) {
@@ -194,7 +348,7 @@ async function fetchTargetedResults(searchTerms: string[]): Promise<string> {
           }
 
           foundGroups.push(
-            `Kelompok: ${group.name} | Kec: ${group.kecamatan} | Desa: ${group.desa} | Anggota: ${group.memberCount} | RTP: ${group.rtpCount} | Ikan: ${[...group.fishTypes].join(',')}\n  Anggota: ${memberNames.join('; ')}`
+            `Kelompok: ${group.name} | Kec: ${group.kecamatan} | Desa: ${group.desa} | Anggota: ${group.memberCount} | RTP: ${group.rtpCount} | Ikan: ${[...group.fishTypes].join(',')} | Usaha: ${[...group.businessTypes].join(',')}\n  Daftar anggota: ${memberNames.join('; ')}`
           );
         }
       }
@@ -231,103 +385,11 @@ async function fetchTargetedResults(searchTerms: string[]): Promise<string> {
       result += '\nKelompok ditemukan:\n' + foundGroups.join('\n');
     }
     if (foundFarmers.length > 0) {
-      result += '\nPembudidaya ditemukan:\n' + foundFarmers.slice(0, 20).join('\n');
+      result += '\nPembudidaya ditemukan:\n' + foundFarmers.slice(0, 50).join('\n');
     }
     return result;
   } catch (error) {
     console.error('Failed to fetch targeted results:', error);
-    return '';
-  }
-}
-
-/**
- * Fetch compact data context — only include summary stats and group name list.
- * No farmer details unless specifically asked (handled by targetedResults).
- */
-async function fetchCompactDataContext(filters: {
-  years: string[];
-  kecamatan: string[];
-  desa: string[];
-  fishType: string[];
-  containerType: string[];
-  businessType: string[];
-}): Promise<string> {
-  try {
-    const where: Record<string, unknown> = {};
-
-    if (filters.years.length > 0) {
-      where.year = { in: filters.years.map(Number).filter(n => !isNaN(n)) };
-    } else {
-      where.year = new Date().getFullYear();
-    }
-
-    if (filters.kecamatan.length > 0) where.kecamatan = { in: filters.kecamatan };
-    if (filters.desa.length > 0) where.desa = { in: filters.desa };
-    if (filters.fishType.length > 0) where.fishType = { in: filters.fishType };
-    if (filters.businessType.length > 0) where.businessType = { in: filters.businessType };
-
-    const records = await db.fishFarm.findMany({ where });
-
-    if (records.length === 0) {
-      return '\n=== DATA ===\nTidak ada data untuk filter yang dipilih.';
-    }
-
-    // Build compact group list
-    const groupMap = new Map<string, { name: string; kec: string; desa: string; anggota: number; rtp: number; fishTypes: Set<string> }>();
-    const farmerLatestByGroup = new Map<string, Map<string, typeof records[0]>>();
-    const sortedDesc = [...records].sort((a, b) => b.year - a.year);
-
-    records.forEach(r => {
-      if (!r.groupName?.trim()) return;
-      const key = `${r.groupName.trim().toLowerCase()}|${r.kecamatan}|${r.desa}`;
-      if (!groupMap.has(key)) {
-        groupMap.set(key, {
-          name: r.groupName.trim(), kec: r.kecamatan, desa: r.desa,
-          anggota: 0, rtp: 0, fishTypes: new Set(),
-        });
-      }
-      groupMap.get(key)!.fishTypes.add(r.fishType);
-
-      if (!farmerLatestByGroup.has(key)) farmerLatestByGroup.set(key, new Map());
-      const fid = r.farmerId || generateFarmerId({
-        farmerName: r.farmerName || '', groupName: r.groupName || '',
-        kecamatan: r.kecamatan || '', desa: r.desa || '',
-      });
-      if (!farmerLatestByGroup.get(key)!.has(fid)) {
-        farmerLatestByGroup.get(key)!.set(fid, r);
-      }
-    });
-
-    for (const [key, group] of groupMap) {
-      const farmerMap = farmerLatestByGroup.get(key);
-      if (farmerMap) {
-        let mc = 0, rc = 0, kc = 0;
-        for (const r of farmerMap.values()) {
-          mc += r.farmerCount;
-          rc += r.rtpCount;
-          if (/^\d{16}$/.test(String(r.kusuka || '').trim())) kc++;
-        }
-        group.anggota = mc;
-        group.rtp = rc;
-      }
-    }
-
-    // Compact format: one line per group
-    const groupLines = Array.from(groupMap.values())
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .slice(0, 30) // Limit to 30 groups to save tokens
-      .map(g => `${g.name} (${g.kec}/${g.desa}) ${g.anggota}org ${g.rtp}rtp [${[...g.fishTypes].join(',')}]`);
-
-    const kecList = [...new Set(records.map(r => r.kecamatan))].sort();
-    const totalGroups = groupMap.size;
-
-    return `\n=== DATA CONTEXT ===
-Total kelompok: ${totalGroups} (menampilkan ${Math.min(30, totalGroups)})
-Kecamatan: ${kecList.join(', ')}
-Daftar kelompok (nama | kec/desa | anggota | rtp | ikan):
-${groupLines.join('\n')}`;
-  } catch (error) {
-    console.error('Failed to fetch data context:', error);
     return '';
   }
 }
@@ -444,21 +506,19 @@ export async function POST(request: NextRequest) {
     // Build system prompt based on question type
     let systemPrompt = BASE_SYSTEM_PROMPT;
 
+    // ALWAYS add full data context — AI needs accurate data for ALL question types
+    const { dataContext, totalGroups } = await fetchFullDataContext(filters || {
+      years: [], kecamatan: [], desa: [], fishType: [],
+      containerType: [], businessType: [],
+    });
+    systemPrompt += dataContext;
+
     // Add stats context (compact) for stats/general questions
     if (questionType === 'stats' || questionType === 'general') {
       systemPrompt += buildCompactStats(statsContext);
     }
 
-    // Always add compact data context for data-aware answers
-    if (questionType !== 'general') {
-      const dataContext = await fetchCompactDataContext(filters || {
-        years: [], kecamatan: [], desa: [], fishType: [],
-        containerType: [], businessType: [],
-      });
-      systemPrompt += dataContext;
-    }
-
-    // Add targeted results for specific questions
+    // Add targeted results for specific questions (group/farmer details)
     if (questionType === 'specific' || searchTerms.length > 0) {
       const targeted = await fetchTargetedResults(searchTerms);
       if (targeted) systemPrompt += targeted;
@@ -467,7 +527,7 @@ export async function POST(request: NextRequest) {
     // Log prompt size for debugging
     const promptChars = systemPrompt.length;
     const estimatedTokens = Math.ceil(promptChars / 4);
-    console.log(`AI Chat: questionType=${questionType}, promptChars=${promptChars}, estTokens=${estimatedTokens}, searchTerms=${searchTerms.join(',')}`);
+    console.log(`AI Chat: questionType=${questionType}, promptChars=${promptChars}, estTokens=${estimatedTokens}, searchTerms=${searchTerms.join(',')}, totalGroups=${totalGroups}`);
 
     // Build conversation messages
     const chatMessages = [
@@ -481,7 +541,7 @@ export async function POST(request: NextRequest) {
       { role: 'user' as const, content: message },
     ];
 
-    // Call AI (Gemini primary, z-ai fallback)
+    // Call AI (Gemini primary → Groq fallback → z-ai last resort)
     const result = await callAI({
       messages: chatMessages,
       temperature: 0.7,
