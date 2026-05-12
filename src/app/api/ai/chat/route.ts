@@ -1,17 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import ZAI from 'z-ai-web-dev-sdk';
+import { getZAI } from '@/lib/ai-sdk';
 import { db } from '@/lib/db';
 import { generateFarmerId } from '@/lib/farmer-id';
-
-// Singleton ZAI instance — reuse across requests to avoid re-initialization
-let zaiInstance: InstanceType<typeof ZAI> | null = null;
-
-async function getZAI() {
-  if (!zaiInstance) {
-    zaiInstance = await ZAI.create();
-  }
-  return zaiInstance;
-}
 
 /**
  * Build the system prompt for the SIPBD AI assistant.
@@ -299,6 +289,17 @@ export async function POST(request: NextRequest) {
     }
 
     const zai = await getZAI();
+
+    if (!zai) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Layanan AI tidak tersedia',
+          detail: 'Konfigurasi ZAI SDK tidak ditemukan. Fitur AI hanya tersedia di lingkungan yang memiliki akses ke ZAI API.',
+        },
+        { status: 503 }
+      );
+    }
 
     // Fetch data context from database (server-side, no HTTP overhead)
     const dataContext = await fetchDataContext(filters || {

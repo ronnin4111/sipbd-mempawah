@@ -1,15 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import ZAI from 'z-ai-web-dev-sdk';
-
-// Singleton ZAI instance
-let zaiInstance: InstanceType<typeof ZAI> | null = null;
-
-async function getZAI() {
-  if (!zaiInstance) {
-    zaiInstance = await ZAI.create();
-  }
-  return zaiInstance;
-}
+import { getZAI } from '@/lib/ai-sdk';
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,6 +17,17 @@ export async function POST(request: NextRequest) {
     }
 
     const zai = await getZAI();
+
+    if (!zai) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Layanan AI tidak tersedia',
+          detail: 'Konfigurasi ZAI SDK tidak ditemukan.',
+        },
+        { status: 503 }
+      );
+    }
 
     const prompts: Record<string, string> = {
       summary: `Anda adalah narator laporan perikanan budidaya profesional. Buatkan narasi ringkasan produksi perikanan budidaya Kabupaten Mempawah berdasarkan data berikut.

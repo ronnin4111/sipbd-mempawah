@@ -3,6 +3,20 @@
 		query XTransformPort=*
 	}
 
+	@zai_api {
+		path /zai-api/*
+	}
+
+	handle @zai_api {
+		uri strip_prefix /zai-api
+		reverse_proxy 172.25.136.193:8080 {
+			header_up Host {host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
 	handle @transform_port_query {
 		reverse_proxy localhost:{query.XTransformPort} {
 			header_up Host {host}
