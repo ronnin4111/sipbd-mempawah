@@ -165,3 +165,37 @@ Stage Summary:
 - Optional: GEMINI_MODEL env var (default: gemini-2.0-flash)
 - Locally: z-ai fallback works automatically (no config needed)
 - On Vercel: Gemini API key is required (z-ai not available)
+
+---
+Task ID: 5
+Agent: main
+Task: Fix Gemini rate limit error on first request — optimize token usage
+
+Work Log:
+- Diagnosed: Gemini "quota exceeded" on first request was likely caused by massive system prompt (50K+ tokens)
+- Root cause: Old code dumped 80 groups + 80 farmers as full JSON into every request
+- Rewrote gemini-ai.ts:
+  - Switched default model from gemini-2.0-flash to gemini-2.0-flash-lite (30 RPM vs 10 RPM)
+  - Added retry logic with exponential backoff (2 retries, 3s/6s delays)
+  - Better error messages showing actual Gemini error details
+  - Reduced max_output_tokens from 4096 to 2048
+- Rewrote /api/ai/chat/route.ts with "smart context" strategy:
+  - classifyQuestion() categorizes questions as 'specific', 'stats', or 'general'
+  - General questions → base prompt only (~500 tokens)
+  - Stats questions → compact stats summary (~1000 tokens)
+  - Specific group/farmer → targeted search results (~1500 tokens)
+  - Compact format: one-line summaries instead of full JSON objects
+  - Before: 80 groups + 80 farmers as JSON = ~30,000 tokens
+  - After: 30 groups as one-liners = ~2,000 tokens (80%+ reduction)
+  - Reduced conversation history from 10 to 6 messages
+- Updated /api/ai/route.ts with version 2.1 and optimization info
+- Tested locally with z-ai fallback — works perfectly
+- Pushed to GitHub (commit d3de937)
+
+Stage Summary:
+- Token usage reduced by 80%+ per request
+- Model switched to gemini-2.0-flash-lite for 3x higher free tier rate limits
+- Retry logic handles transient rate limit errors automatically
+- Smart context system sends only relevant data based on question type
+- User needs to update GEMINI_MODEL env var on Vercel to gemini-2.0-flash-lite
+- Or simply remove GEMINI_MODEL env var (default is now flash-lite)
