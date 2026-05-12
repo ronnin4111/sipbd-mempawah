@@ -4,17 +4,17 @@
  * Uses the official @google/generative-ai SDK for reliable API access.
  * Works on both local dev and Vercel deployment.
  *
- * Google Gemini Free Tier:
- * - gemini-2.0-flash: 10 RPM, 250 RPD (shared endpoint)
- * - gemini-2.0-flash-lite: 30 RPM, 1500 RPD (recommended for high usage)
- * - gemini-2.5-flash-preview-05-20: 10 RPM (preview, newest)
+ * Google Gemini Free Tier (as of 2025):
+ * - gemini-2.0-flash: 15 RPM, 1500 RPD ✅ (RECOMMENDED - most reliable free tier)
+ * - gemini-2.5-flash-preview-05-20: 10 RPM (preview, may have limits)
+ * - gemini-2.0-flash-lite: ⚠️ quota limit may be 0 on some projects
  *
  * IMPORTANT: Free tier limits are PER API KEY, shared across all users.
  * If your key is used elsewhere, limits may be reached faster.
  *
  * Environment variables:
  * - GEMINI_API_KEY: Your Google AI Studio API key (required)
- * - GEMINI_MODEL: Model ID to use (default: gemini-2.0-flash-lite)
+ * - GEMINI_MODEL: Model ID to use (default: gemini-2.0-flash)
  */
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -43,8 +43,9 @@ export interface ChatCompletionResponse {
   };
 }
 
-// Use flash-lite for higher rate limits on free tier
-const DEFAULT_MODEL = 'gemini-2.0-flash-lite';
+// Use gemini-2.0-flash as default — reliable free tier with 15 RPM, 1500 RPD
+const DEFAULT_MODEL = 'gemini-2.0-flash';
+const FALLBACK_MODELS = ['gemini-2.5-flash-preview-05-20', 'gemini-1.5-flash'];
 const DEFAULT_TEMPERATURE = 0.7;
 const DEFAULT_MAX_TOKENS = 2048;
 const MAX_RETRIES = 2;
@@ -88,8 +89,87 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
+ * Internal helper: Try generating chat completion with a specific model.
+ * Returns the result or throws the error.
+ */
+async function tryModelChat(
+  genAI: GoogleGenerativeAI,
+  modelId: string,
+  options: ChatCompletionOptions
+): Promise<ChatCompletionResponse> {
+  // Extract system prompt if present
+  const systemMessage = options.messages.find(m => m.role === 'system');
+  const nonSystemMessages = options.messages.filter(m => m.role !== 'system');
+
+  // Create the model with system instruction if provided
+  const model = genAI.getGenerativeModel({
+    model: modelId,
+    systemInstruction: systemMessage?.content || undefined,
+    generationConfig: {
+      temperature: options.temperature ?? DEFAULT_TEMPERATURE,
+      maxOutputTokens: options.max_tokens ?? DEFAULT_MAX_TOKENS,
+      topP: options.top_p ?? 0.95,
+    },
+  });
+
+  // Convert messages to Gemini format (Gemini uses "user" and "model" roles)
+  const history: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = [];
+
+  for (const msg of nonSystemMessages) {
+    const role = msg.role === 'assistant' ? 'model' as const : 'user' as const;
+
+    // Gemini requires alternating user/model messages.
+    // If we have consecutive same-role messages, merge them.
+    if (history.length > 0 && history[history.length - 1].role === role) {
+      history[history.length - 1].parts.push({ text: msg.content });
+    } else {
+      history.push({ role, parts: [{ text: msg.content }] });
+    }
+  }
+
+  // The last message should be the current user message
+  // We separate it for the generateContent call
+  let currentMessage = '';
+  if (history.length > 0 && history[history.length - 1].role === 'user') {
+    const lastEntry = history.pop()!;
+    currentMessage = lastEntry.parts.map(p => p.text).join('\n');
+  } else if (history.length > 0 && history[history.length - 1].role === 'model') {
+    // If the last message is from the model, we need a user message
+    currentMessage = 'Lanjutkan percakapan ini.';
+  } else {
+    currentMessage = 'Halo';
+  }
+
+  // Start a chat session with history
+  const chat = model.startChat({ history });
+
+  const result = await chat.sendMessage(currentMessage);
+  const response = result.response;
+  const content = response.text();
+
+  // Get usage metadata if available
+  const usageMetadata = response.usageMetadata;
+
+  return {
+    success: true,
+    content,
+    model: modelId,
+    usage: usageMetadata
+      ? {
+          prompt_tokens: usageMetadata.promptTokenCount ?? 0,
+          completion_tokens: usageMetadata.candidatesTokenCount ?? 0,
+          total_tokens: usageMetadata.totalTokenCount ?? 0,
+        }
+      : undefined,
+  };
+}
+
+/**
  * Call the Google Gemini API for chat completions.
- * Includes retry logic for rate limit errors.
+ * Includes retry logic for rate limit errors AND model fallback.
+ *
+ * If the primary model fails with quota/rate-limit, automatically
+ * tries fallback models before giving up.
  */
 export async function geminiChatCompletion(
   options: ChatCompletionOptions
@@ -104,129 +184,99 @@ export async function geminiChatCompletion(
     };
   }
 
-  const modelId = getGeminiModel();
+  const primaryModel = getGeminiModel();
+  // Build the list of models to try: primary first, then fallbacks
+  const modelsToTry = [primaryModel, ...FALLBACK_MODELS.filter(m => m !== primaryModel)];
 
-  // Try up to MAX_RETRIES + 1 times
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      // Extract system prompt if present
-      const systemMessage = options.messages.find(m => m.role === 'system');
-      const nonSystemMessages = options.messages.filter(m => m.role !== 'system');
-
-      // Create the model with system instruction if provided
-      const model = genAI.getGenerativeModel({
-        model: modelId,
-        systemInstruction: systemMessage?.content || undefined,
-        generationConfig: {
-          temperature: options.temperature ?? DEFAULT_TEMPERATURE,
-          maxOutputTokens: options.max_tokens ?? DEFAULT_MAX_TOKENS,
-          topP: options.top_p ?? 0.95,
-        },
-      });
-
-      // Convert messages to Gemini format (Gemini uses "user" and "model" roles)
-      const history: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = [];
-
-      for (const msg of nonSystemMessages) {
-        const role = msg.role === 'assistant' ? 'model' as const : 'user' as const;
-
-        // Gemini requires alternating user/model messages.
-        // If we have consecutive same-role messages, merge them.
-        if (history.length > 0 && history[history.length - 1].role === role) {
-          history[history.length - 1].parts.push({ text: msg.content });
-        } else {
-          history.push({ role, parts: [{ text: msg.content }] });
+  for (const modelId of modelsToTry) {
+    // Try up to MAX_RETRIES + 1 times per model
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        console.log(`[Gemini] Trying model: ${modelId} (attempt ${attempt + 1})`);
+        const result = await tryModelChat(genAI, modelId, options);
+        if (result.success) {
+          console.log(`[Gemini] Success with model: ${modelId}`);
         }
-      }
+        return result;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        console.error(`[Gemini] Error with model ${modelId} (attempt ${attempt + 1}):`, message.substring(0, 300));
 
-      // The last message should be the current user message
-      // We separate it for the generateContent call
-      let currentMessage = '';
-      if (history.length > 0 && history[history.length - 1].role === 'user') {
-        const lastEntry = history.pop()!;
-        currentMessage = lastEntry.parts.map(p => p.text).join('\n');
-      } else if (history.length > 0 && history[history.length - 1].role === 'model') {
-        // If the last message is from the model, we need a user message
-        currentMessage = 'Lanjutkan percakapan ini.';
-      } else {
-        currentMessage = 'Halo';
-      }
+        // Check if this is a retryable error (rate limit)
+        const isRateLimit = message.includes('429') || message.includes('RESOURCE_EXHAUSTED') || message.includes('quota') || message.includes('rate');
+        // Check if this is a model-not-found or model-unavailable error
+        const isModelUnavailable = message.includes('404') || message.includes('NOT_FOUND') || message.includes('model not found');
 
-      // Start a chat session with history
-      const chat = model.startChat({ history });
+        // If model is not found/unavailable, skip to next model immediately
+        if (isModelUnavailable) {
+          console.warn(`[Gemini] Model ${modelId} not available, trying next model...`);
+          break; // break out of retry loop, continue to next model
+        }
 
-      const result = await chat.sendMessage(currentMessage);
-      const response = result.response;
-      const content = response.text();
+        // If it's a quota error with limit:0, try next model instead of retrying
+        if (isRateLimit && message.includes('limit: 0')) {
+          console.warn(`[Gemini] Model ${modelId} has quota limit 0 (not available on free tier), trying next model...`);
+          break; // break out of retry loop, continue to next model
+        }
 
-      // Get usage metadata if available
-      const usageMetadata = response.usageMetadata;
+        // If it's a rate limit error and we have retries left, wait and try again
+        if (isRateLimit && attempt < MAX_RETRIES) {
+          const delay = RETRY_DELAY_MS * Math.pow(2, attempt); // Exponential backoff
+          console.log(`[Gemini] Rate limited. Retrying in ${delay}ms...`);
+          await sleep(delay);
+          continue;
+        }
 
-      return {
-        success: true,
-        content,
-        model: modelId,
-        usage: usageMetadata
-          ? {
-              prompt_tokens: usageMetadata.promptTokenCount ?? 0,
-              completion_tokens: usageMetadata.candidatesTokenCount ?? 0,
-              total_tokens: usageMetadata.totalTokenCount ?? 0,
-            }
-          : undefined,
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      console.error(`Gemini Chat Completion error (attempt ${attempt + 1}/${MAX_RETRIES + 1}):`, message);
+        // Non-retryable error or out of retries
+        if (message.includes('API_KEY_INVALID') || message.includes('401') || message.includes('Unauthorized') || message.includes('API key not valid')) {
+          return {
+            success: false,
+            content: '',
+            error: `API Key Gemini tidak valid. Periksa GEMINI_API_KEY Anda. Detail: ${message}`,
+          };
+        }
 
-      // Check if this is a retryable error (rate limit)
-      const isRateLimit = message.includes('429') || message.includes('RESOURCE_EXHAUSTED') || message.includes('quota') || message.includes('rate');
-      
-      // If it's a rate limit error and we have retries left, wait and try again
-      if (isRateLimit && attempt < MAX_RETRIES) {
-        const delay = RETRY_DELAY_MS * Math.pow(2, attempt); // Exponential backoff
-        console.log(`Rate limited. Retrying in ${delay}ms...`);
-        await sleep(delay);
-        continue;
-      }
+        if (isRateLimit) {
+          // If this model is rate-limited but we have more models to try, move to next
+          if (modelsToTry.indexOf(modelId) < modelsToTry.length - 1) {
+            console.warn(`[Gemini] Model ${modelId} rate limited, trying next model...`);
+            break; // break out of retry loop, continue to next model
+          }
+          return {
+            success: false,
+            content: '',
+            error: `Batas permintaan Gemini tercapai (${modelId}). Coba lagi dalam 1 menit. Detail: ${message}`,
+          };
+        }
 
-      // Non-retryable error or out of retries — return the appropriate error
-      if (message.includes('API_KEY_INVALID') || message.includes('401') || message.includes('Unauthorized') || message.includes('API key not valid')) {
+        if (message.includes('400') || message.includes('BAD_REQUEST')) {
+          return {
+            success: false,
+            content: '',
+            error: `Permintaan tidak valid (mungkin terlalu besar). Detail: ${message.substring(0, 200)}`,
+          };
+        }
+
+        if (message.includes('SAFETY') || message.includes('blocked')) {
+          return {
+            success: false,
+            content: '',
+            error: 'Respons diblokir oleh filter keamanan Google. Coba reformulasikan pertanyaan Anda.',
+          };
+        }
+
+        // For other errors, try next model if available
+        if (modelsToTry.indexOf(modelId) < modelsToTry.length - 1) {
+          console.warn(`[Gemini] Model ${modelId} failed with unexpected error, trying next model...`);
+          break;
+        }
+
         return {
           success: false,
           content: '',
-          error: `API Key Gemini tidak valid. Periksa GEMINI_API_KEY Anda. Detail: ${message}`,
+          error: `Gagal terhubung ke Gemini API: ${message.substring(0, 200)}`,
         };
       }
-
-      if (isRateLimit) {
-        return {
-          success: false,
-          content: '',
-          error: `Batas permintaan Gemini tercapai (${modelId}). Coba lagi dalam 1 menit. Detail: ${message}`,
-        };
-      }
-
-      if (message.includes('400') || message.includes('BAD_REQUEST')) {
-        return {
-          success: false,
-          content: '',
-          error: `Permintaan tidak valid (mungkin terlalu besar). Detail: ${message.substring(0, 200)}`,
-        };
-      }
-
-      if (message.includes('SAFETY') || message.includes('blocked')) {
-        return {
-          success: false,
-          content: '',
-          error: 'Respons diblokir oleh filter keamanan Google. Coba reformulasikan pertanyaan Anda.',
-        };
-      }
-
-      return {
-        success: false,
-        content: '',
-        error: `Gagal terhubung ke Gemini API: ${message.substring(0, 200)}`,
-      };
     }
   }
 

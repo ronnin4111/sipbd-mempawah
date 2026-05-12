@@ -5,7 +5,8 @@ import { geminiChatCompletion, isGeminiConfigured, getGeminiModel } from './gemi
  *
  * Strategy:
  * 1. Google Gemini API (primary — works everywhere, generous free tier)
- *    - Free: 15 RPM, 1500 RPD for Gemini 2.0 Flash
+ *    - Free: 15 RPM, 1500 RPD for gemini-2.0-flash (default)
+ *    - Fallback models: gemini-2.5-flash-preview, gemini-1.5-flash
  *    - No monthly credit limits (unlike Hugging Face)
  * 2. z-ai-web-dev-sdk (fallback — works in sandbox/local dev only)
  *    - Requires .z-ai-config file (not available on Vercel)
