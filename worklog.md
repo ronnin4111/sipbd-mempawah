@@ -112,3 +112,25 @@ Stage Summary:
 - NEEDS: User to set HF_API_KEY environment variable on Vercel dashboard
 - Token: [REDACTED - set in Vercel env vars]
 - Model env var: HF_MODEL=Qwen/Qwen2.5-7B-Instruct (optional, has default)
+
+---
+Task ID: 3
+Agent: main
+Task: Add targeted search to AI chat for specific group/farmer member queries
+
+Work Log:
+- Analyzed why AI couldn't answer "siapa saja anggota" questions
+- Root cause: daftarPembudidaya was limited to 80 farmers (alphabetical), didn't always include members of the asked group
+- Added extractSearchTerms() function to detect group/farmer names from user's message
+- Added fetchTargetedResults() function to query ALL farmers in a matching group
+- Updated buildSystemPrompt() to include "HASIL PENCARIAN SPESIFIK" section with full member list
+- Updated system prompt instructions: AI must use targeted search for "siapa saja" questions
+- Added daftarAnggota field with complete farmer list per group in targeted results
+- Cleaned git history to remove accidentally committed HF API token
+- Force-pushed cleaned history to GitHub
+
+Stage Summary:
+- AI can now answer BOTH "berapa jumlah anggota" AND "siapa saja anggotanya"
+- Tested on Vercel: "siapa saja anggota kelompok kawan sejati" → returns full 19-member list
+- HF API token removed from git history (push protection passed)
+- All features working on production: https://sipbd-mempawah.vercel.app/
