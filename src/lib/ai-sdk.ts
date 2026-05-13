@@ -141,6 +141,23 @@ async function callZAI(options: UnifiedAIOptions): Promise<UnifiedAIResult> {
  * 2. Groq API (if key available via env or DB) — ultra-fast fallback on Vercel
  * 3. z-ai-web-dev-sdk (if .z-ai-config is available) — local dev only
  */
+/**
+ * Timeout wrapper — ensures AI calls don't hang forever.
+ * Default 30s timeout (Vercel serverless max is 60s for hobby tier).
+ */
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number = 30000,
+  label: string = 'AI'
+): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} request timed out after ${ms}ms`)), ms)
+    ),
+  ]);
+}
+
 export async function callAI(options: UnifiedAIOptions): Promise<UnifiedAIResult> {
   const errors: Array<{ provider: string; detail: string }> = [];
   const startTime = Date.now();
@@ -160,13 +177,17 @@ export async function callAI(options: UnifiedAIOptions): Promise<UnifiedAIResult
     console.log('[AI SDK] Trying Google Gemini...');
     try {
       const geminiStart = Date.now();
-      const result = await geminiChatCompletion({
-        messages: options.messages,
-        temperature: options.temperature,
-        max_tokens: options.max_tokens,
-        apiKey: geminiKey,          // Pass directly — no env var mutation
-        model: geminiModel || undefined,
-      });
+      const result = await withTimeout(
+        geminiChatCompletion({
+          messages: options.messages,
+          temperature: options.temperature,
+          max_tokens: options.max_tokens,
+          apiKey: geminiKey,          // Pass directly — no env var mutation
+          model: geminiModel || undefined,
+        }),
+        30000,
+        'Gemini'
+      );
       const geminiElapsed = Date.now() - geminiStart;
 
       if (result.success) {
@@ -196,13 +217,17 @@ export async function callAI(options: UnifiedAIOptions): Promise<UnifiedAIResult
     console.log('[AI SDK] Trying Groq fallback...');
     try {
       const groqStart = Date.now();
-      const result = await groqChatCompletion({
-        messages: options.messages,
-        temperature: options.temperature,
-        max_tokens: options.max_tokens,
-        apiKey: groqKey,            // Pass directly — no env var mutation
-        model: groqModel || undefined,
-      });
+      const result = await withTimeout(
+        groqChatCompletion({
+          messages: options.messages,
+          temperature: options.temperature,
+          max_tokens: options.max_tokens,
+          apiKey: groqKey,            // Pass directly — no env var mutation
+          model: groqModel || undefined,
+        }),
+        30000,
+        'Groq'
+      );
       const groqElapsed = Date.now() - groqStart;
 
       if (result.success) {

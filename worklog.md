@@ -76,3 +76,51 @@ Stage Summary:
 - "berapa jumlah kelompok pembesaran?" → works (stats context, Groq, returns "40")
 - Gemini remains non-functional on Vercel due to network connectivity issues (works locally)
 - Groq is the primary working provider on Vercel
+
+---
+Task ID: 1
+Agent: full-stack-developer
+Task: Rewrite AI chat route with question-context awareness
+
+Work Log:
+- Read existing route.ts (1206 lines) and worklog.md to understand current architecture
+- Added `parseQuestionContext()` function that extracts context from user questions:
+  - Years: supports "tahun 2025", "data 2024", "tahun 2024 dan 2025", "2024-2026", "tahun lalu", "tahun ini", "2 tahun terakhir", "bandingkan 2024 vs 2025"
+  - Kecamatan: matches 10 known kecamatan with fuzzy partial matching (length > 3)
+  - Business type: detects "pembenihan/pembenih/pembesaran"
+  - Fish type: matches 14 known fish names from question text
+  - Desa: extracts capitalized words not in skip list
+  - Comparison flag: detects "bandingkan/perbandingan/perbedaan/compare" and "2024 vs 2025" patterns
+- Added `resolveEffectiveFilters()` function that merges question context with UI filters:
+  - Question context takes PRIORITY over UI filters for all fields
+  - Falls back to UI filters, then defaults when question context is empty
+  - Container type only from UI filter (rarely mentioned in questions)
+- Added `buildContextHeader()` function to generate a human-readable context description line
+- Added `fetchMultiYearComparisonContext()` function for comparison questions:
+  - Fetches data for each year in resolved filters
+  - Generates per-year summary (groups, farmers, production per kecamatan)
+  - Keeps output compact to avoid token overflow
+  - Adds side-by-side comparison summary line
+- Updated `classifyQuestion()` to return 'comparison' type for comparison patterns
+- Updated `fetchCompactDataContext()` to accept optional year parameter (instead of hardcoding currentYear)
+- Updated `fetchTargetedResults()` to accept optional filters parameter (instead of hardcoding currentYear)
+- Fixed production field name: used `r.productionQty` instead of incorrect `r.production` in comparison context
+- Updated POST handler to wire everything together:
+  - Calls `parseQuestionContext(message)` after `classifyQuestion()`
+  - Calls `resolveEffectiveFilters(questionCtx, filters)` to get resolved filters
+  - Uses `effectiveQuestionType` that upgrades to 'comparison' when comparison context detected
+  - Adds context header line to system prompt (e.g., "Konteks pertanyaan terdeteksi: Tahun=2025, Kecamatan=Siantan")
+  - Passes resolved filters to `fetchStatsDataContext`, `fetchFullDataContext`, `fetchTargetedResults`
+  - Uses `fetchMultiYearComparisonContext` for comparison question type
+  - Passes resolved year to `fetchCompactDataContext` for general questions
+  - Enhanced debug logging with resolvedFilters and questionCtx info
+- Preserved all existing constraints: BASE_SYSTEM_PROMPT unchanged, extractSearchTerms unchanged, buildCompactStats unchanged, KUSUKA functions unchanged, memory integration unchanged, MAX_PROMPT_CHARS=25000 preserved, generateFarmerId import preserved
+- ESLint passes with no errors on the modified file
+
+Stage Summary:
+- AI chat route now parses question context independently from UI filters
+- User asking "berapa data tahun 2025?" gets 2025 data even if UI filter shows 2026
+- Comparison questions ("bandingkan 2024 vs 2025") trigger multi-year data fetching
+- Context header line added so AI knows what scope was auto-detected
+- File grew from 1206 to 1648 lines (442 lines added for new functions)
+- All existing functionality preserved, no breaking changes

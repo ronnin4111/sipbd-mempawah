@@ -58,7 +58,7 @@ Istilah:
  * kelompok" should be 'stats' or 'general' so the AI answers from compact summaries
  * in the data context, not from the full member listings.
  */
-function classifyQuestion(message: string): 'specific' | 'stats' | 'general' {
+function classifyQuestion(message: string): 'specific' | 'stats' | 'general' | 'comparison' {
   const lower = message.toLowerCase();
 
   // ============================================================
@@ -92,6 +92,14 @@ function classifyQuestion(message: string): 'specific' | 'stats' | 'general' {
     /status\s+kusuka/i, /draf\s+kusuka/i, /valid\s+kusuka/i,
   ];
   if (specificPatterns.some(p => p.test(lower))) return 'specific';
+
+  // Comparison questions — multi-year or multi-region comparisons
+  const comparisonPatterns = [
+    /bandingkan/i, /perbandingan/i, /perbedaan/i, /compare/i,
+    /vs\.?/i, /\d{4}\s*(vs|dengan|dan|terhadap)\s*\d{4}/i,
+    /\d{4}\s*-\s*\d{4}/,  // "2024-2025" range
+  ];
+  if (comparisonPatterns.some(p => p.test(lower))) return 'comparison';
 
   // Stats/production/trend questions (but NOT kelompok listing questions)
   const statsPatterns = [
@@ -162,6 +170,268 @@ function extractSearchTerms(message: string): string[] {
   }
 
   return [...new Set(terms)];
+}
+
+/**
+ * Known kecamatan names from DB data.
+ */
+const KNOWN_KECAMATAN = [
+  'Siantan', 'Mempawah Hilir', 'Mempawah Hulu', 'Segedong',
+  'Salo', 'Toho', 'Lubuk Bandung', 'Batu Ampar',
+  'Terentang', 'Weda Selatan',
+];
+
+/**
+ * Known fish type names from DB data.
+ */
+const KNOWN_FISH_TYPES = [
+  'Nila', 'Lele', 'Mas', 'Patin', 'Gabus', 'Bawal',
+  'Kerapu', 'Udang', 'Bandeng', 'Pari', 'Belanak',
+  'Kakap', 'Napol', 'Barramundi',
+];
+
+/**
+ * Parsed question context — what the user is asking about,
+ * extracted from the natural language question itself
+ * (independent of UI filter state).
+ */
+interface QuestionContext {
+  years: number[];
+  kecamatan: string[];
+  businessType: string[];
+  fishType: string[];
+  desa: string[];
+  isComparison: boolean;
+}
+
+/**
+ * Parse the user's question to extract contextual information
+ * like years, kecamatan, fish types, etc.
+ * This is used to override UI filters so the AI fetches
+ * the right data regardless of what the UI shows.
+ */
+function parseQuestionContext(message: string): QuestionContext {
+  const ctx: QuestionContext = {
+    years: [],
+    kecamatan: [],
+    businessType: [],
+    fishType: [],
+    desa: [],
+    isComparison: false,
+  };
+  const lower = message.toLowerCase();
+  const currentYear = new Date().getFullYear();
+
+  // ===== Parse years =====
+  // "tahun 2025", "data 2024", "tahun 2024 dan 2025"
+  const explicitYearPattern = /(?:tahun|data|tahun\s+ini|tahun\s+lalu|tahun\s+kemarin)?\s*(\d{4})(?:\s*(?:dan|,|&)?\s*(\d{4}))*/gi;
+  const explicitYears = new Set<number>();
+  let yearMatch: RegExpExecArray | null;
+  while ((yearMatch = explicitYearPattern.exec(lower)) !== null) {
+    for (let i = 1; i < yearMatch.length; i++) {
+      if (yearMatch[i]) {
+        const y = parseInt(yearMatch[i], 10);
+        if (y >= 2020 && y <= currentYear + 1) {
+          explicitYears.add(y);
+        }
+      }
+    }
+  }
+
+  // "2024-2026" range pattern
+  const rangePattern = /(\d{4})\s*-\s*(\d{4})/;
+  const rangeMatch = lower.match(rangePattern);
+  if (rangeMatch) {
+    const startY = parseInt(rangeMatch[1], 10);
+    const endY = parseInt(rangeMatch[2], 10);
+    if (startY < endY && endY - startY <= 10) {
+      for (let y = startY; y <= endY; y++) {
+        explicitYears.add(y);
+      }
+    }
+  }
+
+  // Relative year patterns
+  if (/tahun\s+lalu|tahun\s+kemarin/i.test(lower)) {
+    explicitYears.add(currentYear - 1);
+  }
+  if (/tahun\s+ini|tahun\s+sekarang|tahun\s+berjalan/i.test(lower)) {
+    explicitYears.add(currentYear);
+  }
+
+  // "N tahun terakhir" pattern
+  const nYearPattern = /(\d+)\s+tahun\s+terakhir/i;
+  const nYearMatch = lower.match(nYearPattern);
+  if (nYearMatch) {
+    const n = parseInt(nYearMatch[1], 10);
+    if (n >= 1 && n <= 10) {
+      for (let i = 0; i < n; i++) {
+        explicitYears.add(currentYear - i);
+      }
+    }
+  }
+
+  // "bandingkan 2024 vs 2025" / "perbandingan 2024 2025"
+  const vsPattern = /(\d{4})\s*(?:vs|dengan|dan|terhadap)\s*(\d{4})/i;
+  const vsMatch = lower.match(vsPattern);
+  if (vsMatch) {
+    const y1 = parseInt(vsMatch[1], 10);
+    const y2 = parseInt(vsMatch[2], 10);
+    if (y1 >= 2020 && y1 <= currentYear + 1) explicitYears.add(y1);
+    if (y2 >= 2020 && y2 <= currentYear + 1) explicitYears.add(y2);
+    ctx.isComparison = true;
+  }
+
+  // Check comparison keywords
+  if (/bandingkan|perbandingan|perbedaan|compare/i.test(lower)) {
+    ctx.isComparison = true;
+  }
+
+  ctx.years = [...explicitYears].sort((a, b) => a - b);
+
+  // ===== Parse kecamatan =====
+  for (const kec of KNOWN_KECAMATAN) {
+    if (lower.includes(kec.toLowerCase())) {
+      ctx.kecamatan.push(kec);
+    }
+  }
+  // Fuzzy match: also check partial kecamatan names in the question
+  const kecPartialPatterns: Record<string, string[]> = {
+    'Siantan': ['siantan'],
+    'Mempawah Hilir': ['mempawah hilir', 'hilir'],
+    'Mempawah Hulu': ['mempawah hulu', 'hulu'],
+    'Segedong': ['segedong'],
+    'Salo': ['salo'],
+    'Toho': ['toho'],
+    'Lubuk Bandung': ['lubuk bandung', 'lubuk'],
+    'Batu Ampar': ['batu ampar'],
+    'Terentang': ['terentang'],
+    'Weda Selatan': ['weda selatan', 'weda'],
+  };
+  for (const [kec, patterns] of Object.entries(kecPartialPatterns)) {
+    if (ctx.kecamatan.includes(kec)) continue; // already matched
+    for (const p of patterns) {
+      if (lower.includes(p) && p.length > 3) { // avoid matching very short partials like 'hulu'
+        ctx.kecamatan.push(kec);
+        break;
+      }
+    }
+  }
+
+  // ===== Parse business type =====
+  if (/pembenihan|pembenih/i.test(lower)) {
+    ctx.businessType.push('Pembenihan');
+  }
+  if (/pembesaran/i.test(lower)) {
+    ctx.businessType.push('Pembesaran');
+  }
+
+  // ===== Parse fish type =====
+  for (const fish of KNOWN_FISH_TYPES) {
+    if (lower.includes(fish.toLowerCase())) {
+      ctx.fishType.push(fish);
+    }
+  }
+
+  // ===== Parse desa (capitalized words that might be desa names) =====
+  const skipWords = new Set([
+    ...KNOWN_KECAMATAN.map(k => k.toLowerCase()),
+    'mempawah', 'kabupaten', 'dinas', 'perikanan', 'budidaya',
+    'kelompok', 'pembudidaya', 'anggota', 'jumlah', 'berapa',
+    'data', 'tahun', 'desa', 'kecamatan', 'ikan', 'jenis',
+    'usaha', 'rtp', 'kusuka', 'produksi', 'pembesaran', 'pembenihan',
+    ...KNOWN_FISH_TYPES.map(f => f.toLowerCase()),
+  ]);
+  const words = message.split(/\s+/);
+  for (const word of words) {
+    const clean = word.replace(/[^\w]/g, '');
+    if (clean.length > 2 && clean[0] === clean[0].toUpperCase() && !skipWords.has(clean.toLowerCase())) {
+      ctx.desa.push(clean);
+    }
+  }
+
+  return ctx;
+}
+
+/**
+ * Resolve effective filters by merging question context with UI filters.
+ * Question context takes PRIORITY over UI filters.
+ * If user mentions "tahun 2025" → use 2025, regardless of UI filter.
+ * If user doesn't mention any year → fall back to UI filter, then current year.
+ */
+function resolveEffectiveFilters(
+  questionCtx: QuestionContext,
+  uiFilters: {
+    years: string[];
+    kecamatan: string[];
+    desa: string[];
+    fishType: string[];
+    containerType: string[];
+    businessType: string[];
+  }
+): {
+  years: string[];
+  kecamatan: string[];
+  desa: string[];
+  fishType: string[];
+  containerType: string[];
+  businessType: string[];
+} {
+  const resolved = {
+    // Years: question context > UI filter > current year
+    years: questionCtx.years.length > 0
+      ? questionCtx.years.map(String)
+      : (uiFilters.years.length > 0 ? uiFilters.years : []),
+    // Kecamatan: question context > UI filter
+    kecamatan: questionCtx.kecamatan.length > 0
+      ? questionCtx.kecamatan
+      : uiFilters.kecamatan,
+    // Desa: question context > UI filter
+    desa: questionCtx.desa.length > 0
+      ? questionCtx.desa
+      : uiFilters.desa,
+    // Fish type: question context > UI filter
+    fishType: questionCtx.fishType.length > 0
+      ? questionCtx.fishType
+      : uiFilters.fishType,
+    // Container type: only from UI filter (rarely mentioned in questions)
+    containerType: uiFilters.containerType,
+    // Business type: question context > UI filter
+    businessType: questionCtx.businessType.length > 0
+      ? questionCtx.businessType
+      : uiFilters.businessType,
+  };
+
+  return resolved;
+}
+
+/**
+ * Build a human-readable description of the auto-detected question context,
+ * to include in the data context header so the AI knows what scope was fetched.
+ */
+function buildContextHeader(questionCtx: QuestionContext): string {
+  const parts: string[] = [];
+  if (questionCtx.years.length > 0) {
+    parts.push(`Tahun=${questionCtx.years.join(',')}`);
+  }
+  if (questionCtx.kecamatan.length > 0) {
+    parts.push(`Kecamatan=${questionCtx.kecamatan.join(',')}`);
+  }
+  if (questionCtx.businessType.length > 0) {
+    parts.push(`JenisUsaha=${questionCtx.businessType.join(',')}`);
+  }
+  if (questionCtx.fishType.length > 0) {
+    parts.push(`JenisIkan=${questionCtx.fishType.join(',')}`);
+  }
+  if (questionCtx.desa.length > 0) {
+    parts.push(`Desa=${questionCtx.desa.join(',')}`);
+  }
+  if (questionCtx.isComparison) {
+    parts.push('Mode=Perbandingan');
+  }
+  return parts.length > 0
+    ? `Konteks pertanyaan terdeteksi: ${parts.join(', ')}`
+    : '';
 }
 
 /**
@@ -330,13 +600,13 @@ async function fetchKusukaTargetedResults(searchTerms: string[], questionType: s
  * Used for 'general' questions (greetings, non-data questions) to keep prompt small.
  * The AI can still answer basic questions like "what data do you have?"
  */
-async function fetchCompactDataContext(): Promise<{
+async function fetchCompactDataContext(year?: number): Promise<{
   dataContext: string;
   totalGroups: number;
 }> {
   try {
-    const currentYear = new Date().getFullYear();
-    const records = await db.fishFarm.findMany({ where: { year: currentYear } });
+    const targetYear = year || new Date().getFullYear();
+    const records = await db.fishFarm.findMany({ where: { year: targetYear } });
 
     if (records.length === 0) {
       return {
@@ -367,7 +637,7 @@ Total pembudidaya: ${totalFarmers}
 Kecamatan: ${[...kecSet].sort().join(', ')}
 Jenis ikan: ${[...fishSet].sort().join(', ')}
 Jenis usaha: ${[...bizSet].sort().join(', ')}
-Tahun data: ${currentYear}
+Tahun data: ${targetYear}
 
 CATATAN: Ini ringkasan saja. Untuk data detail kelompok/anggota, tanyakan secara spesifik.`,
       totalGroups: groupKeys.size,
@@ -725,10 +995,26 @@ CATATAN: Untuk daftar nama anggota kelompok, lihat HASIL PENCARIAN SPESIFIK di b
  * Returns all matching groups and their members.
  * If searchTerms is empty but we have a question about groups, returns all groups with members.
  */
-async function fetchTargetedResults(searchTerms: string[], questionType: string): Promise<string> {
+async function fetchTargetedResults(searchTerms: string[], questionType: string, filters?: {
+  years: string[];
+  kecamatan: string[];
+  desa: string[];
+  fishType: string[];
+  containerType: string[];
+  businessType: string[];
+}): Promise<string> {
   try {
     const where: Record<string, unknown> = {};
-    where.year = new Date().getFullYear();
+    // Use resolved filters if provided, otherwise fall back to current year
+    if (filters && filters.years.length > 0) {
+      where.year = { in: filters.years.map(Number).filter(n => !isNaN(n)) };
+    } else {
+      where.year = new Date().getFullYear();
+    }
+    if (filters?.kecamatan.length) where.kecamatan = { in: filters.kecamatan };
+    if (filters?.desa.length) where.desa = { in: filters.desa };
+    if (filters?.fishType.length) where.fishType = { in: filters.fishType };
+    if (filters?.businessType.length) where.businessType = { in: filters.businessType };
 
     const records = await db.fishFarm.findMany({ where });
 
@@ -872,6 +1158,126 @@ async function fetchTargetedResults(searchTerms: string[], questionType: string)
 }
 
 /**
+ * Fetch multi-year comparison context for side-by-side data.
+ * Generates per-year summary (groups, farmers, production) for each year
+ * in the resolved filters. Keeps it compact to avoid token overflow.
+ */
+async function fetchMultiYearComparisonContext(resolvedFilters: {
+  years: string[];
+  kecamatan: string[];
+  desa: string[];
+  fishType: string[];
+  containerType: string[];
+  businessType: string[];
+}): Promise<string> {
+  try {
+    const years = resolvedFilters.years.length > 0
+      ? resolvedFilters.years.map(Number).filter(n => !isNaN(n))
+      : [new Date().getFullYear()];
+
+    if (years.length < 2) {
+      // Need at least 2 years for comparison; add previous year
+      years.unshift(years[0] - 1);
+    }
+
+    const lines: string[] = ['\n=== DATA PERBANDINGAN MULTI-TAHUN ==='];
+
+    for (const year of years) {
+      const where: Record<string, unknown> = { year };
+      if (resolvedFilters.kecamatan.length > 0) where.kecamatan = { in: resolvedFilters.kecamatan };
+      if (resolvedFilters.desa.length > 0) where.desa = { in: resolvedFilters.desa };
+      if (resolvedFilters.fishType.length > 0) where.fishType = { in: resolvedFilters.fishType };
+      if (resolvedFilters.businessType.length > 0) where.businessType = { in: resolvedFilters.businessType };
+
+      const records = await db.fishFarm.findMany({ where });
+
+      if (records.length === 0) {
+        lines.push(`\n--- Tahun ${year}: Tidak ada data ---`);
+        continue;
+      }
+
+      // Build group data
+      const groupMap = new Map<string, { businessTypes: Set<string>; memberCount: number; rtpCount: number; }>();
+      const allFarmerLatest = new Map<string, typeof records[0]>();
+      const sortedDesc = [...records].sort((a, b) => b.year - a.year);
+
+      let totalPembesaranProd = 0;
+      let totalPembenihanProd = 0;
+
+      records.forEach(r => {
+        if (!r.groupName?.trim()) return;
+        const key = `${r.groupName.trim().toLowerCase()}|${r.kecamatan}`;
+        if (!groupMap.has(key)) {
+          groupMap.set(key, { businessTypes: new Set(), memberCount: 0, rtpCount: 0 });
+        }
+        groupMap.get(key)!.businessTypes.add(r.businessType);
+
+        const fid = r.farmerId || generateFarmerId({
+          farmerName: r.farmerName || '', groupName: r.groupName || '',
+          kecamatan: r.kecamatan || '', desa: r.desa || '',
+        });
+        if (!allFarmerLatest.has(fid)) {
+          allFarmerLatest.set(fid, r);
+          groupMap.get(key)!.memberCount += r.farmerCount;
+          groupMap.get(key)!.rtpCount += r.rtpCount;
+        }
+
+        // Sum production
+        if (r.businessType === 'Pembesaran') {
+          totalPembesaranProd += (r.productionQty || 0);
+        } else if (r.businessType === 'Pembenihan') {
+          totalPembenihanProd += (r.productionQty || 0);
+        }
+      });
+
+      // Business type breakdown
+      let pembesaranOnly = 0, pembenihanOnly = 0, bothBiz = 0;
+      for (const group of groupMap.values()) {
+        const hasPembesaran = group.businessTypes.has('Pembesaran');
+        const hasPembenihan = group.businessTypes.has('Pembenihan');
+        if (hasPembesaran && hasPembenihan) bothBiz++;
+        else if (hasPembesaran) pembesaranOnly++;
+        else if (hasPembenihan) pembenihanOnly++;
+      }
+
+      // Per-kecamatan summary
+      const kecGroupCounts = new Map<string, number>();
+      const kecFarmerCounts = new Map<string, number>();
+      for (const r of records) {
+        if (!r.groupName?.trim()) continue;
+        kecGroupCounts.set(r.kecamatan, (kecGroupCounts.get(r.kecamatan) || 0) + 1);
+      }
+      for (const r of allFarmerLatest.values()) {
+        kecFarmerCounts.set(r.kecamatan, (kecFarmerCounts.get(r.kecamatan) || 0) + r.farmerCount);
+      }
+      const kecSummary = [...kecGroupCounts.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([kec, count]) => `${kec}(${count}kel, ${kecFarmerCounts.get(kec) || 0}org)`)
+        .join(', ');
+
+      lines.push(`\n--- Tahun ${year} ---`);
+      lines.push(`Kelompok: ${groupMap.size} (Pembesaran:${pembesaranOnly}, Pembenihan:${pembenihanOnly}, Campuran:${bothBiz})`);
+      lines.push(`Pembudidaya: ${allFarmerLatest.size}, RTP: ${records.reduce((sum, r) => sum + r.rtpCount, 0)}`);
+      lines.push(`Produksi Pembesaran: ${totalPembesaranProd.toLocaleString('id-ID')} Kg`);
+      lines.push(`Produksi Pembenihan: ${totalPembenihanProd.toLocaleString('id-ID')} Ekor`);
+      if (kecSummary) lines.push(`Per kecamatan: ${kecSummary}`);
+    }
+
+    // Add side-by-side comparison summary
+    if (years.length >= 2) {
+      lines.push('\n--- RINGKASAN PERBANDINGAN ---');
+      lines.push(`Tahun: ${years.join(' vs ')}`);
+      lines.push('Untuk perbandingan detail per indikator, lihat data per tahun di atas.');
+    }
+
+    return lines.join('\n');
+  } catch (error) {
+    console.error('Failed to fetch multi-year comparison context:', error);
+    return '\n=== DATA PERBANDINGAN ===\nGagal memuat data perbandingan.';
+  }
+}
+
+/**
  * Build compact stats summary from the client-side stats context.
  */
 function buildCompactStats(statsContext?: Record<string, unknown>): string {
@@ -996,6 +1402,27 @@ export async function POST(request: NextRequest) {
     const searchTerms = extractSearchTerms(message);
 
     // ============================================================
+    // QUESTION CONTEXT AWARENESS: Parse the user's question to
+    // extract contextual info (years, kecamatan, fish type, etc.)
+    // This overrides UI filters so the AI fetches the right data
+    // regardless of what the UI currently shows.
+    // ============================================================
+    const questionCtx = parseQuestionContext(message);
+    const defaultFilters = {
+      years: [], kecamatan: [], desa: [], fishType: [],
+      containerType: [], businessType: [],
+    };
+    const resolvedFilters = resolveEffectiveFilters(questionCtx, filters || defaultFilters);
+
+    // If question context detected a comparison but classifyQuestion didn't catch it,
+    // upgrade the question type to 'comparison'
+    const effectiveQuestionType: 'specific' | 'stats' | 'general' | 'comparison' =
+      (questionCtx.isComparison && questionType !== 'specific') ? 'comparison' : questionType;
+
+    // Build context header to let the AI know what scope was auto-detected
+    const contextHeader = buildContextHeader(questionCtx);
+
+    // ============================================================
     // Build system prompt — SMART context loading based on question type
     // ============================================================
     const MAX_PROMPT_CHARS = 25000; // ~6,000 tokens — safe for Groq API limits
@@ -1003,6 +1430,11 @@ export async function POST(request: NextRequest) {
 
     // Base prompt + memory (always included)
     let systemPrompt = BASE_SYSTEM_PROMPT;
+
+    // Add question context header if any context was auto-detected
+    if (contextHeader) {
+      systemPrompt += '\n\n' + contextHeader;
+    }
 
     // 🧠 MEMORY: Retrieve relevant memories and inject into system prompt
     const memories = await retrieveMemories(sessionId, message);
@@ -1015,41 +1447,50 @@ export async function POST(request: NextRequest) {
     // - 'general': Only compact summaries (~500 chars) — keeps prompt tiny
     // - 'stats': Summary + business type breakdown + kecamatan list (~2K chars)
     // - 'specific': Full data context + targeted results — largest, but still limited
+    // - 'comparison': Multi-year comparison context
     let totalGroups = 0;
-    if (questionType === 'general') {
+    if (effectiveQuestionType === 'comparison') {
+      // For comparison questions, load multi-year comparison context
+      const comparisonContext = await fetchMultiYearComparisonContext(resolvedFilters);
+      systemPrompt += comparisonContext;
+      // Also add KUSUKA data for context
+      const kusukaContext = await fetchKusukaDataContext();
+      systemPrompt += kusukaContext;
+      totalGroups = 0; // comparison spans multiple years
+    } else if (effectiveQuestionType === 'general') {
       // For general/greeting questions, only include compact summary stats
-      const compactContext = await fetchCompactDataContext();
+      // Use resolved year from question context if available
+      const resolvedYear = resolvedFilters.years.length > 0
+        ? parseInt(resolvedFilters.years[0], 10)
+        : undefined;
+      const compactContext = await fetchCompactDataContext(resolvedYear);
       systemPrompt += compactContext.dataContext;
       totalGroups = compactContext.totalGroups;
-    } else if (questionType === 'stats') {
+    } else if (effectiveQuestionType === 'stats') {
       // For stats/counting questions, include summaries + business breakdown
       // but NOT the full group list (which is 10K+ chars and causes Groq 413 errors)
-      const statsContext = await fetchStatsDataContext(filters || {
-        years: [], kecamatan: [], desa: [], fishType: [],
-        containerType: [], businessType: [],
-      });
-      systemPrompt += statsContext.dataContext;
-      totalGroups = statsContext.totalGroups;
+      // Use resolved filters (which may override years/kecamatan from question)
+      const statsResult = await fetchStatsDataContext(resolvedFilters);
+      systemPrompt += statsResult.dataContext;
+      totalGroups = statsResult.totalGroups;
     } else {
       // For specific questions, load full data context
-      const fullContext = await fetchFullDataContext(filters || {
-        years: [], kecamatan: [], desa: [], fishType: [],
-        containerType: [], businessType: [],
-      });
+      // Use resolved filters (which may override years/kecamatan from question)
+      const fullContext = await fetchFullDataContext(resolvedFilters);
       systemPrompt += fullContext.dataContext;
       totalGroups = fullContext.totalGroups;
     }
 
     // Add KUSUKA data context for stats and specific questions only
-    // (general/greeting questions don't need KUSUKA details)
-    if (questionType !== 'general') {
+    // (general/greeting questions don't need KUSUKA details, comparison already includes it)
+    if (effectiveQuestionType !== 'general' && effectiveQuestionType !== 'comparison') {
       const kusukaContext = await fetchKusukaDataContext();
       systemPrompt += kusukaContext;
     }
 
     // Add stats context (compact) for stats/general questions
     let statsSection = '';
-    if (questionType === 'stats' || questionType === 'general') {
+    if (effectiveQuestionType === 'stats' || effectiveQuestionType === 'general') {
       statsSection = buildCompactStats(statsContext);
       systemPrompt += statsSection;
     }
@@ -1058,9 +1499,10 @@ export async function POST(request: NextRequest) {
     // These are the VERBOSE parts that can blow past token limits
     let targetedResults = '';
     let kusukaTargetedResults = '';
-    if (questionType === 'specific' || searchTerms.length > 0) {
-      targetedResults = await fetchTargetedResults(searchTerms, questionType);
-      kusukaTargetedResults = await fetchKusukaTargetedResults(searchTerms, questionType);
+    if (effectiveQuestionType === 'specific' || searchTerms.length > 0) {
+      // Pass resolved filters so targeted results also use question-aware year/kecamatan
+      targetedResults = await fetchTargetedResults(searchTerms, effectiveQuestionType, resolvedFilters);
+      kusukaTargetedResults = await fetchKusukaTargetedResults(searchTerms, effectiveQuestionType);
     }
 
     // ============================================================
@@ -1127,7 +1569,7 @@ export async function POST(request: NextRequest) {
     const memoryCount = memories.length;
     const targetedChars = targetedResults.length;
     const kusukaTargetedChars = kusukaTargetedResults.length;
-    console.log(`AI Chat: questionType=${questionType}, promptChars=${promptChars}, estTokens=${estimatedTokens}, searchTerms=${searchTerms.join(',')}, totalGroups=${totalGroups}, memories=${memoryCount}, targetedChars=${targetedChars}, kusukaTargetedChars=${kusukaTargetedChars}, truncated=${wasTruncated}`);
+    console.log(`AI Chat: questionType=${effectiveQuestionType}, promptChars=${promptChars}, estTokens=${estimatedTokens}, searchTerms=${searchTerms.join(',')}, totalGroups=${totalGroups}, memories=${memoryCount}, targetedChars=${targetedChars}, kusukaTargetedChars=${kusukaTargetedChars}, truncated=${wasTruncated}, resolvedYears=${resolvedFilters.years.join(',')}, resolvedKec=${resolvedFilters.kecamatan.join(',')}, questionCtxYears=${questionCtx.years.join(',')}`);
 
     // Build conversation messages
     const chatMessages = [
