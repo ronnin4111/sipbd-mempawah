@@ -55,6 +55,13 @@ const RETRY_DELAY_MS = 3000;
 let genAIInstance: GoogleGenerativeAI | null = null;
 
 /**
+ * Reset the singleton instance (used when API key changes dynamically)
+ */
+export function resetGeminiInstance(): void {
+  genAIInstance = null;
+}
+
+/**
  * Get or create the GoogleGenerativeAI instance
  */
 function getGenAIInstance(): GoogleGenerativeAI | null {

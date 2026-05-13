@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageSquare, X, Send, Bot, User, Sparkles, Trash2, Loader2 } from 'lucide-react';
+import { MessageSquare, X, Send, Bot, User, Sparkles, Trash2, Loader2, Settings, Key, CheckCircle2, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { useFilterStore } from '@/store/filter-store';
 import { useFishFarmStats } from '@/hooks/use-fish-farms';
 
@@ -10,6 +10,11 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
+}
+
+interface AIConfig {
+  gemini: { configured: boolean; source: string; model: string; keyHint: string | null };
+  groq: { configured: boolean; source: string; model: string; keyHint: string | null };
 }
 
 const QUICK_PROMPTS = [
@@ -27,6 +32,15 @@ export function AIChatWidget() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showConfig, setShowConfig] = useState(false);
+  const [aiConfig, setAiConfig] = useState<AIConfig | null>(null);
+  const [configGeminiKey, setConfigGeminiKey] = useState('');
+  const [configGroqKey, setConfigGroqKey] = useState('');
+  const [configPassword, setConfigPassword] = useState('');
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
+  const [configMessage, setConfigMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [showGeminiKey, setShowGeminiKey] = useState(false);
+  const [showGroqKey, setShowGroqKey] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -51,6 +65,23 @@ export function AIChatWidget() {
   // Get stats data for AI context
   const { data: stats } = useFishFarmStats();
 
+  // Fetch AI config when panel opens
+  const fetchAIConfig = useCallback(async () => {
+    try {
+      const res = await fetch('/api/ai/config');
+      if (res.ok) {
+        const data = await res.json();
+        setAiConfig(data);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) fetchAIConfig();
+  }, [isOpen, fetchAIConfig]);
+
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
@@ -60,10 +91,40 @@ export function AIChatWidget() {
   }, [messages, scrollToBottom]);
 
   useEffect(() => {
-    if (isOpen && inputRef.current) {
+    if (isOpen && inputRef.current && !showConfig) {
       inputRef.current.focus();
     }
-  }, [isOpen]);
+  }, [isOpen, showConfig]);
+
+  const saveConfig = async () => {
+    setIsSavingConfig(true);
+    setConfigMessage(null);
+    try {
+      const res = await fetch('/api/ai/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          password: configPassword,
+          geminiApiKey: configGeminiKey || undefined,
+          groqApiKey: configGroqKey || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setConfigMessage({ type: 'success', text: '✅ Konfigurasi AI berhasil disimpan!' });
+        setConfigGeminiKey('');
+        setConfigGroqKey('');
+        setConfigPassword('');
+        fetchAIConfig();
+      } else {
+        setConfigMessage({ type: 'error', text: `❌ ${data.error || 'Gagal menyimpan'}` });
+      }
+    } catch {
+      setConfigMessage({ type: 'error', text: '❌ Gagal terhubung ke server' });
+    } finally {
+      setIsSavingConfig(false);
+    }
+  };
 
   const sendMessage = async (text: string) => {
     if (!text.trim() || isLoading) return;
@@ -151,14 +212,23 @@ export function AIChatWidget() {
         setMessages((prev) => [...prev, aiMessage]);
       } else {
         const errorDetail = data.detail || data.error || '';
+        // Check if it's a missing API key error
+        const isKeyMissing = errorDetail.includes('API Key belum dikonfigurasi');
         const errorMessage: Message = {
           role: 'assistant',
-          content: errorDetail
-            ? `Maaf, terjadi kesalahan: ${errorDetail}. Silakan coba lagi. 🙏`
-            : 'Maaf, terjadi kesalahan saat memproses pertanyaan Anda. Silakan coba lagi. 🙏',
+          content: isKeyMissing
+            ? '🔑 **API Key AI belum dikonfigurasi.**\n\nKlik ikon ⚙️ di header chat ini untuk mengatur API key.\n\n**Gratis & mudah:**\n- Gemini: https://aistudio.google.com/apikey\n- Groq: https://console.groq.com\n\nSetelah dapat key, paste di pengaturan AI.'
+            : errorDetail
+              ? `Maaf, terjadi kesalahan: ${errorDetail}. Silakan coba lagi. 🙏`
+              : 'Maaf, terjadi kesalahan saat memproses pertanyaan Anda. Silakan coba lagi. 🙏',
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, errorMessage]);
+
+        // Auto-show config if keys are missing
+        if (isKeyMissing) {
+          fetchAIConfig();
+        }
       }
     } catch (err) {
       console.error('Chat fetch error:', err);
@@ -183,6 +253,9 @@ export function AIChatWidget() {
   const clearChat = () => {
     setMessages([]);
   };
+
+  // Check if any AI provider is configured
+  const isAIConfigured = aiConfig?.gemini?.configured || aiConfig?.groq?.configured;
 
   // Format message content with simple markdown-like rendering
   const formatContent = (content: string) => {
@@ -236,7 +309,14 @@ export function AIChatWidget() {
             aria-label="Buka Asisten AI"
           >
             <MessageSquare className="h-6 w-6 text-white group-hover:scale-110 transition-transform" />
-            <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full animate-pulse" />
+            {!isAIConfigured && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-amber-400 rounded-full flex items-center justify-center">
+                <Key className="h-2.5 w-2.5 text-amber-900" />
+              </span>
+            )}
+            {isAIConfigured && (
+              <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full animate-pulse" />
+            )}
           </motion.button>
         )}
       </AnimatePresence>
@@ -269,8 +349,17 @@ export function AIChatWidget() {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-bold text-white">Asisten AI Perikanan</div>
-                <div className="text-[10px] text-cyan-100">SIPBD · Data Mempawah</div>
+                <div className="text-[10px] text-cyan-100">
+                  SIPBD · Mempawah {!isAIConfigured && '· ⚠️ API Key belum diatur'}
+                </div>
               </div>
+              <button
+                onClick={() => { setShowConfig(!showConfig); fetchAIConfig(); }}
+                className="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
+                title="Pengaturan AI"
+              >
+                <Settings className="h-3.5 w-3.5 text-white" />
+              </button>
               <button
                 onClick={clearChat}
                 className="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
@@ -286,6 +375,126 @@ export function AIChatWidget() {
                 <X className="h-3.5 w-3.5 text-white" />
               </button>
             </div>
+
+            {/* Config panel */}
+            <AnimatePresence>
+              {showConfig && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="overflow-hidden border-b"
+                  style={{ borderColor: 'var(--border)' }}
+                >
+                  <div className="p-4 space-y-3" style={{ background: 'var(--card)' }}>
+                    <div className="text-xs font-semibold flex items-center gap-2" style={{ color: 'var(--foreground)' }}>
+                      <Key className="h-3.5 w-3.5" /> Konfigurasi API Key AI
+                    </div>
+                    <p className="text-[10px]" style={{ color: 'var(--muted-foreground)' }}>
+                      Atur API key agar AI bisa menjawab pertanyaan. Keduanya gratis!
+                    </p>
+
+                    {/* Status indicators */}
+                    <div className="flex gap-2">
+                      <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] ${aiConfig?.gemini?.configured ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                        {aiConfig?.gemini?.configured ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
+                        Gemini {aiConfig?.gemini?.configured ? '✓' : '✗'}
+                        {aiConfig?.gemini?.keyHint && <span className="opacity-60">({aiConfig.gemini.keyHint})</span>}
+                      </div>
+                      <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] ${aiConfig?.groq?.configured ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                        {aiConfig?.groq?.configured ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
+                        Groq {aiConfig?.groq?.configured ? '✓' : '✗'}
+                        {aiConfig?.groq?.keyHint && <span className="opacity-60">({aiConfig.groq.keyHint})</span>}
+                      </div>
+                    </div>
+
+                    {/* Gemini Key Input */}
+                    <div>
+                      <label className="text-[10px] font-medium block mb-1" style={{ color: 'var(--foreground)' }}>
+                        Gemini API Key <span className="opacity-50">(primary — https://aistudio.google.com/apikey)</span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showGeminiKey ? 'text' : 'password'}
+                          value={configGeminiKey}
+                          onChange={(e) => setConfigGeminiKey(e.target.value)}
+                          placeholder={aiConfig?.gemini?.configured ? 'Kosongkan jika tidak ingin mengubah' : 'AIzaSy...'}
+                          className="w-full text-[11px] px-3 py-1.5 rounded-lg border pr-8 outline-none focus:ring-1 focus:ring-cyan-400"
+                          style={{ borderColor: 'var(--border)', background: 'var(--background)', color: 'var(--foreground)' }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowGeminiKey(!showGeminiKey)}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 opacity-40 hover:opacity-70"
+                        >
+                          {showGeminiKey ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Groq Key Input */}
+                    <div>
+                      <label className="text-[10px] font-medium block mb-1" style={{ color: 'var(--foreground)' }}>
+                        Groq API Key <span className="opacity-50">(fallback — https://console.groq.com)</span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showGroqKey ? 'text' : 'password'}
+                          value={configGroqKey}
+                          onChange={(e) => setConfigGroqKey(e.target.value)}
+                          placeholder={aiConfig?.groq?.configured ? 'Kosongkan jika tidak ingin mengubah' : 'gsk_...'}
+                          className="w-full text-[11px] px-3 py-1.5 rounded-lg border pr-8 outline-none focus:ring-1 focus:ring-cyan-400"
+                          style={{ borderColor: 'var(--border)', background: 'var(--background)', color: 'var(--foreground)' }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowGroqKey(!showGroqKey)}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 opacity-40 hover:opacity-70"
+                        >
+                          {showGroqKey ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Admin Password */}
+                    <div>
+                      <label className="text-[10px] font-medium block mb-1" style={{ color: 'var(--foreground)' }}>
+                        Password Admin
+                      </label>
+                      <input
+                        type="password"
+                        value={configPassword}
+                        onChange={(e) => setConfigPassword(e.target.value)}
+                        placeholder="Masukkan password admin"
+                        className="w-full text-[11px] px-3 py-1.5 rounded-lg border outline-none focus:ring-1 focus:ring-cyan-400"
+                        style={{ borderColor: 'var(--border)', background: 'var(--background)', color: 'var(--foreground)' }}
+                      />
+                    </div>
+
+                    {/* Save button */}
+                    <button
+                      onClick={saveConfig}
+                      disabled={isSavingConfig || !configPassword}
+                      className="w-full text-[11px] px-3 py-2 rounded-lg text-white font-medium transition-all disabled:opacity-40"
+                      style={{ background: 'linear-gradient(135deg, #06B6D4, #0891B2)' }}
+                    >
+                      {isSavingConfig ? (
+                        <span className="flex items-center justify-center gap-2">
+                          <Loader2 className="h-3 w-3 animate-spin" /> Menyimpan...
+                        </span>
+                      ) : '💾 Simpan Konfigurasi'}
+                    </button>
+
+                    {/* Config message */}
+                    {configMessage && (
+                      <div className={`text-[10px] px-2 py-1 rounded ${configMessage.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                        {configMessage.text}
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4" style={{ scrollbarWidth: 'thin' }}>
@@ -304,6 +513,12 @@ export function AIChatWidget() {
                   <p className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
                     Tanyakan tentang data perikanan budidaya, kelompok, pembudidaya, dan produksi di Kab. Mempawah
                   </p>
+
+                  {!isAIConfigured && (
+                    <div className="mt-3 p-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-[10px]">
+                      ⚠️ API Key belum diatur. Klik ⚙️ di atas untuk mengatur API key agar AI bisa menjawab.
+                    </div>
+                  )}
 
                   {/* Quick prompts */}
                   <div className="mt-4 space-y-2">

@@ -62,6 +62,13 @@ const RETRY_DELAY_MS = 2000;
 let groqInstance: Groq | null = null;
 
 /**
+ * Reset the singleton instance (used when API key changes dynamically)
+ */
+export function resetGroqInstance(): void {
+  groqInstance = null;
+}
+
+/**
  * Get or create the Groq instance
  */
 function getGroqInstance(): Groq | null {
