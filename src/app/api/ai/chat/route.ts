@@ -784,7 +784,13 @@ export async function POST(request: NextRequest) {
     const questionType = classifyQuestion(message);
     const searchTerms = extractSearchTerms(message);
 
-    // Build system prompt based on question type
+    // ============================================================
+    // Build system prompt — separate parts for size limit enforcement
+    // ============================================================
+    const MAX_PROMPT_CHARS = 30000; // ~7,500 tokens — safe for all free-tier models
+    const TRUNCATION_NOTE = '\n\n[Data dipangkas karena terlalu panjang. Untuk detail lengkap, tanya secara spesifik.]';
+
+    // Base prompt + memory (always included)
     let systemPrompt = BASE_SYSTEM_PROMPT;
 
     // 🧠 MEMORY: Retrieve relevant memories and inject into system prompt
@@ -806,25 +812,86 @@ export async function POST(request: NextRequest) {
     systemPrompt += kusukaContext;
 
     // Add stats context (compact) for stats/general questions
+    let statsSection = '';
     if (questionType === 'stats' || questionType === 'general') {
-      systemPrompt += buildCompactStats(statsContext);
+      statsSection = buildCompactStats(statsContext);
+      systemPrompt += statsSection;
     }
 
     // Add targeted results for specific questions (group/farmer details with member names)
+    // These are the VERBOSE parts that can blow past token limits
+    let targetedResults = '';
+    let kusukaTargetedResults = '';
     if (questionType === 'specific' || searchTerms.length > 0) {
-      const targeted = await fetchTargetedResults(searchTerms, questionType);
-      if (targeted) systemPrompt += targeted;
+      targetedResults = await fetchTargetedResults(searchTerms, questionType);
+      kusukaTargetedResults = await fetchKusukaTargetedResults(searchTerms, questionType);
+    }
 
-      // Also add KUSUKA targeted results for specific/search queries
-      const kusukaTargeted = await fetchKusukaTargetedResults(searchTerms, questionType);
-      if (kusukaTargeted) systemPrompt += kusukaTargeted;
+    // ============================================================
+    // PROMPT SIZE LIMIT ENFORCEMENT
+    // If the prompt exceeds MAX_PROMPT_CHARS, strategically remove
+    // the most verbose parts to stay within limits.
+    // Priority: keep summaries, remove individual details.
+    // ============================================================
+    let wasTruncated = false;
+    const promptBeforeTargeted = systemPrompt.length;
+
+    // Try adding KUSUKA targeted results first (usually smaller)
+    if (kusukaTargetedResults) {
+      const sizeAfterKusukaTargeted = promptBeforeTargeted + kusukaTargetedResults.length + targetedResults.length;
+      if (sizeAfterKusukaTargeted <= MAX_PROMPT_CHARS) {
+        // Both fit — add both
+        systemPrompt += kusukaTargetedResults;
+        systemPrompt += targetedResults;
+      } else {
+        // Check if KUSUKA targeted alone fits
+        const sizeWithKusukaOnly = promptBeforeTargeted + kusukaTargetedResults.length;
+        if (sizeWithKusukaOnly <= MAX_PROMPT_CHARS) {
+          systemPrompt += kusukaTargetedResults;
+          // Try to fit targeted results too (truncated if needed)
+          const remainingBudget = MAX_PROMPT_CHARS - systemPrompt.length - TRUNCATION_NOTE.length;
+          if (targetedResults && remainingBudget > 200) {
+            systemPrompt += targetedResults.substring(0, remainingBudget);
+            wasTruncated = true;
+          } else if (targetedResults) {
+            wasTruncated = true;
+          }
+        } else {
+          // KUSUKA targeted doesn't fit — skip it, try regular targeted
+          const remainingBudget = MAX_PROMPT_CHARS - promptBeforeTargeted - TRUNCATION_NOTE.length;
+          if (targetedResults && remainingBudget > 200) {
+            systemPrompt += targetedResults.substring(0, remainingBudget);
+            wasTruncated = true;
+          } else {
+            wasTruncated = true;
+          }
+        }
+      }
+    } else if (targetedResults) {
+      // No KUSUKA targeted, just regular targeted
+      const sizeWithTargeted = promptBeforeTargeted + targetedResults.length;
+      if (sizeWithTargeted <= MAX_PROMPT_CHARS) {
+        systemPrompt += targetedResults;
+      } else {
+        const remainingBudget = MAX_PROMPT_CHARS - promptBeforeTargeted - TRUNCATION_NOTE.length;
+        if (remainingBudget > 200) {
+          systemPrompt += targetedResults.substring(0, remainingBudget);
+        }
+        wasTruncated = true;
+      }
+    }
+
+    if (wasTruncated) {
+      systemPrompt += TRUNCATION_NOTE;
     }
 
     // Log prompt size for debugging
     const promptChars = systemPrompt.length;
     const estimatedTokens = Math.ceil(promptChars / 4);
     const memoryCount = memories.length;
-    console.log(`AI Chat: questionType=${questionType}, promptChars=${promptChars}, estTokens=${estimatedTokens}, searchTerms=${searchTerms.join(',')}, totalGroups=${totalGroups}, memories=${memoryCount}`);
+    const targetedChars = targetedResults.length;
+    const kusukaTargetedChars = kusukaTargetedResults.length;
+    console.log(`AI Chat: questionType=${questionType}, promptChars=${promptChars}, estTokens=${estimatedTokens}, searchTerms=${searchTerms.join(',')}, totalGroups=${totalGroups}, memories=${memoryCount}, targetedChars=${targetedChars}, kusukaTargetedChars=${kusukaTargetedChars}, truncated=${wasTruncated}`);
 
     // Build conversation messages
     const chatMessages = [

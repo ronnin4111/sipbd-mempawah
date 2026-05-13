@@ -133,6 +133,9 @@ export async function groqChatCompletion(
   const primaryModel = options.model || getGroqModel();
   const modelsToTry = [primaryModel, ...FALLBACK_MODELS.filter(m => m !== primaryModel)];
 
+  // Track the first error from each model for better diagnostics
+  const firstErrorsByModel = new Map<string, string>();
+
   for (const modelId of modelsToTry) {
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
@@ -170,6 +173,11 @@ export async function groqChatCompletion(
         const message = error instanceof Error ? error.message : 'Unknown error';
         console.error(`[Groq] Error with model ${modelId} (attempt ${attempt + 1}):`, message.substring(0, 300));
 
+        // Track first error per model
+        if (!firstErrorsByModel.has(modelId)) {
+          firstErrorsByModel.set(modelId, message.substring(0, 200));
+        }
+
         // Check error types
         const isRateLimit = message.includes('429') || message.includes('rate_limit') || message.includes('Rate limit');
         const isAuthError = message.includes('401') || message.includes('Invalid API Key') || message.includes('invalid_api_key');
@@ -205,28 +213,31 @@ export async function groqChatCompletion(
             console.warn(`[Groq] Model ${modelId} rate limited, trying next model...`);
             break;
           }
+          const errSummary = [...firstErrorsByModel.entries()].map(([m, e]) => `${m}: ${e.substring(0, 80)}`).join('; ');
           return {
             success: false,
             content: '',
-            error: `Batas permintaan Groq tercapai (${modelId}). Coba lagi dalam 1 menit.`,
+            error: `Batas permintaan Groq tercapai (${modelId}). Coba lagi dalam 1 menit. Detail per model: ${errSummary}`,
           };
         }
 
         // Bad request error
         if (message.includes('400') || message.includes('Bad Request')) {
+          const errSummary = [...firstErrorsByModel.entries()].map(([m, e]) => `${m}: ${e.substring(0, 80)}`).join('; ');
           return {
             success: false,
             content: '',
-            error: `Permintaan tidak valid. Detail: ${message.substring(0, 200)}`,
+            error: `Permintaan tidak valid. Detail per model: ${errSummary}`,
           };
         }
 
         // Context length exceeded
         if (message.includes('context_length') || message.includes('too many tokens')) {
+          const errSummary = [...firstErrorsByModel.entries()].map(([m, e]) => `${m}: ${e.substring(0, 80)}`).join('; ');
           return {
             success: false,
             content: '',
-            error: 'Pesan terlalu panjang untuk model ini. Coba persingkat percakapan Anda.',
+            error: `Pesan terlalu panjang untuk model ini. Coba persingkat percakapan Anda. Detail per model: ${errSummary}`,
           };
         }
 
@@ -236,19 +247,21 @@ export async function groqChatCompletion(
           break;
         }
 
+        const errSummary = [...firstErrorsByModel.entries()].map(([m, e]) => `${m}: ${e.substring(0, 80)}`).join('; ');
         return {
           success: false,
           content: '',
-          error: `Gagal terhubung ke Groq API (model: ${modelId}): ${message.substring(0, 300)}`,
+          error: `Gagal terhubung ke Groq API. Detail per model: ${errSummary}`,
         };
       }
     }
   }
 
+  const errSummary = [...firstErrorsByModel.entries()].map(([m, e]) => `${m}: ${e.substring(0, 80)}`).join('; ');
   return {
     success: false,
     content: '',
-    error: `Gagal setelah mencoba semua model Groq (${modelsToTry.join(', ')}). Coba lagi nanti.`,
+    error: `Gagal setelah mencoba semua model Groq (${modelsToTry.join(', ')}). Detail: ${errSummary}`,
   };
 }
 

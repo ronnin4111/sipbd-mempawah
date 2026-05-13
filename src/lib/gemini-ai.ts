@@ -206,6 +206,9 @@ export async function geminiChatCompletion(
   // Build the list of models to try: primary first, then fallbacks
   const modelsToTry = [primaryModel, ...FALLBACK_MODELS.filter(m => m !== primaryModel)];
 
+  // Track the first error from each model for better diagnostics
+  const firstErrorsByModel = new Map<string, string>();
+
   for (const modelId of modelsToTry) {
     // Try up to MAX_RETRIES + 1 times per model
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -219,6 +222,11 @@ export async function geminiChatCompletion(
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
         console.error(`[Gemini] Error with model ${modelId} (attempt ${attempt + 1}):`, message.substring(0, 300));
+
+        // Track first error per model
+        if (!firstErrorsByModel.has(modelId)) {
+          firstErrorsByModel.set(modelId, message.substring(0, 200));
+        }
 
         // Check if this is a retryable error (rate limit)
         const isRateLimit = message.includes('429') || message.includes('RESOURCE_EXHAUSTED') || message.includes('quota') || message.includes('rate');
@@ -260,18 +268,20 @@ export async function geminiChatCompletion(
             console.warn(`[Gemini] Model ${modelId} rate limited, trying next model...`);
             break; // break out of retry loop, continue to next model
           }
+          const errSummary = [...firstErrorsByModel.entries()].map(([m, e]) => `${m}: ${e.substring(0, 80)}`).join('; ');
           return {
             success: false,
             content: '',
-            error: `Batas permintaan Gemini tercapai (${modelId}). Coba lagi dalam 1 menit. Detail: ${message}`,
+            error: `Batas permintaan Gemini tercapai (${modelId}). Coba lagi dalam 1 menit. Detail per model: ${errSummary}`,
           };
         }
 
         if (message.includes('400') || message.includes('BAD_REQUEST')) {
+          const errSummary = [...firstErrorsByModel.entries()].map(([m, e]) => `${m}: ${e.substring(0, 80)}`).join('; ');
           return {
             success: false,
             content: '',
-            error: `Permintaan tidak valid (mungkin terlalu besar). Detail: ${message.substring(0, 200)}`,
+            error: `Permintaan tidak valid (mungkin terlalu besar). Detail per model: ${errSummary}`,
           };
         }
 
@@ -289,20 +299,22 @@ export async function geminiChatCompletion(
           break;
         }
 
+        const errSummary = [...firstErrorsByModel.entries()].map(([m, e]) => `${m}: ${e.substring(0, 80)}`).join('; ');
         return {
           success: false,
           content: '',
-          error: `Gagal terhubung ke Gemini API (model: ${modelId}): ${message.substring(0, 300)}`,
+          error: `Gagal terhubung ke Gemini API. Detail per model: ${errSummary}`,
         };
       }
     }
   }
 
   // Should never reach here, but just in case
+  const errSummary = [...firstErrorsByModel.entries()].map(([m, e]) => `${m}: ${e.substring(0, 80)}`).join('; ');
   return {
     success: false,
     content: '',
-    error: `Gagal setelah mencoba semua model Gemini (${modelsToTry.join(', ')}). Coba lagi nanti.`,
+    error: `Gagal setelah mencoba semua model Gemini (${modelsToTry.join(', ')}). Detail: ${errSummary}`,
   };
 }
 
