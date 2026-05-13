@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Sparkles, FileText, TrendingUp, MapPin, Target, Loader2, Copy, Check } from 'lucide-react';
+import { Sparkles, FileText, TrendingUp, MapPin, Target, Loader2, Copy, Check, AlertCircle, RotateCcw } from 'lucide-react';
 import { useFishFarmStats } from '@/hooks/use-fish-farms';
 import { useFilterStore } from '@/store/filter-store';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -20,6 +20,7 @@ export function SmartNarrator() {
   const [isLoading, setIsLoading] = useState(false);
   const [activeType, setActiveType] = useState<NarrationType | null>(null);
   const [copied, setCopied] = useState(false);
+  const [errorInfo, setErrorInfo] = useState<{ error: string; detail: string } | null>(null);
   const { data: stats } = useFishFarmStats();
   const years = useFilterStore((s) => s.years);
   const kecamatan = useFilterStore((s) => s.kecamatan);
@@ -34,6 +35,7 @@ export function SmartNarrator() {
     setIsLoading(true);
     setActiveType(type);
     setNarrative(null);
+    setErrorInfo(null);
 
     try {
       const statsContext = {
@@ -71,11 +73,20 @@ export function SmartNarrator() {
 
       if (data.success) {
         setNarrative(data.narrative);
+        setErrorInfo(null);
       } else {
-        setNarrative('Gagal menghasilkan narasi. Silakan coba lagi.');
+        setNarrative(null);
+        setErrorInfo({
+          error: data.error || 'Gagal menghasilkan narasi',
+          detail: data.detail || '',
+        });
       }
     } catch {
-      setNarrative('Gagal menghasilkan narasi. Periksa koneksi dan coba lagi.');
+      setNarrative(null);
+      setErrorInfo({
+        error: 'Gagal menghasilkan narasi',
+        detail: 'Periksa koneksi internet dan coba lagi.',
+      });
     } finally {
       setIsLoading(false);
     }
@@ -88,6 +99,9 @@ export function SmartNarrator() {
       setTimeout(() => setCopied(false), 2000);
     }
   };
+
+  const isApiKeyError = errorInfo?.detail?.includes('API Key belum dikonfigurasi') ||
+    errorInfo?.detail?.includes('🔑');
 
   return (
     <div
@@ -197,6 +211,51 @@ export function SmartNarrator() {
                 style={{ color: 'var(--foreground)' }}
               >
                 {narrative}
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {errorInfo && !isLoading && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="px-4 pb-4"
+          >
+            <div
+              className="rounded-lg p-4"
+              style={{
+                background: 'rgba(239, 68, 68, 0.08)',
+                border: '1px solid rgba(239, 68, 68, 0.2)',
+              }}
+            >
+              <div className="flex items-start gap-3">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-red-500" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-semibold text-red-600 dark:text-red-400 mb-1">
+                    {errorInfo.error}
+                  </div>
+                  <div className="text-[11px] text-red-500/80 dark:text-red-400/70 leading-relaxed">
+                    {errorInfo.detail}
+                  </div>
+                  {isApiKeyError && (
+                    <div className="mt-2 text-[11px] text-red-500/70 dark:text-red-400/60">
+                      💡 Buka chat AI → klik ⚙️ → masukkan API key Gemini atau Groq (gratis!)
+                    </div>
+                  )}
+                  <button
+                    onClick={() => activeType && generateNarration(activeType)}
+                    className="mt-3 flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-medium transition-colors hover:bg-red-100 dark:hover:bg-red-900/30"
+                    style={{
+                      color: 'var(--foreground)',
+                      border: '1px solid rgba(239, 68, 68, 0.2)',
+                    }}
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                    Coba Lagi
+                  </button>
+                </div>
               </div>
             </div>
           </motion.div>

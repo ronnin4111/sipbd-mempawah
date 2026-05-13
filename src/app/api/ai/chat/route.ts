@@ -31,6 +31,8 @@ Aturan respons SANGAT PENTING:
 - ⚠️ JANGAN MENGARANG DATA — HANYA gunakan data yang ada di DATA CONTEXT
 - ⚠️ JANGAN menyebutkan nama kecamatan/kelompok/ikan yang TIDAK ada di DATA CONTEXT
 - Jika data tidak tersedia di konteks, katakan jujur "Data tidak tersedia di konteks yang diberikan"
+- ⚠️ PENTING: Jika data ADA di DATA CONTEXT, JANGAN bilang data tidak tersedia. Data di DATA CONTEXT sudah diambil langsung dari database sesuai pertanyaan Anda.
+- DATA CONTEXT berisi data yang SUDAH diquery dari database sesuai pertanyaan Anda. JANGAN bilang data tidak tersedia jika ada angka di DATA CONTEXT.
 - Jika nama kelompok/pembudidaya tidak ditemukan, sarankan nama mirip dari DATA CONTEXT
 - Daftar kelompok/kecamatan/desa HANYA dari data yang disediakan — JANGAN tebak
 - Saat diminta daftar kelompok, GUNAKAN nomor urut sesuai DATA CONTEXT
@@ -189,6 +191,23 @@ const KNOWN_FISH_TYPES = [
   'Kerapu', 'Udang', 'Bandeng', 'Pari', 'Belanak',
   'Kakap', 'Napol', 'Barramundi',
 ];
+
+/**
+ * Get available years from the database.
+ * Returns distinct years sorted descending.
+ */
+async function getAvailableYears(): Promise<number[]> {
+  try {
+    const result = await db.fishFarm.findMany({
+      select: { year: true },
+      distinct: ['year'],
+      orderBy: { year: 'desc' },
+    });
+    return result.map(r => r.year).filter((y): y is number => typeof y === 'number');
+  } catch {
+    return [];
+  }
+}
 
 /**
  * Parsed question context — what the user is asking about,
@@ -357,9 +376,9 @@ function parseQuestionContext(message: string): QuestionContext {
  * Resolve effective filters by merging question context with UI filters.
  * Question context takes PRIORITY over UI filters.
  * If user mentions "tahun 2025" → use 2025, regardless of UI filter.
- * If user doesn't mention any year → fall back to UI filter, then current year.
+ * If user doesn't mention any year → fall back to UI filter, then latest 2 years from DB.
  */
-function resolveEffectiveFilters(
+async function resolveEffectiveFilters(
   questionCtx: QuestionContext,
   uiFilters: {
     years: string[];
@@ -369,19 +388,36 @@ function resolveEffectiveFilters(
     containerType: string[];
     businessType: string[];
   }
-): {
+): Promise<{
   years: string[];
   kecamatan: string[];
   desa: string[];
   fishType: string[];
   containerType: string[];
   businessType: string[];
-} {
+}> {
+  let resolvedYears: string[];
+
+  if (questionCtx.years.length > 0) {
+    // Question context has years → use them
+    resolvedYears = questionCtx.years.map(String);
+  } else if (uiFilters.years.length > 0) {
+    // UI filter has years → use them
+    resolvedYears = uiFilters.years;
+  } else {
+    // Neither has years → use latest 2 years from database
+    // This prevents defaulting to just current year which may have incomplete data
+    const availableYears = await getAvailableYears();
+    if (availableYears.length > 0) {
+      resolvedYears = availableYears.slice(0, 2).map(String);
+    } else {
+      // Fallback to current year if DB query fails
+      resolvedYears = [String(new Date().getFullYear())];
+    }
+  }
+
   const resolved = {
-    // Years: question context > UI filter > current year
-    years: questionCtx.years.length > 0
-      ? questionCtx.years.map(String)
-      : (uiFilters.years.length > 0 ? uiFilters.years : []),
+    years: resolvedYears,
     // Kecamatan: question context > UI filter
     kecamatan: questionCtx.kecamatan.length > 0
       ? questionCtx.kecamatan
@@ -605,7 +641,11 @@ async function fetchCompactDataContext(year?: number): Promise<{
   totalGroups: number;
 }> {
   try {
-    const targetYear = year || new Date().getFullYear();
+    let targetYear = year;
+    if (!targetYear) {
+      const availableYears = await getAvailableYears();
+      targetYear = availableYears.length > 0 ? availableYears[0] : new Date().getFullYear();
+    }
     const records = await db.fishFarm.findMany({ where: { year: targetYear } });
 
     if (records.length === 0) {
@@ -676,7 +716,9 @@ async function fetchStatsDataContext(filters: {
     if (filters.years.length > 0) {
       where.year = { in: filters.years.map(Number).filter(n => !isNaN(n)) };
     } else {
-      where.year = new Date().getFullYear();
+      // Default to latest available year from database instead of current year
+      const availableYears = await getAvailableYears();
+      where.year = availableYears.length > 0 ? availableYears[0] : new Date().getFullYear();
     }
     if (filters.kecamatan.length > 0) where.kecamatan = { in: filters.kecamatan };
     if (filters.desa.length > 0) where.desa = { in: filters.desa };
@@ -813,7 +855,9 @@ async function fetchFullDataContext(filters: {
     if (filters.years.length > 0) {
       where.year = { in: filters.years.map(Number).filter(n => !isNaN(n)) };
     } else {
-      where.year = new Date().getFullYear();
+      // Default to latest available year from database instead of current year
+      const availableYears = await getAvailableYears();
+      where.year = availableYears.length > 0 ? availableYears[0] : new Date().getFullYear();
     }
 
     if (filters.kecamatan.length > 0) where.kecamatan = { in: filters.kecamatan };
@@ -1005,11 +1049,12 @@ async function fetchTargetedResults(searchTerms: string[], questionType: string,
 }): Promise<string> {
   try {
     const where: Record<string, unknown> = {};
-    // Use resolved filters if provided, otherwise fall back to current year
+    // Use resolved filters if provided, otherwise fall back to latest available year
     if (filters && filters.years.length > 0) {
       where.year = { in: filters.years.map(Number).filter(n => !isNaN(n)) };
     } else {
-      where.year = new Date().getFullYear();
+      const availableYears = await getAvailableYears();
+      where.year = availableYears.length > 0 ? availableYears[0] : new Date().getFullYear();
     }
     if (filters?.kecamatan.length) where.kecamatan = { in: filters.kecamatan };
     if (filters?.desa.length) where.desa = { in: filters.desa };
@@ -1171,9 +1216,18 @@ async function fetchMultiYearComparisonContext(resolvedFilters: {
   businessType: string[];
 }): Promise<string> {
   try {
-    const years = resolvedFilters.years.length > 0
-      ? resolvedFilters.years.map(Number).filter(n => !isNaN(n))
-      : [new Date().getFullYear()];
+    let years: number[];
+    if (resolvedFilters.years.length > 0) {
+      years = resolvedFilters.years.map(Number).filter(n => !isNaN(n));
+    } else {
+      // Default to latest 2 years from database instead of current year
+      const availableYears = await getAvailableYears();
+      years = availableYears.length >= 2
+        ? availableYears.slice(0, 2)
+        : availableYears.length === 1
+          ? [availableYears[0], availableYears[0] - 1]
+          : [new Date().getFullYear()];
+    }
 
     if (years.length < 2) {
       // Need at least 2 years for comparison; add previous year
@@ -1181,6 +1235,7 @@ async function fetchMultiYearComparisonContext(resolvedFilters: {
     }
 
     const lines: string[] = ['\n=== DATA PERBANDINGAN MULTI-TAHUN ==='];
+    lines.push('⚠️ PENTING: Data ini sudah diambil dari database untuk tahun yang Anda tanyakan. Gunakan data ini langsung — JANGAN bilang data tidak tersedia jika ada angka di bawah.');
 
     for (const year of years) {
       const where: Record<string, unknown> = { year };
@@ -1192,9 +1247,11 @@ async function fetchMultiYearComparisonContext(resolvedFilters: {
       const records = await db.fishFarm.findMany({ where });
 
       if (records.length === 0) {
-        lines.push(`\n--- Tahun ${year}: Tidak ada data ---`);
+        lines.push(`\n--- Tahun ${year}: Tidak ada data di database untuk tahun ini ---`);
         continue;
       }
+
+      lines.push(`\n--- Tahun ${year}: Data ditemukan (${records.length} record) ---`);
 
       // Build group data
       const groupMap = new Map<string, { businessTypes: Set<string>; memberCount: number; rtpCount: number; }>();
@@ -1412,7 +1469,7 @@ export async function POST(request: NextRequest) {
       years: [], kecamatan: [], desa: [], fishType: [],
       containerType: [], businessType: [],
     };
-    const resolvedFilters = resolveEffectiveFilters(questionCtx, filters || defaultFilters);
+    const resolvedFilters = await resolveEffectiveFilters(questionCtx, filters || defaultFilters);
 
     // If question context detected a comparison but classifyQuestion didn't catch it,
     // upgrade the question type to 'comparison'
@@ -1422,6 +1479,12 @@ export async function POST(request: NextRequest) {
     // Build context header to let the AI know what scope was auto-detected
     const contextHeader = buildContextHeader(questionCtx);
 
+    // Add available years info so AI knows what data exists in the database
+    const availableYears = await getAvailableYears();
+    const availableYearsInfo = availableYears.length > 0
+      ? `\n\nTahun data tersedia di database: ${availableYears.join(', ')}`
+      : '';
+
     // ============================================================
     // Build system prompt — SMART context loading based on question type
     // ============================================================
@@ -1429,7 +1492,7 @@ export async function POST(request: NextRequest) {
     const TRUNCATION_NOTE = '\n\n[Data dipangkas karena terlalu panjang. Untuk detail lengkap, tanya secara spesifik.]';
 
     // Base prompt + memory (always included)
-    let systemPrompt = BASE_SYSTEM_PROMPT;
+    let systemPrompt = BASE_SYSTEM_PROMPT + availableYearsInfo;
 
     // Add question context header if any context was auto-detected
     if (contextHeader) {

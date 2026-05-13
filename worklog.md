@@ -124,3 +124,41 @@ Stage Summary:
 - Context header line added so AI knows what scope was auto-detected
 - File grew from 1206 to 1648 lines (442 lines added for new functions)
 - All existing functionality preserved, no breaking changes
+
+## 2026-03-05: Fix AI Chat and Narasi Cerdas (Task: fix-ai-narrate-chat)
+
+### Problem 1: AI Chat says "data tidak tersedia" for year comparisons
+**Root cause:** Multiple issues:
+1. When no year filter specified, code defaulted to `new Date().getFullYear()` (2026), which has limited data
+2. The system prompt was too conservative, causing AI to say "data tidak tersedia" even when data WAS present in the context
+3. The multi-year comparison context didn't clearly indicate data was found
+
+**Fixes in `src/app/api/ai/chat/route.ts`:**
+- Added `getAvailableYears()` helper that queries DB for distinct years
+- Made `resolveEffectiveFilters()` async — now defaults to latest 2 years from DB instead of empty array → current year
+- `fetchStatsDataContext`, `fetchFullDataContext`, `fetchTargetedResults`, `fetchCompactDataContext` — all now default to latest available year from DB instead of `new Date().getFullYear()`
+- `fetchMultiYearComparisonContext` — defaults to latest 2 years from DB, added "Data ditemukan" header for each year with records, and a PENTING note that data is from the database
+- Added available years info to system prompt: "Tahun data tersedia di database: 2019, 2021, 2022, ..."
+- Updated system prompt with explicit rules:
+  - "Jika data ADA di DATA CONTEXT, JANGAN bilang data tidak tersedia"
+  - "DATA CONTEXT berisi data yang SUDAH diquery dari database sesuai pertanyaan Anda"
+
+### Problem 2: Narasi Cerdas AI not working on Vercel
+**Root cause:** 
+1. `JSON.stringify(statsContext)` was too large → 413 errors from Groq
+2. Poor error messages — just generic "Gagal menghasilkan narasi"
+3. No retry capability in UI
+
+**Fixes in `src/app/api/ai/narrate/route.ts`:**
+- Replaced raw JSON with `formatStatsContextToText()` — compact human-readable text format
+- Added `MAX_CONTEXT_CHARS = 8000` budget with truncation
+- Added `getAvailableYears()` to include available years in AI context
+- Added user-friendly error messages for: API key not configured, 413 too large, 429 rate limited, all providers failed, network errors
+- Updated prompts with "PENTING: Data yang diberikan sudah diquery dari database dan SUDAH BENAR"
+
+**Fixes in `src/components/ai/smart-narrator.tsx`:**
+- Added `errorInfo` state to capture error + detail from API response
+- Added error display with red styling, AlertCircle icon, and actual error detail text
+- Added retry button (RotateCcw icon) that re-triggers the same narration type
+- Added helpful message when API keys are not configured
+- Clean separation of narrative success vs error states
