@@ -45,7 +45,7 @@ export interface ChatCompletionResponse {
 
 // Use gemini-2.0-flash as default — reliable free tier with 15 RPM, 1500 RPD
 const DEFAULT_MODEL = 'gemini-2.0-flash';
-const FALLBACK_MODELS = ['gemini-2.5-flash-preview-05-20', 'gemini-1.5-flash'];
+const FALLBACK_MODELS = ['gemini-2.5-flash-preview-05-20', 'gemini-1.5-flash', 'gemini-2.0-flash-lite'];
 const DEFAULT_TEMPERATURE = 0.7;
 const DEFAULT_MAX_TOKENS = 2048;
 const MAX_RETRIES = 2;

@@ -12,9 +12,12 @@
  * Supported Models on Free Tier:
  * - llama-3.3-70b-versatile ✅ (RECOMMENDED - best quality)
  * - llama-3.1-8b-instant (fast, lightweight)
- * - gemma2-9b-it (good alternative)
+ * - llama-3.2-3b-preview (small & fast)
  * - mixtral-8x7b-32768 (long context)
  * - deepseek-r1-distill-llama-70b (reasoning)
+ *
+ * DECOMMISSIONED (do NOT use):
+ * - gemma2-9b-it ❌ (removed March 2025)
  *
  * Environment variables:
  * - GROQ_API_KEY: Your Groq API key (required, free at https://console.groq.com)
@@ -49,7 +52,7 @@ export interface ChatCompletionResponse {
 
 // Default model — best quality/availability on free tier
 const DEFAULT_MODEL = 'llama-3.3-70b-versatile';
-const FALLBACK_MODELS = ['llama-3.1-8b-instant', 'gemma2-9b-it'];
+const FALLBACK_MODELS = ['llama-3.1-8b-instant', 'llama-3.2-3b-preview', 'mixtral-8x7b-32768'];
 const DEFAULT_TEMPERATURE = 0.7;
 const DEFAULT_MAX_TOKENS = 2048;
 const MAX_RETRIES = 2;
@@ -155,10 +158,11 @@ export async function groqChatCompletion(
         const isRateLimit = message.includes('429') || message.includes('rate_limit') || message.includes('Rate limit');
         const isAuthError = message.includes('401') || message.includes('Invalid API Key') || message.includes('invalid_api_key');
         const isModelUnavailable = message.includes('404') || message.includes('model_not_found') || message.includes('does not exist');
+        const isDecommissioned = message.includes('decommissioned') || message.includes('no longer supported');
 
-        // If model not found, try next model
-        if (isModelUnavailable) {
-          console.warn(`[Groq] Model ${modelId} not available, trying next model...`);
+        // If model decommissioned or not found, try next model
+        if (isModelUnavailable || isDecommissioned) {
+          console.warn(`[Groq] Model ${modelId} not available (decommissioned/not found), trying next model...`);
           break;
         }
 

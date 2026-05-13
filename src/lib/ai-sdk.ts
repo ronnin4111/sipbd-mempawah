@@ -11,7 +11,7 @@ import { groqChatCompletion, isGroqConfigured, getGroqModel } from './groq-ai';
  *    - No monthly credit limits (unlike Hugging Face)
  * 2. Groq API (fallback 1 — ultra-fast inference, very generous free tier)
  *    - Free: 30 RPM, 6000 RPD for llama-3.3-70b-versatile (default)
- *    - Fallback models: llama-3.1-8b-instant, gemma2-9b-it
+ *    - Fallback models: llama-3.1-8b-instant, llama-3.2-3b-preview, mixtral-8x7b-32768
  *    - LPU hardware accelerator for blazing fast responses
  * 3. z-ai-web-dev-sdk (fallback 2 — works in sandbox/local dev only)
  *    - Requires .z-ai-config file (not available on Vercel)
