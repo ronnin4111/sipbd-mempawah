@@ -56,7 +56,9 @@ export interface ChatCompletionResponse {
 
 // Default model — best quality/availability on free tier
 const DEFAULT_MODEL = 'llama-3.3-70b-versatile';
-const FALLBACK_MODELS = ['llama-3.1-8b-instant', 'llama-3.2-3b-preview', 'mixtral-8x7b-32768'];
+// Fallback models — only models with large context windows
+// Removed llama-3.2-3b-preview (too small context, causes 413 errors)
+const FALLBACK_MODELS = ['llama-3.1-8b-instant', 'mixtral-8x7b-32768'];
 const DEFAULT_TEMPERATURE = 0.7;
 const DEFAULT_MAX_TOKENS = 2048;
 const MAX_RETRIES = 1; // Reduced from 2 to 1 — avoid consuming rate limit budget

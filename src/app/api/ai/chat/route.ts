@@ -326,6 +326,62 @@ async function fetchKusukaTargetedResults(searchTerms: string[], questionType: s
 }
 
 /**
+ * Fetch COMPACT data context — summary only, no individual group details.
+ * Used for 'general' questions (greetings, non-data questions) to keep prompt small.
+ * The AI can still answer basic questions like "what data do you have?"
+ */
+async function fetchCompactDataContext(): Promise<{
+  dataContext: string;
+  totalGroups: number;
+}> {
+  try {
+    const currentYear = new Date().getFullYear();
+    const records = await db.fishFarm.findMany({ where: { year: currentYear } });
+
+    if (records.length === 0) {
+      return {
+        dataContext: '\n=== DATA CONTEXT (Ringkasan) ===\nBelum ada data tahun ini.',
+        totalGroups: 0,
+      };
+    }
+
+    // Quick counts
+    const groupKeys = new Set<string>();
+    const kecSet = new Set<string>();
+    const fishSet = new Set<string>();
+    const bizSet = new Set<string>();
+    let totalFarmers = 0;
+
+    records.forEach(r => {
+      if (r.groupName?.trim()) groupKeys.add(`${r.groupName.trim().toLowerCase()}|${r.kecamatan}`);
+      kecSet.add(r.kecamatan);
+      fishSet.add(r.fishType);
+      bizSet.add(r.businessType);
+      totalFarmers += r.farmerCount;
+    });
+
+    return {
+      dataContext: `\n=== DATA CONTEXT (Ringkasan) ===
+Total kelompok: ${groupKeys.size}
+Total pembudidaya: ${totalFarmers}
+Kecamatan: ${[...kecSet].sort().join(', ')}
+Jenis ikan: ${[...fishSet].sort().join(', ')}
+Jenis usaha: ${[...bizSet].sort().join(', ')}
+Tahun data: ${currentYear}
+
+CATATAN: Ini ringkasan saja. Untuk data detail kelompok/anggota, tanyakan secara spesifik.`,
+      totalGroups: groupKeys.size,
+    };
+  } catch (error) {
+    console.error('Failed to fetch compact data context:', error);
+    return {
+      dataContext: '\n=== DATA ===\nGagal memuat data.',
+      totalGroups: 0,
+    };
+  }
+}
+
+/**
  * Fetch comprehensive data context — includes ALL groups with full details.
  * No artificial limit on group count so AI can answer "berapa total" and
  * "tampilkan semua" accurately.
@@ -804,9 +860,9 @@ export async function POST(request: NextRequest) {
     const searchTerms = extractSearchTerms(message);
 
     // ============================================================
-    // Build system prompt — separate parts for size limit enforcement
+    // Build system prompt — SMART context loading based on question type
     // ============================================================
-    const MAX_PROMPT_CHARS = 30000; // ~7,500 tokens — safe for all free-tier models
+    const MAX_PROMPT_CHARS = 25000; // ~6,000 tokens — safe for Groq API limits
     const TRUNCATION_NOTE = '\n\n[Data dipangkas karena terlalu panjang. Untuk detail lengkap, tanya secara spesifik.]';
 
     // Base prompt + memory (always included)
@@ -819,16 +875,33 @@ export async function POST(request: NextRequest) {
       systemPrompt += memoryContext;
     }
 
-    // ALWAYS add full data context — AI needs accurate data for ALL question types
-    const { dataContext, totalGroups } = await fetchFullDataContext(filters || {
-      years: [], kecamatan: [], desa: [], fishType: [],
-      containerType: [], businessType: [],
-    });
-    systemPrompt += dataContext;
+    // SMART DATA CONTEXT LOADING:
+    // - 'general': Only compact summaries (no full group list) — keeps prompt small
+    // - 'stats': Summaries + compact stats — moderate size
+    // - 'specific': Full data context + targeted results — largest, but still limited
+    let totalGroups = 0;
+    if (questionType === 'general') {
+      // For general/greeting questions, only include compact summary stats
+      // Don't load the full group list — it's huge and unnecessary for greetings
+      const compactContext = await fetchCompactDataContext();
+      systemPrompt += compactContext.dataContext;
+      totalGroups = compactContext.totalGroups;
+    } else {
+      // For stats and specific questions, load full data context
+      const fullContext = await fetchFullDataContext(filters || {
+        years: [], kecamatan: [], desa: [], fishType: [],
+        containerType: [], businessType: [],
+      });
+      systemPrompt += fullContext.dataContext;
+      totalGroups = fullContext.totalGroups;
+    }
 
-    // Add KUSUKA data context for ALL questions (so AI knows KUSUKA data is available)
-    const kusukaContext = await fetchKusukaDataContext();
-    systemPrompt += kusukaContext;
+    // Add KUSUKA data context for stats and specific questions only
+    // (general/greeting questions don't need KUSUKA details)
+    if (questionType !== 'general') {
+      const kusukaContext = await fetchKusukaDataContext();
+      systemPrompt += kusukaContext;
+    }
 
     // Add stats context (compact) for stats/general questions
     let statsSection = '';
