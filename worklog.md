@@ -25,3 +25,26 @@ Stage Summary:
 - AI should now correctly answer "berapa kelompok pembenih" → 15
 - AI should now correctly list members of any kelompok
 - Deployed to GitHub: commit a45154e
+
+---
+Task ID: 2
+Agent: main
+Task: Verify Vercel auto-deployment, fix missing Turso tables, seed KUSUKA data
+
+Work Log:
+- Checked git status: code pushed to origin/main (latest commit 19ca1e3 - KUSUKA system)
+- Discovered KusukaRegistration table was MISSING from Turso production database
+- ChatMemory table existed in Turso (1 record)
+- FishFarm table existed in Turso (2550 records)
+- Created KusukaRegistration table in Turso via PrismaLibSql adapter with all 6 indexes
+- Seeded 35 KUSUKA records from local SQLite to Turso production DB
+- Regenerated Prisma client locally (was stale - causing server crashes)
+- Verified KUSUKA stats API works locally (returns correct 35 records)
+- Local dev server has stability issues with AI calls (memory constraints in dev environment)
+
+Stage Summary:
+- Turso production DB now has: FishFarm (2550), ChatMemory (1), KusukaRegistration (35)
+- All Prisma schema tables synced to Turso
+- Code is on GitHub main branch → Vercel auto-deployment triggered
+- Local dev server working for API endpoints (may crash on AI calls due to env constraints)
+- KUSUKA data is live on production (35 registrants across 8 kecamatan)
