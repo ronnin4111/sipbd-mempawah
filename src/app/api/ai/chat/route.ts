@@ -382,6 +382,142 @@ CATATAN: Ini ringkasan saja. Untuk data detail kelompok/anggota, tanyakan secara
 }
 
 /**
+ * Fetch STATS data context — summaries + business breakdown, NO full group list.
+ * Used for counting/summary questions like "berapa jumlah kelompok?" or "berapa kusuka?"
+ * Includes business type breakdown and per-kecamatan counts, but NOT the verbose
+ * individual group listing (which causes Groq 413 errors).
+ */
+async function fetchStatsDataContext(filters: {
+  years: string[];
+  kecamatan: string[];
+  desa: string[];
+  fishType: string[];
+  containerType: string[];
+  businessType: string[];
+}): Promise<{
+  dataContext: string;
+  totalGroups: number;
+  totalFarmers: number;
+  pembenihanCount: number;
+  pembesaranCount: number;
+}> {
+  try {
+    const where: Record<string, unknown> = {};
+    if (filters.years.length > 0) {
+      where.year = { in: filters.years.map(Number).filter(n => !isNaN(n)) };
+    } else {
+      where.year = new Date().getFullYear();
+    }
+    if (filters.kecamatan.length > 0) where.kecamatan = { in: filters.kecamatan };
+    if (filters.desa.length > 0) where.desa = { in: filters.desa };
+    if (filters.fishType.length > 0) where.fishType = { in: filters.fishType };
+    if (filters.businessType.length > 0) where.businessType = { in: filters.businessType };
+
+    const records = await db.fishFarm.findMany({ where });
+
+    if (records.length === 0) {
+      return {
+        dataContext: '\n=== DATA ===\nTidak ada data untuk filter yang dipilih.',
+        totalGroups: 0, totalFarmers: 0, pembenihanCount: 0, pembesaranCount: 0,
+      };
+    }
+
+    // Build group data for counting (but NOT for listing)
+    const groupMap = new Map<string, {
+      businessTypes: Set<string>; memberCount: number; rtpCount: number;
+    }>();
+    const allFarmerLatest = new Map<string, typeof records[0]>();
+    const sortedDesc = [...records].sort((a, b) => b.year - a.year);
+
+    records.forEach(r => {
+      if (!r.groupName?.trim()) return;
+      const key = `${r.groupName.trim().toLowerCase()}|${r.kecamatan}`;
+      if (!groupMap.has(key)) {
+        groupMap.set(key, { businessTypes: new Set(), memberCount: 0, rtpCount: 0 });
+      }
+      groupMap.get(key)!.businessTypes.add(r.businessType);
+
+      const fid = r.farmerId || generateFarmerId({
+        farmerName: r.farmerName || '', groupName: r.groupName || '',
+        kecamatan: r.kecamatan || '', desa: r.desa || '',
+      });
+      if (!allFarmerLatest.has(fid)) {
+        allFarmerLatest.set(fid, r);
+        groupMap.get(key)!.memberCount += r.farmerCount;
+        groupMap.get(key)!.rtpCount += r.rtpCount;
+      }
+    });
+
+    const kecList = [...new Set(records.map(r => r.kecamatan))].sort();
+    const desaByKec = new Map<string, Set<string>>();
+    records.forEach(r => {
+      if (!desaByKec.has(r.kecamatan)) desaByKec.set(r.kecamatan, new Set());
+      desaByKec.get(r.kecamatan)!.add(r.desa);
+    });
+
+    const fishTypeList = [...new Set(records.map(r => r.fishType))].sort();
+    const businessTypeList = [...new Set(records.map(r => r.businessType))].sort();
+    const containerTypeList = [...new Set(records.map(r => r.containerType))].sort();
+
+    // Business type breakdown
+    let pembesaranOnly = 0, pembenihanOnly = 0, bothBiz = 0;
+    for (const group of groupMap.values()) {
+      const hasPembesaran = group.businessTypes.has('Pembesaran');
+      const hasPembenihan = group.businessTypes.has('Pembenihan');
+      if (hasPembesaran && hasPembenihan) bothBiz++;
+      else if (hasPembesaran) pembesaranOnly++;
+      else if (hasPembenihan) pembenihanOnly++;
+    }
+    const pembenihanCount = pembenihanOnly + bothBiz;
+    const pembesaranCount = pembesaranOnly + bothBiz;
+
+    const totalGroups = groupMap.size;
+    const totalFarmers = allFarmerLatest.size;
+
+    // Per-kecamatan group count
+    const kecGroupCounts = new Map<string, number>();
+    for (const r of records) {
+      if (!r.groupName?.trim()) continue;
+      // Count unique groups per kecamatan
+      const kec = r.kecamatan;
+      kecGroupCounts.set(kec, (kecGroupCounts.get(kec) || 0) + 1);
+    }
+
+    const kecDesaLines = [...desaByKec.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([kec, desas]) => `${kec} (${[...desas].sort().join(', ')})`)
+      .join(', ');
+
+    const dataContext = `\n=== DATA CONTEXT (WAJIB: gunakan HANYA data ini, jangan mengarang) ===
+Total kelompok: ${totalGroups}
+Total pembudidaya: ${totalFarmers}
+
+RINGKASAN JENIS USAHA:
+- Kelompok Pembesaran saja: ${pembesaranOnly}
+- Kelompok Pembenihan saja: ${pembenihanOnly}
+- Kelompok Pembesaran+Pembenihan: ${bothBiz}
+- Total kelompok Pembesaran (termasuk campuran): ${pembesaranCount}
+- Total kelompok Pembenihan (termasuk campuran): ${pembenihanCount}
+
+Kecamatan (${kecList.length}): ${kecList.join(', ')}
+Desa per kecamatan: ${kecDesaLines}
+Jenis ikan: ${fishTypeList.join(', ')}
+Jenis usaha: ${businessTypeList.join(', ')}
+Wadah budidaya: ${containerTypeList.join(', ')}
+
+CATATAN: Untuk daftar nama kelompok atau anggota, tanyakan secara spesifik.`;
+
+    return { dataContext, totalGroups, totalFarmers, pembenihanCount, pembesaranCount };
+  } catch (error) {
+    console.error('Failed to fetch stats data context:', error);
+    return {
+      dataContext: '\n=== DATA ===\nGagal memuat data.',
+      totalGroups: 0, totalFarmers: 0, pembenihanCount: 0, pembesaranCount: 0,
+    };
+  }
+}
+
+/**
  * Fetch comprehensive data context — includes ALL groups with full details.
  * No artificial limit on group count so AI can answer "berapa total" and
  * "tampilkan semua" accurately.
@@ -876,18 +1012,26 @@ export async function POST(request: NextRequest) {
     }
 
     // SMART DATA CONTEXT LOADING:
-    // - 'general': Only compact summaries (no full group list) — keeps prompt small
-    // - 'stats': Summaries + compact stats — moderate size
+    // - 'general': Only compact summaries (~500 chars) — keeps prompt tiny
+    // - 'stats': Summary + business type breakdown + kecamatan list (~2K chars)
     // - 'specific': Full data context + targeted results — largest, but still limited
     let totalGroups = 0;
     if (questionType === 'general') {
       // For general/greeting questions, only include compact summary stats
-      // Don't load the full group list — it's huge and unnecessary for greetings
       const compactContext = await fetchCompactDataContext();
       systemPrompt += compactContext.dataContext;
       totalGroups = compactContext.totalGroups;
+    } else if (questionType === 'stats') {
+      // For stats/counting questions, include summaries + business breakdown
+      // but NOT the full group list (which is 10K+ chars and causes Groq 413 errors)
+      const statsContext = await fetchStatsDataContext(filters || {
+        years: [], kecamatan: [], desa: [], fishType: [],
+        containerType: [], businessType: [],
+      });
+      systemPrompt += statsContext.dataContext;
+      totalGroups = statsContext.totalGroups;
     } else {
-      // For stats and specific questions, load full data context
+      // For specific questions, load full data context
       const fullContext = await fetchFullDataContext(filters || {
         years: [], kecamatan: [], desa: [], fishType: [],
         containerType: [], businessType: [],
