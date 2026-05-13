@@ -36,6 +36,10 @@ export interface ChatCompletionOptions {
   temperature?: number;
   max_tokens?: number;
   top_p?: number;
+  /** Direct API key — overrides env var. Used by AI SDK for DB-stored keys. */
+  apiKey?: string;
+  /** Direct model override */
+  model?: string;
 }
 
 export interface ChatCompletionResponse {
@@ -58,7 +62,7 @@ const DEFAULT_MAX_TOKENS = 2048;
 const MAX_RETRIES = 2;
 const RETRY_DELAY_MS = 2000;
 
-// Singleton instance
+// Singleton instance (for env-var-based usage)
 let groqInstance: Groq | null = null;
 
 /**
@@ -69,7 +73,8 @@ export function resetGroqInstance(): void {
 }
 
 /**
- * Get or create the Groq instance
+ * Get or create the Groq instance from env var.
+ * NOTE: For DB-stored keys, pass apiKey directly to chatCompletion instead.
  */
 function getGroqInstance(): Groq | null {
   if (groqInstance) return groqInstance;
@@ -82,7 +87,7 @@ function getGroqInstance(): Groq | null {
 }
 
 /**
- * Check if Groq API is configured (has API key)
+ * Check if Groq API is configured (has API key in env)
  */
 export function isGroqConfigured(): boolean {
   return !!process.env.GROQ_API_KEY;
@@ -106,14 +111,15 @@ function sleep(ms: number): Promise<void> {
  * Call the Groq API for chat completions.
  * Includes retry logic for rate limit errors AND model fallback.
  *
- * Groq uses OpenAI-compatible API, so message format is the same.
+ * @param options.apiKey - Direct API key (overrides env var). Used for DB-stored keys.
  */
 export async function groqChatCompletion(
   options: ChatCompletionOptions
 ): Promise<ChatCompletionResponse> {
-  const groq = getGroqInstance();
+  // Resolve API key: direct parameter > env var
+  const apiKey = options.apiKey || process.env.GROQ_API_KEY;
 
-  if (!groq) {
+  if (!apiKey) {
     return {
       success: false,
       content: '',
@@ -121,7 +127,10 @@ export async function groqChatCompletion(
     };
   }
 
-  const primaryModel = getGroqModel();
+  // Create a fresh Groq instance with the resolved key (no singleton issues)
+  const groq = new Groq({ apiKey });
+
+  const primaryModel = options.model || getGroqModel();
   const modelsToTry = [primaryModel, ...FALLBACK_MODELS.filter(m => m !== primaryModel)];
 
   for (const modelId of modelsToTry) {
@@ -249,7 +258,7 @@ export async function groqChatCompletion(
 export async function groqChat(
   systemPrompt: string,
   userMessage: string,
-  options?: { temperature?: number; max_tokens?: number }
+  options?: { temperature?: number; max_tokens?: number; apiKey?: string }
 ): Promise<ChatCompletionResponse> {
   return groqChatCompletion({
     messages: [

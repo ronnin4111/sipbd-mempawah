@@ -29,6 +29,10 @@ export interface ChatCompletionOptions {
   temperature?: number;
   max_tokens?: number;
   top_p?: number;
+  /** Direct API key — overrides env var. Used by AI SDK for DB-stored keys. */
+  apiKey?: string;
+  /** Direct model override */
+  model?: string;
 }
 
 export interface ChatCompletionResponse {
@@ -51,7 +55,7 @@ const DEFAULT_MAX_TOKENS = 2048;
 const MAX_RETRIES = 2;
 const RETRY_DELAY_MS = 3000;
 
-// Singleton instance
+// Singleton instance (for env-var-based usage)
 let genAIInstance: GoogleGenerativeAI | null = null;
 
 /**
@@ -62,7 +66,8 @@ export function resetGeminiInstance(): void {
 }
 
 /**
- * Get or create the GoogleGenerativeAI instance
+ * Get or create the GoogleGenerativeAI instance from env var.
+ * NOTE: For DB-stored keys, pass apiKey directly to chatCompletion instead.
  */
 function getGenAIInstance(): GoogleGenerativeAI | null {
   if (genAIInstance) return genAIInstance;
@@ -75,7 +80,7 @@ function getGenAIInstance(): GoogleGenerativeAI | null {
 }
 
 /**
- * Check if Google Gemini API is configured (has API key)
+ * Check if Google Gemini API is configured (has API key in env)
  */
 export function isGeminiConfigured(): boolean {
   return !!process.env.GEMINI_API_KEY;
@@ -177,13 +182,16 @@ async function tryModelChat(
  *
  * If the primary model fails with quota/rate-limit, automatically
  * tries fallback models before giving up.
+ *
+ * @param options.apiKey - Direct API key (overrides env var). Used for DB-stored keys.
  */
 export async function geminiChatCompletion(
   options: ChatCompletionOptions
 ): Promise<ChatCompletionResponse> {
-  const genAI = getGenAIInstance();
+  // Resolve API key: direct parameter > env var
+  const apiKey = options.apiKey || process.env.GEMINI_API_KEY;
 
-  if (!genAI) {
+  if (!apiKey) {
     return {
       success: false,
       content: '',
@@ -191,7 +199,10 @@ export async function geminiChatCompletion(
     };
   }
 
-  const primaryModel = getGeminiModel();
+  // Create instance with the resolved key (always fresh — no singleton issues)
+  const genAI = new GoogleGenerativeAI(apiKey);
+
+  const primaryModel = options.model || getGeminiModel();
   // Build the list of models to try: primary first, then fallbacks
   const modelsToTry = [primaryModel, ...FALLBACK_MODELS.filter(m => m !== primaryModel)];
 
@@ -301,7 +312,7 @@ export async function geminiChatCompletion(
 export async function geminiChat(
   systemPrompt: string,
   userMessage: string,
-  options?: { temperature?: number; max_tokens?: number }
+  options?: { temperature?: number; max_tokens?: number; apiKey?: string }
 ): Promise<ChatCompletionResponse> {
   return geminiChatCompletion({
     messages: [

@@ -17,10 +17,10 @@ import { db } from './db';
  * 3. z-ai-web-dev-sdk (fallback 2 — works in sandbox/local dev only)
  *    - Requires .z-ai-config file (not available on Vercel)
  *
- * API Key Resolution:
- * - First checks environment variables (GEMINI_API_KEY, GROQ_API_KEY)
- * - Then checks AppSetting database (ai_gemini_api_key, ai_groq_api_key)
- * - This allows configuring API keys from the app UI without Vercel dashboard
+ * API Key Resolution (no env var mutation!):
+ * - Reads key from DB (AppSetting) and passes directly to AI client constructors
+ * - Also checks environment variables as fallback
+ * - This approach works correctly in Vercel's serverless environment
  */
 
 export interface UnifiedAIOptions {
@@ -122,6 +122,9 @@ async function callZAI(options: UnifiedAIOptions): Promise<UnifiedAIResult> {
 /**
  * Call AI using the best available provider with automatic fallback.
  *
+ * Key resolution: DB-stored keys are passed DIRECTLY to client constructors.
+ * No process.env mutation — works correctly in Vercel serverless functions.
+ *
  * Priority:
  * 1. Google Gemini API (if key available via env or DB) — works on Vercel
  * 2. Groq API (if key available via env or DB) — ultra-fast fallback on Vercel
@@ -136,32 +139,20 @@ export async function callAI(options: UnifiedAIOptions): Promise<UnifiedAIResult
   const geminiModel = await getModel('GEMINI_MODEL', 'ai_gemini_model');
   const groqModel = await getModel('GROQ_MODEL', 'ai_groq_model');
 
-  // 1. Try Google Gemini API first (works on Vercel + local)
+  console.log(`[AI SDK] Keys resolved: Gemini=${geminiKey ? 'yes' : 'no'}, Groq=${groqKey ? 'yes' : 'no'}`);
+  console.log(`[AI SDK] Models resolved: Gemini=${geminiModel || 'default'}, Groq=${groqModel || 'default'}`);
+
+  // 1. Try Google Gemini API first — pass key directly
   if (geminiKey) {
     console.log('[AI SDK] Trying Google Gemini...');
     try {
-      // Temporarily set env vars for the Gemini client to pick up
-      const prevKey = process.env.GEMINI_API_KEY;
-      const prevModel = process.env.GEMINI_MODEL;
-      process.env.GEMINI_API_KEY = geminiKey;
-      if (geminiModel) process.env.GEMINI_MODEL = geminiModel;
-
-      // Reset singleton so it picks up new key
-      const { resetGeminiInstance } = await import('./gemini-ai');
-      resetGeminiInstance();
-
       const result = await geminiChatCompletion({
         messages: options.messages,
         temperature: options.temperature,
         max_tokens: options.max_tokens,
+        apiKey: geminiKey,          // Pass directly — no env var mutation
+        model: geminiModel || undefined,
       });
-
-      // Restore env vars
-      if (prevKey) process.env.GEMINI_API_KEY = prevKey;
-      else delete process.env.GEMINI_API_KEY;
-      if (prevModel) process.env.GEMINI_MODEL = prevModel;
-      else delete process.env.GEMINI_MODEL;
-      resetGeminiInstance();
 
       if (result.success) {
         return {
@@ -181,31 +172,17 @@ export async function callAI(options: UnifiedAIOptions): Promise<UnifiedAIResult
     }
   }
 
-  // 2. Try Groq as fallback (works on Vercel + local)
+  // 2. Try Groq as fallback — pass key directly
   if (groqKey) {
     console.log('[AI SDK] Trying Groq fallback...');
     try {
-      const prevKey = process.env.GROQ_API_KEY;
-      const prevModel = process.env.GROQ_MODEL;
-      process.env.GROQ_API_KEY = groqKey;
-      if (groqModel) process.env.GROQ_MODEL = groqModel;
-
-      // Reset singleton so it picks up new key
-      const { resetGroqInstance } = await import('./groq-ai');
-      resetGroqInstance();
-
       const result = await groqChatCompletion({
         messages: options.messages,
         temperature: options.temperature,
         max_tokens: options.max_tokens,
+        apiKey: groqKey,            // Pass directly — no env var mutation
+        model: groqModel || undefined,
       });
-
-      // Restore env vars
-      if (prevKey) process.env.GROQ_API_KEY = prevKey;
-      else delete process.env.GROQ_API_KEY;
-      if (prevModel) process.env.GROQ_MODEL = prevModel;
-      else delete process.env.GROQ_MODEL;
-      resetGroqInstance();
 
       if (result.success) {
         return {
