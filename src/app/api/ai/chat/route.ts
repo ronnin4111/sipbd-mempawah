@@ -17,10 +17,13 @@ Peran utama:
 - Menjawab pertanyaan tentang data produksi perikanan budidaya di Kab. Mempawah
 - Menganalisis tren, membandingkan kecamatan, memberikan rekomendasi
 - Mencari data kelompok/pembudidaya spesifik dari konteks yang disediakan
+- KUSUKA=Kartu Identitas Usaha Perikanan — data registrasi perorangan pembudidaya
 
 Anda juga fleksibel:
 - Pertanyaan umum tentang budidaya ikan, akuakultur, dll → jawab dengan pengetahuan Anda
 - Pertanyaan di luar topik → jawab singkat, arahkan kembali ke perikanan budidaya 😊
+
+Anda juga bisa menjawab pertanyaan tentang data registrasi KUSUKA perorangan, status kartu, dan detail alamat pembudidaya.
 
 Aturan respons SANGAT PENTING:
 - WAJIB bahasa Indonesia
@@ -35,9 +38,10 @@ Aturan respons SANGAT PENTING:
 - JANGAN bilang "data tidak lengkap" atau "data tidak ada" — semua data kelompok dan anggota sudah disediakan lengkap di DATA CONTEXT
 - Saat ditanya tentang kelompok pembenih/pembenihan atau pembesaran, gunakan RINGKASAN JENIS USAHA di DATA CONTEXT
 - Saat ditanya tentang anggota kelompok, gunakan DAFTAR ANGGOTA yang disediakan di DATA CONTEXT
+- Untuk pertanyaan tentang KUSUKA/registrasi perorangan, gunakan DATA KUSUKA di DATA CONTEXT
 
 Istilah:
-- RTP=Rumah Tangga Perikanan, KUSUKA=Kartu Identitas Usaha Perikanan
+- RTP=Rumah Tangga Perikanan, KUSUKA=Kartu Identitas Usaha Perikanan — data registrasi perorangan pembudidaya
 - CPIB=Cara Pembenihan Ikan Baik, CBIB=Cara Budidaya Ikan Baik
 - Kelompok=poktan/pokdakan (kelompok pembudidaya ikan), Anggota=jumlah anggota kelompok
 - Jenis Usaha: Pembesaran=membesarkan ikan untuk dikonsumsi, Pembenihan=memijahkan/menghasilkan benih ikan
@@ -62,6 +66,11 @@ function classifyQuestion(message: string): 'specific' | 'stats' | 'general' {
     /kelompok\s+(pembenih|pembenihan|pembesaran)/i,
     /pembenih|pembenihan|pembesaran/i,
     /nama\s+anggota/i, /anggota\s+dari/i,
+    // KUSUKA-specific patterns
+    /kusuka/i, /kartu\s+usaha/i, /registrasi/i, /pendaftaran/i,
+    /perorangan/i, /pembenih\s+perorangan/i, /nama\s+pembudidaya/i,
+    /alamat\s+pembudidaya/i,
+    /status\s+kusuka/i, /draf\s+kusuka/i, /valid\s+kusuka/i,
   ];
   if (specificPatterns.some(p => p.test(lower))) return 'specific';
 
@@ -69,7 +78,7 @@ function classifyQuestion(message: string): 'specific' | 'stats' | 'general' {
   const statsPatterns = [
     /produksi/i, /tren/i, /statistik/i,
     /kecamatan.*tinggi/i, /kecamatan.*rendah/i, /perbandingan/i,
-    /rtp/i, /kusuka/i, /cpib/i, /cbib/i, /pencapaian/i, /target/i,
+    /rtp/i, /cpib/i, /cbib/i, /pencapaian/i, /target/i,
     /naik/i, /turun/i, /kenaikan/i, /penurunan/i, /pertumbuhan/i,
     /jumlah\s+(pembudidaya|rtp|produksi)/i, /total\s+(pembudidaya|rtp|produksi)/i,
   ];
@@ -122,6 +131,7 @@ function extractSearchTerms(message: string): string[] {
     'kabupaten', 'mempawah', 'dinas', 'perikanan', 'budidaya',
     'seluruh', 'tampilkan', 'sebutkan',
     'pembenih', 'pembenihan', 'pembesaran',  // handled specially, not as search terms
+    'registrasi', 'pendaftaran', 'perorangan', 'kartu',  // KUSUKA keywords, not search terms
   ]);
 
   const words = message.split(/\s+/);
@@ -133,6 +143,167 @@ function extractSearchTerms(message: string): string[] {
   }
 
   return [...new Set(terms)];
+}
+
+/**
+ * Fetch KUSUKA registration data context — summary of all registrations.
+ * Provides aggregate statistics for AI to answer KUSUKA-related questions.
+ */
+async function fetchKusukaDataContext(): Promise<string> {
+  try {
+    const registrations = await db.kusukaRegistration.findMany();
+
+    if (registrations.length === 0) {
+      return '\n=== DATA KUSUKA (Registrasi Perorangan) ===\nTidak ada data registrasi KUSUKA.';
+    }
+
+    const total = registrations.length;
+
+    // Count per status
+    const statusCount = new Map<string, number>();
+    for (const r of registrations) {
+      const status = r.statusKusuka || '-';
+      statusCount.set(status, (statusCount.get(status) || 0) + 1);
+    }
+    const statusLines = [...statusCount.entries()]
+      .sort(([, a], [, b]) => b - a)
+      .map(([s, c]) => `${s}: ${c}`)
+      .join(', ');
+
+    // Count per kecamatan
+    const kecCount = new Map<string, number>();
+    for (const r of registrations) {
+      const kec = r.kecamatan || '-';
+      kecCount.set(kec, (kecCount.get(kec) || 0) + 1);
+    }
+    const kecLines = [...kecCount.entries()]
+      .sort(([, a], [, b]) => b - a)
+      .map(([k, c]) => `${k}: ${c}`)
+      .join(', ');
+
+    // Count per profesi utama
+    const profesiCount = new Map<string, number>();
+    for (const r of registrations) {
+      const p = r.profesiUtama || '-';
+      profesiCount.set(p, (profesiCount.get(p) || 0) + 1);
+    }
+    const profesiLines = [...profesiCount.entries()]
+      .sort(([, a], [, b]) => b - a)
+      .map(([p, c]) => `${p}: ${c}`)
+      .join(', ');
+
+    // Count per bentuk usaha
+    const bentukCount = new Map<string, number>();
+    for (const r of registrations) {
+      const b = r.bentukUsaha || '-';
+      bentukCount.set(b, (bentukCount.get(b) || 0) + 1);
+    }
+    const bentukLines = [...bentukCount.entries()]
+      .sort(([, a], [, b]) => b - a)
+      .map(([b, c]) => `${b}: ${c}`)
+      .join(', ');
+
+    // Count with valid KUSUKA card number (16 digits)
+    const validKusukaCard = registrations.filter(r => /^\d{16}$/.test((r.noKusuka || '').trim())).length;
+
+    // Count with kelompok vs without kelompok (independent)
+    const withKelompok = registrations.filter(r => r.namaKelompok && r.namaKelompok.trim() !== '').length;
+    const withoutKelompok = total - withKelompok;
+
+    // List unique kelompok with member counts
+    const kelompokMap = new Map<string, number>();
+    for (const r of registrations) {
+      if (r.namaKelompok && r.namaKelompok.trim()) {
+        const k = r.namaKelompok.trim();
+        kelompokMap.set(k, (kelompokMap.get(k) || 0) + 1);
+      }
+    }
+    const kelompokLines = [...kelompokMap.entries()]
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 30) // Limit to top 30 kelompok to keep compact
+      .map(([k, c]) => `${k} (${c})`)
+      .join(', ');
+    const kelompokExtra = kelompokMap.size > 30 ? ` ...dan ${kelompokMap.size - 30} lagi` : '';
+
+    const dataContext = `\n=== DATA KUSUKA (Registrasi Perorangan) ===
+Total registran: ${total}
+Per status: ${statusLines}
+Per kecamatan: ${kecLines}
+Per profesi utama: ${profesiLines}
+Per bentuk usaha: ${bentukLines}
+No.KUSUKA valid (16 digit): ${validKusukaCard}
+Dengan kelompok: ${withKelompok}, Mandiri (tanpa kelompok): ${withoutKelompok}
+Kelompok (${kelompokMap.size}): ${kelompokLines}${kelompokExtra}`;
+
+    return dataContext;
+  } catch (error) {
+    console.error('Failed to fetch KUSUKA data context:', error);
+    return '\n=== DATA KUSUKA ===\nGagal memuat data KUSUKA.';
+  }
+}
+
+/**
+ * Fetch targeted KUSUKA registration results based on search terms.
+ * Returns full details for matching registrants.
+ */
+async function fetchKusukaTargetedResults(searchTerms: string[], questionType: string): Promise<string> {
+  try {
+    const registrations = await db.kusukaRegistration.findMany();
+
+    if (registrations.length === 0) {
+      return '';
+    }
+
+    // If no search terms but it's a specific KUSUKA question, return summary listing
+    if (searchTerms.length === 0) {
+      if (questionType === 'specific') {
+        // Return a compact listing of all registrants (name, kec, status)
+        const lines = registrations
+          .sort((a, b) => a.nama.localeCompare(b.nama))
+          .slice(0, 50) // Limit to keep prompt manageable
+          .map((r, i) => `${i + 1}. ${r.nama} | Kec:${r.kecamatan} | Desa:${r.kelDesa} | ${r.bentukUsaha} | ${r.profesiUtama} | Status:${r.statusKusuka}`)
+          .join('\n');
+        const extra = registrations.length > 50 ? `\n...dan ${registrations.length - 50} registran lainnya` : '';
+        return `\n=== DAFTAR REGISTRAN KUSUKA (${registrations.length} orang) ===\n${lines}${extra}`;
+      }
+      return '';
+    }
+
+    // Search for matching registrants
+    const found: string[] = [];
+    const matchedIds = new Set<string>();
+
+    for (const term of searchTerms) {
+      const q = term.toLowerCase();
+
+      for (const r of registrations) {
+        if (matchedIds.has(r.id)) continue;
+
+        if (
+          (r.nama && r.nama.toLowerCase().includes(q)) ||
+          (r.kecamatan && r.kecamatan.toLowerCase().includes(q)) ||
+          (r.kelDesa && r.kelDesa.toLowerCase().includes(q)) ||
+          (r.namaKelompok && r.namaKelompok.toLowerCase().includes(q)) ||
+          (r.noKusuka && r.noKusuka.toLowerCase().includes(q))
+        ) {
+          matchedIds.add(r.id);
+          // Return full details for matched registrants
+          const kelStr = r.namaKelompok ? `Kel:${r.namaKelompok}` : 'Mandiri';
+          const noKusukaStr = r.noKusuka ? `No.KUSUKA:${r.noKusuka}` : 'No.KUSUKA:-';
+          found.push(`${r.nama} | Kec:${r.kecamatan} | Desa:${r.kelDesa} | ${kelStr} | ${r.bentukUsaha} | ${r.profesiUtama} | ${noKusukaStr} | Alamat:${r.alamat || '-'} | Status:${r.statusKusuka}`);
+        }
+      }
+    }
+
+    if (found.length === 0) {
+      return `\nHASIL PENCARIAN KUSUKA: Tidak ditemukan untuk "${searchTerms.join(', ')}". Coba periksa ejaan.`;
+    }
+
+    return `\n=== HASIL PENCARIAN KUSUKA (${found.length} ditemukan) ===\n${found.join('\n')}`;
+  } catch (error) {
+    console.error('Failed to fetch KUSUKA targeted results:', error);
+    return '';
+  }
 }
 
 /**
@@ -630,6 +801,10 @@ export async function POST(request: NextRequest) {
     });
     systemPrompt += dataContext;
 
+    // Add KUSUKA data context for ALL questions (so AI knows KUSUKA data is available)
+    const kusukaContext = await fetchKusukaDataContext();
+    systemPrompt += kusukaContext;
+
     // Add stats context (compact) for stats/general questions
     if (questionType === 'stats' || questionType === 'general') {
       systemPrompt += buildCompactStats(statsContext);
@@ -639,6 +814,10 @@ export async function POST(request: NextRequest) {
     if (questionType === 'specific' || searchTerms.length > 0) {
       const targeted = await fetchTargetedResults(searchTerms, questionType);
       if (targeted) systemPrompt += targeted;
+
+      // Also add KUSUKA targeted results for specific/search queries
+      const kusukaTargeted = await fetchKusukaTargetedResults(searchTerms, questionType);
+      if (kusukaTargeted) systemPrompt += kusukaTargeted;
     }
 
     // Log prompt size for debugging

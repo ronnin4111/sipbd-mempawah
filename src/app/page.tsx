@@ -12,6 +12,7 @@ import { ReportTables } from '@/components/tables/report-tables';
 import { ImportDialog } from '@/components/import-export/import-dialog';
 import { ExportSection } from '@/components/import-export/export-section';
 import { DisagregasiSection } from '@/components/disaggregation/disagregasi-section';
+import { KusukaSection } from '@/components/kusuka/kusuka-section';
 import { useFilterStore } from '@/store/filter-store';
 import { HeroBanner } from '@/components/layout/hero-banner';
 import { CommodityPricesTable } from '@/components/commodity-prices/commodity-prices-table';
@@ -120,6 +121,14 @@ function HargaKomoditasSection() {
   );
 }
 
+function KusukaDataSection() {
+  return (
+    <div className="space-y-4">
+      <KusukaSection />
+    </div>
+  );
+}
+
 function ImportExportSection() {
   const [importOpen, setImportOpen] = useState(false);
 
@@ -163,6 +172,8 @@ export default function Home() {
         return <TrenV2Section />;
       case 'harga-komoditas':
         return <HargaKomoditasSection />;
+      case 'data-kusuka':
+        return <KusukaDataSection />;
       case 'disagregasi':
         return <DisagregasiSection />;
       case 'import-export':

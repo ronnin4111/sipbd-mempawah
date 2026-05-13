@@ -87,3 +87,33 @@ model ChatMemory {
   @@index([sessionId, key])
   @@index([expiresAt])
 }
+
+model KusukaRegistration {
+  id              String   @id @default(cuid())
+  nama            String   // NAMA - person's name
+  provinsi        String   @default("KALIMANTAN BARAT")
+  kabKota         String   @default("MEMPAWAH")
+  kecamatan       String   // KECAMATAN
+  kelDesa         String   // KEL/DESA
+  noKusuka        String   @default("") // NO KUSUKA (16-digit)
+  namaKelompok    String   @default("") // Nama Kelompok (can be empty)
+  bentukUsaha     String   @default("Perseorangan") // BENTUK USAHA: Perseorangan | Kelompok Masyarakat | Badan Usaha
+  profesiUtama    String   @default("Subsektor Pembudidaya Ikan") // PROFESI UTAMA
+  alamat          String   @default("") // ALAMAT
+  tglDibuat       DateTime @default(now()) // TANGGAL DI BUAT
+  dibuatOleh      String   @default("") // DIBUAT OLEH
+  tglDiperbaharui DateTime @default(now()) // TGL DIPERBAHARUI
+  diperbaharuiOleh String  @default("") // DIPERBAHARUI OLEH
+  divalidasiOleh  String   @default("") // DIVALIDASI OLEH
+  tglDivalidasi   DateTime? // TGL DIVALIDASI
+  statusKusuka    String   @default("Valid") // STATUS KUSUKA: Valid | Draf | Submit | -
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([kecamatan])
+  @@index([kelDesa])
+  @@index([namaKelompok])
+  @@index([noKusuka])
+  @@index([statusKusuka])
+  @@index([profesiUtama])
+}
