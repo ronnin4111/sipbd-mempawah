@@ -256,14 +256,19 @@ export async function callAI(options: UnifiedAIOptions): Promise<UnifiedAIResult
     if (d.includes('API_KEY_INVALID') || d.includes('API key not valid') || d.includes('Invalid API Key') || d.includes('invalid_api_key')) {
       return `${e.provider}: API Key tidak valid`;
     }
-    if (d.includes('429') || d.includes('RESOURCE_EXHAUSTED') || d.includes('rate_limit') || d.includes('quota')) {
-      return `${e.provider}: Batas permintaan tercapai (coba lagi 1 menit)`;
+    if (d.includes('429') || d.includes('RESOURCE_EXHAUSTED') || d.includes('rate_limit') || d.includes('Batas permintaan') || d.includes('quota')) {
+      return `${e.provider}: Rate limited (coba lagi 1 menit)`;
     }
-    if (d.includes('Gagal setelah beberapa percobaan')) {
-      return `${e.provider}: Semua model gagal merespons`;
+    if (d.includes('Gagal setelah beberapa percobaan') || d.includes('Gagal setelah mencoba')) {
+      // Extract the per-model detail if available
+      const detailMatch = d.match(/Detail:\s*(.+)/);
+      if (detailMatch) {
+        return `${e.provider}: ${detailMatch[1].substring(0, 200)}`;
+      }
+      return `${e.provider}: Semua model gagal`;
     }
-    // Keep first 150 chars of actual error for debugging
-    return `${e.provider}: ${d.substring(0, 150)}`;
+    // Keep first 250 chars of actual error for debugging
+    return `${e.provider}: ${d.substring(0, 250)}`;
   });
 
   return {

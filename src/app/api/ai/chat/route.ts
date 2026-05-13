@@ -52,17 +52,36 @@ Istilah:
 
 /**
  * Classify the user's question type to determine what data to include.
+ *
+ * IMPORTANT: 'specific' questions load verbose targeted results (all member names),
+ * which makes the prompt very large. Counting/summary questions like "berapa jumlah
+ * kelompok" should be 'stats' or 'general' so the AI answers from compact summaries
+ * in the data context, not from the full member listings.
  */
 function classifyQuestion(message: string): 'specific' | 'stats' | 'general' {
   const lower = message.toLowerCase();
 
-  // Specific group/farmer questions
+  // ============================================================
+  // Counting/summary questions → 'stats' (NOT 'specific'!)
+  // These can be answered from the compact data context summaries.
+  // Loading targeted results for these just wastes tokens and causes failures.
+  // ============================================================
+  const countSummaryPatterns = [
+    /berapa\s+(jumlah\s+)?kelompok/i,     // "berapa kelompok", "berapa jumlah kelompok"
+    /berapa\s+(jumlah\s+)?(rtp|pembudidaya)/i,
+    /berapa\s+(jumlah\s+)?kusuka/i,       // "berapa kusuka", "berapa jumlah kusuka"
+    /total\s+(kelompok|rtp|pembudidaya|kusuka)/i,
+    /jumlah\s+(kelompok|rtp|pembudidaya|kusuka)/i,
+    /jumlah\s+anggota/i,                   // "jumlah anggota" = counting, not listing
+  ];
+  if (countSummaryPatterns.some(p => p.test(lower))) return 'stats';
+
+  // Specific group/farmer questions — these need individual member details
   const specificPatterns = [
-    /kelompok\s+\w+/i, /anggota\s+kelompok/i, /pembudidaya\s+\w+/i,
+    /anggota\s+kelompok/i, /pembudidaya\s+\w+/i,
     /siapa\s+saja/i, /daftar\s+anggota/i, /nama\s+kelompok/i,
-    /grup\s+\w+/i, /semua\s+kelompok/i, /seluruh\s+kelompok/i,
+    /semua\s+kelompok/i, /seluruh\s+kelompok/i,
     /tampilkan\s+semua/i, /tampilkan\s+seluruh/i, /daftar\s+kelompok/i,
-    /berapa\s+kelompok/i, /berapa\s+jumlah\s+kelompok/i,
     /kelompok\s+(pembenih|pembenihan|pembesaran)/i,
     /pembenih|pembenihan|pembesaran/i,
     /nama\s+anggota/i, /anggota\s+dari/i,
