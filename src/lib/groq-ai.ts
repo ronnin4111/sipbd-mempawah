@@ -59,7 +59,7 @@ const DEFAULT_MODEL = 'llama-3.3-70b-versatile';
 const FALLBACK_MODELS = ['llama-3.1-8b-instant', 'llama-3.2-3b-preview', 'mixtral-8x7b-32768'];
 const DEFAULT_TEMPERATURE = 0.7;
 const DEFAULT_MAX_TOKENS = 2048;
-const MAX_RETRIES = 2;
+const MAX_RETRIES = 1; // Reduced from 2 to 1 — avoid consuming rate limit budget
 const RETRY_DELAY_MS = 2000;
 
 // Singleton instance (for env-var-based usage)
@@ -135,8 +135,16 @@ export async function groqChatCompletion(
 
   // Track the first error from each model for better diagnostics
   const firstErrorsByModel = new Map<string, string>();
+  let isNetworkError = false; // If true, skip remaining models (same endpoint)
 
   for (const modelId of modelsToTry) {
+    // If we detected a network error, skip remaining models — they use the same endpoint
+    if (isNetworkError) {
+      console.warn(`[Groq] Skipping model ${modelId} — network error detected`);
+      firstErrorsByModel.set(modelId, 'Skipped: network error');
+      continue;
+    }
+
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
         console.log(`[Groq] Trying model: ${modelId} (attempt ${attempt + 1})`);
@@ -176,6 +184,14 @@ export async function groqChatCompletion(
         // Track first error per model
         if (!firstErrorsByModel.has(modelId)) {
           firstErrorsByModel.set(modelId, message.substring(0, 200));
+        }
+
+        // Check if this is a network error (fetch failed, DNS error, timeout)
+        // Network errors affect ALL models — no point trying others
+        if (message.includes('Error fetching') || message.includes('fetch failed') || message.includes('ECONNREFUSED') || message.includes('ENOTFOUND') || message.includes('ETIMEDOUT') || message.includes('network') || message.includes('Failed to fetch') || message.includes('Connection error')) {
+          console.error(`[Groq] Network error detected for model ${modelId} — skipping remaining models`);
+          isNetworkError = true;
+          break; // Don't retry, and skip remaining models
         }
 
         // Check error types
