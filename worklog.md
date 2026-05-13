@@ -48,3 +48,31 @@ Stage Summary:
 - Code is on GitHub main branch → Vercel auto-deployment triggered
 - Local dev server working for API endpoints (may crash on AI calls due to env constraints)
 - KUSUKA data is live on production (35 registrants across 8 kecamatan)
+---
+Task ID: fix-ai-chat-vercel
+Agent: main
+Task: Fix AI chat failing on Vercel deployment for data questions
+
+Work Log:
+- Read and analyzed all AI-related source files (ai-sdk.ts, gemini-ai.ts, groq-ai.ts, chat route, config route, chat widget)
+- Created /api/ai/test endpoint for diagnosing AI provider connectivity
+- Improved error reporting in ai-sdk.ts - added per-model error tracking, detailed logging
+- Added Test Connection button to chat config panel with diagnostics display
+- Discovered Gemini has persistent network error on Vercel ("Error fetching from generativelanguage.googleapis.com")
+- Discovered Groq was getting 413 "Request entity too large" errors due to oversized prompts
+- Discovered Groq was getting rate limited (429) due to aggressive retry logic consuming rate limit budget
+- Fixed question classification - "berapa jumlah kelompok?" was 'specific' (loads ALL members) but should be 'stats'
+- Created 3-tier data context system: compact (~500 chars), stats (~2K chars), full (15K+ chars)
+- Reduced MAX_RETRIES from 2 to 1 to avoid consuming rate limit budget
+- Added network error detection - skip remaining models if network error detected
+- Removed small Groq fallback model (llama-3.2-3b-preview) that caused 413 errors
+- Reduced MAX_PROMPT_CHARS from 30K to 25K for Groq compatibility
+
+Stage Summary:
+- AI chat now works on Vercel for all question types
+- "hai" → works (compact context, Groq)
+- "berapa jumlah kelompok?" → works (stats context, Groq, returns "55")
+- "berapa jumlah kusuka?" → works (stats context, Groq, returns "35")
+- "berapa jumlah kelompok pembesaran?" → works (stats context, Groq, returns "40")
+- Gemini remains non-functional on Vercel due to network connectivity issues (works locally)
+- Groq is the primary working provider on Vercel
