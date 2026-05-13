@@ -251,24 +251,14 @@ export async function callAI(options: UnifiedAIOptions): Promise<UnifiedAIResult
 
   // Build user-friendly error message with actual details
   const errorParts = errors.map(e => {
-    // Shorten common error patterns for readability
+    // Show actual error details for debugging — don't over-classify
     const d = e.detail;
     if (d.includes('API_KEY_INVALID') || d.includes('API key not valid') || d.includes('Invalid API Key') || d.includes('invalid_api_key')) {
       return `${e.provider}: API Key tidak valid`;
     }
-    if (d.includes('429') || d.includes('RESOURCE_EXHAUSTED') || d.includes('rate_limit') || d.includes('Batas permintaan') || d.includes('quota')) {
-      return `${e.provider}: Rate limited (coba lagi 1 menit)`;
-    }
-    if (d.includes('Gagal setelah beberapa percobaan') || d.includes('Gagal setelah mencoba')) {
-      // Extract the per-model detail if available
-      const detailMatch = d.match(/Detail:\s*(.+)/);
-      if (detailMatch) {
-        return `${e.provider}: ${detailMatch[1].substring(0, 200)}`;
-      }
-      return `${e.provider}: Semua model gagal`;
-    }
-    // Keep first 250 chars of actual error for debugging
-    return `${e.provider}: ${d.substring(0, 250)}`;
+    // For all other errors, show the raw detail (up to 300 chars) for diagnostics
+    // This helps us see the ACTUAL error instead of a generic "Rate limited" message
+    return `${e.provider}: ${d.substring(0, 300)}`;
   });
 
   return {
