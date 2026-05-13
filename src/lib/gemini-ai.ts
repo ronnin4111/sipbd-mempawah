@@ -292,7 +292,7 @@ export async function geminiChatCompletion(
         return {
           success: false,
           content: '',
-          error: `Gagal terhubung ke Gemini API: ${message.substring(0, 200)}`,
+          error: `Gagal terhubung ke Gemini API (model: ${modelId}): ${message.substring(0, 300)}`,
         };
       }
     }
@@ -302,7 +302,7 @@ export async function geminiChatCompletion(
   return {
     success: false,
     content: '',
-    error: 'Gagal setelah beberapa percobaan. Coba lagi nanti.',
+    error: `Gagal setelah mencoba semua model Gemini (${modelsToTry.join(', ')}). Coba lagi nanti.`,
   };
 }
 

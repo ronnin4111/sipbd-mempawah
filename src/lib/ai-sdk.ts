@@ -40,21 +40,32 @@ export interface UnifiedAIResult {
 /**
  * Get API key from environment variable or database setting.
  * Env vars take priority over database settings.
+ * Logs DB errors for debugging (instead of silently ignoring).
  */
 async function getApiKey(envVarName: string, dbSettingKey: string): Promise<string | null> {
   // 1. Check environment variable first
   const envKey = process.env[envVarName];
-  if (envKey) return envKey;
+  if (envKey) {
+    console.log(`[AI SDK] ${envVarName} found in env var`);
+    return envKey;
+  }
 
   // 2. Check database setting
   try {
     const setting = await db.appSetting.findUnique({ where: { key: dbSettingKey } });
     if (setting?.value) {
       const parsed = JSON.parse(setting.value);
-      if (typeof parsed === 'string' && parsed.trim()) return parsed.trim();
+      if (typeof parsed === 'string' && parsed.trim()) {
+        console.log(`[AI SDK] ${envVarName} found in database (key=${dbSettingKey})`);
+        return parsed.trim();
+      }
+      console.warn(`[AI SDK] ${envVarName} in database is empty or invalid (key=${dbSettingKey})`);
+    } else {
+      console.log(`[AI SDK] ${envVarName} not found in database (key=${dbSettingKey})`);
     }
-  } catch {
-    // Ignore DB errors — fall through
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : 'Unknown DB error';
+    console.error(`[AI SDK] DB error reading ${dbSettingKey}:`, errMsg);
   }
 
   return null;
@@ -74,7 +85,7 @@ async function getModel(envVarName: string, dbSettingKey: string): Promise<strin
       if (typeof parsed === 'string' && parsed.trim()) return parsed.trim();
     }
   } catch {
-    // Ignore DB errors
+    // Ignore DB errors for model setting (not critical)
   }
 
   return null;
@@ -131,21 +142,24 @@ async function callZAI(options: UnifiedAIOptions): Promise<UnifiedAIResult> {
  * 3. z-ai-web-dev-sdk (if .z-ai-config is available) — local dev only
  */
 export async function callAI(options: UnifiedAIOptions): Promise<UnifiedAIResult> {
-  const errors: string[] = [];
+  const errors: Array<{ provider: string; detail: string }> = [];
+  const startTime = Date.now();
 
   // Resolve API keys from env + database
+  console.log('[AI SDK] Resolving API keys...');
   const geminiKey = await getApiKey('GEMINI_API_KEY', 'ai_gemini_api_key');
   const groqKey = await getApiKey('GROQ_API_KEY', 'ai_groq_api_key');
   const geminiModel = await getModel('GEMINI_MODEL', 'ai_gemini_model');
   const groqModel = await getModel('GROQ_MODEL', 'ai_groq_model');
 
-  console.log(`[AI SDK] Keys resolved: Gemini=${geminiKey ? 'yes' : 'no'}, Groq=${groqKey ? 'yes' : 'no'}`);
+  console.log(`[AI SDK] Keys resolved: Gemini=${geminiKey ? 'yes(' + geminiKey.substring(0, 6) + '...)' : 'no'}, Groq=${groqKey ? 'yes(' + groqKey.substring(0, 6) + '...)' : 'no'}`);
   console.log(`[AI SDK] Models resolved: Gemini=${geminiModel || 'default'}, Groq=${groqModel || 'default'}`);
 
   // 1. Try Google Gemini API first — pass key directly
   if (geminiKey) {
     console.log('[AI SDK] Trying Google Gemini...');
     try {
+      const geminiStart = Date.now();
       const result = await geminiChatCompletion({
         messages: options.messages,
         temperature: options.temperature,
@@ -153,8 +167,10 @@ export async function callAI(options: UnifiedAIOptions): Promise<UnifiedAIResult
         apiKey: geminiKey,          // Pass directly — no env var mutation
         model: geminiModel || undefined,
       });
+      const geminiElapsed = Date.now() - geminiStart;
 
       if (result.success) {
+        console.log(`[AI SDK] Gemini SUCCESS in ${geminiElapsed}ms, model=${result.model}`);
         return {
           success: true,
           content: result.content,
@@ -163,19 +179,23 @@ export async function callAI(options: UnifiedAIOptions): Promise<UnifiedAIResult
         };
       }
 
-      errors.push(`Gemini: ${result.error}`);
-      console.warn('[AI SDK] Gemini failed:', result.error?.substring(0, 100));
+      const errDetail = result.error || 'Unknown error';
+      errors.push({ provider: 'Gemini', detail: errDetail });
+      console.warn(`[AI SDK] Gemini FAILED in ${geminiElapsed}ms:`, errDetail.substring(0, 200));
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
-      errors.push(`Gemini: ${msg.substring(0, 100)}`);
-      console.warn('[AI SDK] Gemini exception:', msg.substring(0, 100));
+      errors.push({ provider: 'Gemini', detail: msg.substring(0, 300) });
+      console.warn('[AI SDK] Gemini exception:', msg.substring(0, 200));
     }
+  } else {
+    console.log('[AI SDK] Skipping Gemini — no API key');
   }
 
   // 2. Try Groq as fallback — pass key directly
   if (groqKey) {
     console.log('[AI SDK] Trying Groq fallback...');
     try {
+      const groqStart = Date.now();
       const result = await groqChatCompletion({
         messages: options.messages,
         temperature: options.temperature,
@@ -183,8 +203,10 @@ export async function callAI(options: UnifiedAIOptions): Promise<UnifiedAIResult
         apiKey: groqKey,            // Pass directly — no env var mutation
         model: groqModel || undefined,
       });
+      const groqElapsed = Date.now() - groqStart;
 
       if (result.success) {
+        console.log(`[AI SDK] Groq SUCCESS in ${groqElapsed}ms, model=${result.model}`);
         return {
           success: true,
           content: result.content,
@@ -193,13 +215,16 @@ export async function callAI(options: UnifiedAIOptions): Promise<UnifiedAIResult
         };
       }
 
-      errors.push(`Groq: ${result.error}`);
-      console.warn('[AI SDK] Groq failed:', result.error?.substring(0, 100));
+      const errDetail = result.error || 'Unknown error';
+      errors.push({ provider: 'Groq', detail: errDetail });
+      console.warn(`[AI SDK] Groq FAILED in ${groqElapsed}ms:`, errDetail.substring(0, 200));
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
-      errors.push(`Groq: ${msg.substring(0, 100)}`);
-      console.warn('[AI SDK] Groq exception:', msg.substring(0, 100));
+      errors.push({ provider: 'Groq', detail: msg.substring(0, 300) });
+      console.warn('[AI SDK] Groq exception:', msg.substring(0, 200));
     }
+  } else {
+    console.log('[AI SDK] Skipping Groq — no API key');
   }
 
   // 3. Try z-ai as local fallback (only works in sandbox)
@@ -209,7 +234,10 @@ export async function callAI(options: UnifiedAIOptions): Promise<UnifiedAIResult
     return zaiResult;
   }
 
-  errors.push(`z-ai: ${zaiResult.error}`);
+  errors.push({ provider: 'z-ai', detail: zaiResult.error || 'Not available' });
+
+  const totalElapsed = Date.now() - startTime;
+  console.error(`[AI SDK] ALL providers failed in ${totalElapsed}ms. Errors:`, JSON.stringify(errors));
 
   // 4. All providers failed — return combined error with helpful message
   if (!geminiKey && !groqKey) {
@@ -221,11 +249,27 @@ export async function callAI(options: UnifiedAIOptions): Promise<UnifiedAIResult
     };
   }
 
-  // Some providers were configured but all failed
+  // Build user-friendly error message with actual details
+  const errorParts = errors.map(e => {
+    // Shorten common error patterns for readability
+    const d = e.detail;
+    if (d.includes('API_KEY_INVALID') || d.includes('API key not valid') || d.includes('Invalid API Key') || d.includes('invalid_api_key')) {
+      return `${e.provider}: API Key tidak valid`;
+    }
+    if (d.includes('429') || d.includes('RESOURCE_EXHAUSTED') || d.includes('rate_limit') || d.includes('quota')) {
+      return `${e.provider}: Batas permintaan tercapai (coba lagi 1 menit)`;
+    }
+    if (d.includes('Gagal setelah beberapa percobaan')) {
+      return `${e.provider}: Semua model gagal merespons`;
+    }
+    // Keep first 150 chars of actual error for debugging
+    return `${e.provider}: ${d.substring(0, 150)}`;
+  });
+
   return {
     success: false,
     content: '',
-    error: `Semua provider AI gagal. ${errors.join(' | ')}`,
+    error: `Semua provider AI gagal. ${errorParts.join(' | ')}`,
     provider: 'all-failed',
   };
 }

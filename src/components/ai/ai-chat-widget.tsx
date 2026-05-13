@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageSquare, X, Send, Bot, User, Sparkles, Trash2, Loader2, Settings, Key, CheckCircle2, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { MessageSquare, X, Send, Bot, User, Sparkles, Trash2, Loader2, Settings, Key, CheckCircle2, AlertCircle, Eye, EyeOff, Wifi, WifiOff } from 'lucide-react';
 import { useFilterStore } from '@/store/filter-store';
 import { useFishFarmStats } from '@/hooks/use-fish-farms';
 
@@ -15,6 +15,13 @@ interface Message {
 interface AIConfig {
   gemini: { configured: boolean; source: string; model: string; keyHint: string | null };
   groq: { configured: boolean; source: string; model: string; keyHint: string | null };
+}
+
+interface AITestResult {
+  gemini: { keyFound: boolean; keySource: string; keyHint: string | null; testResult: string; latencyMs: number; error: string | null };
+  groq: { keyFound: boolean; keySource: string; keyHint: string | null; testResult: string; latencyMs: number; error: string | null };
+  dbConnection: { ok: boolean; error: string | null };
+  summary: string;
 }
 
 const QUICK_PROMPTS = [
@@ -41,6 +48,8 @@ export function AIChatWidget() {
   const [configMessage, setConfigMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [showGeminiKey, setShowGeminiKey] = useState(false);
   const [showGroqKey, setShowGroqKey] = useState(false);
+  const [isTestingAI, setIsTestingAI] = useState(false);
+  const [testResult, setTestResult] = useState<AITestResult | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -116,6 +125,8 @@ export function AIChatWidget() {
         setConfigGroqKey('');
         setConfigPassword('');
         fetchAIConfig();
+        // Auto-test after saving
+        testAIConnection();
       } else {
         setConfigMessage({ type: 'error', text: `❌ ${data.error || 'Gagal menyimpan'}` });
       }
@@ -123,6 +134,34 @@ export function AIChatWidget() {
       setConfigMessage({ type: 'error', text: '❌ Gagal terhubung ke server' });
     } finally {
       setIsSavingConfig(false);
+    }
+  };
+
+  const testAIConnection = async () => {
+    setIsTestingAI(true);
+    setTestResult(null);
+    try {
+      const res = await fetch('/api/ai/test');
+      if (res.ok) {
+        const data = await res.json();
+        setTestResult(data.results);
+      } else {
+        setTestResult({
+          gemini: { keyFound: false, keySource: 'none', keyHint: null, testResult: 'failed', latencyMs: 0, error: 'Failed to fetch test results' },
+          groq: { keyFound: false, keySource: 'none', keyHint: null, testResult: 'failed', latencyMs: 0, error: 'Failed to fetch test results' },
+          dbConnection: { ok: false, error: 'Test endpoint failed' },
+          summary: 'Test endpoint returned error',
+        });
+      }
+    } catch (err) {
+      setTestResult({
+        gemini: { keyFound: false, keySource: 'none', keyHint: null, testResult: 'failed', latencyMs: 0, error: 'Network error' },
+        groq: { keyFound: false, keySource: 'none', keyHint: null, testResult: 'failed', latencyMs: 0, error: 'Network error' },
+        dbConnection: { ok: false, error: 'Network error' },
+        summary: 'Network error - cannot reach test endpoint',
+      });
+    } finally {
+      setIsTestingAI(false);
     }
   };
 
@@ -214,13 +253,19 @@ export function AIChatWidget() {
         const errorDetail = data.detail || data.error || '';
         // Check if it's a missing API key error
         const isKeyMissing = errorDetail.includes('API Key belum dikonfigurasi');
+        const isRateLimited = errorDetail.includes('Batas permintaan') || errorDetail.includes('rate');
+        const isInvalidKey = errorDetail.includes('API Key tidak valid') || errorDetail.includes('INVALID_API_KEY');
         const errorMessage: Message = {
           role: 'assistant',
           content: isKeyMissing
             ? '🔑 **API Key AI belum dikonfigurasi.**\n\nKlik ikon ⚙️ di header chat ini untuk mengatur API key.\n\n**Gratis & mudah:**\n- Gemini: https://aistudio.google.com/apikey\n- Groq: https://console.groq.com\n\nSetelah dapat key, paste di pengaturan AI.'
-            : errorDetail
-              ? `Maaf, terjadi kesalahan: ${errorDetail}. Silakan coba lagi. 🙏`
-              : 'Maaf, terjadi kesalahan saat memproses pertanyaan Anda. Silakan coba lagi. 🙏',
+            : isRateLimited
+              ? `⏳ **Batas permintaan tercapai.**\n\n${errorDetail}\n\nTunggu 1-2 menit lalu coba lagi. Gunakan ⚙️ → Test Koneksi untuk diagnose.`
+              : isInvalidKey
+                ? `🔑 **API Key tidak valid.**\n\n${errorDetail}\n\nPeriksa API key di pengaturan (⚙️). Pastikan key yang dimasukkan benar.`
+                : errorDetail
+                  ? `Maaf, terjadi kesalahan: ${errorDetail}. Silakan coba lagi. 🙏`
+                  : 'Maaf, terjadi kesalahan saat memproses pertanyaan Anda. Silakan coba lagi. 🙏',
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, errorMessage]);
@@ -288,6 +333,15 @@ export function AIChatWidget() {
       }
       return <div key={i} dangerouslySetInnerHTML={{ __html: formattedLine }} />;
     });
+  };
+
+  // Render test result badge
+  const renderTestBadge = (result: 'success' | 'failed' | 'testing' | 'not_tested' | 'empty_response', label: string) => {
+    if (result === 'success') return <span className="text-green-600 font-medium">✅ {label} OK</span>;
+    if (result === 'failed') return <span className="text-red-600 font-medium">❌ {label} GAGAL</span>;
+    if (result === 'testing') return <span className="text-amber-600">⏳ Testing...</span>;
+    if (result === 'empty_response') return <span className="text-amber-600">⚠️ {label} kosong</span>;
+    return <span className="text-gray-400">⏸ Belum ditest</span>;
   };
 
   return (
@@ -386,7 +440,7 @@ export function AIChatWidget() {
                   className="overflow-hidden border-b"
                   style={{ borderColor: 'var(--border)' }}
                 >
-                  <div className="p-4 space-y-3" style={{ background: 'var(--card)' }}>
+                  <div className="p-4 space-y-3 max-h-[50vh] overflow-y-auto" style={{ background: 'var(--card)' }}>
                     <div className="text-xs font-semibold flex items-center gap-2" style={{ color: 'var(--foreground)' }}>
                       <Key className="h-3.5 w-3.5" /> Konfigurasi API Key AI
                     </div>
@@ -491,6 +545,67 @@ export function AIChatWidget() {
                         {configMessage.text}
                       </div>
                     )}
+
+                    {/* Test Connection Section */}
+                    <div className="border-t pt-3" style={{ borderColor: 'var(--border)' }}>
+                      <div className="flex items-center gap-2 mb-2">
+                        {testResult?.gemini?.testResult === 'success' || testResult?.groq?.testResult === 'success' ? (
+                          <Wifi className="h-3.5 w-3.5 text-green-500" />
+                        ) : testResult ? (
+                          <WifiOff className="h-3.5 w-3.5 text-red-500" />
+                        ) : (
+                          <Wifi className="h-3.5 w-3.5" style={{ color: 'var(--muted-foreground)' }} />
+                        )}
+                        <span className="text-[10px] font-semibold" style={{ color: 'var(--foreground)' }}>
+                          Diagnosa Koneksi AI
+                        </span>
+                      </div>
+
+                      <button
+                        onClick={testAIConnection}
+                        disabled={isTestingAI}
+                        className="w-full text-[11px] px-3 py-2 rounded-lg border font-medium transition-all disabled:opacity-40 hover:bg-accent"
+                        style={{ borderColor: 'var(--border)', color: 'var(--foreground)' }}
+                      >
+                        {isTestingAI ? (
+                          <span className="flex items-center justify-center gap-2">
+                            <Loader2 className="h-3 w-3 animate-spin" /> Testing koneksi...
+                          </span>
+                        ) : '🔍 Test Koneksi AI'}
+                      </button>
+
+                      {/* Test Results */}
+                      {testResult && (
+                        <div className="mt-2 space-y-1.5 text-[10px]">
+                          {/* DB Connection */}
+                          <div className={`px-2 py-1 rounded ${testResult.dbConnection?.ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                            {testResult.dbConnection?.ok ? '✅ Database: Terhubung' : `❌ Database: ${testResult.dbConnection?.error || 'Gagal'}`}
+                          </div>
+
+                          {/* Gemini Result */}
+                          <div className={`px-2 py-1 rounded ${testResult.gemini.testResult === 'success' ? 'bg-green-50 text-green-700' : testResult.gemini.keyFound ? 'bg-red-50 text-red-700' : 'bg-gray-50 text-gray-500'}`}>
+                            {renderTestBadge(testResult.gemini.testResult, 'Gemini')}
+                            {testResult.gemini.keyFound && (
+                              <span className="opacity-60 ml-1">({testResult.gemini.keySource}, {testResult.gemini.latencyMs}ms)</span>
+                            )}
+                            {testResult.gemini.error && (
+                              <div className="mt-0.5 opacity-70 break-all">{testResult.gemini.error.substring(0, 200)}</div>
+                            )}
+                          </div>
+
+                          {/* Groq Result */}
+                          <div className={`px-2 py-1 rounded ${testResult.groq.testResult === 'success' ? 'bg-green-50 text-green-700' : testResult.groq.keyFound ? 'bg-red-50 text-red-700' : 'bg-gray-50 text-gray-500'}`}>
+                            {renderTestBadge(testResult.groq.testResult, 'Groq')}
+                            {testResult.groq.keyFound && (
+                              <span className="opacity-60 ml-1">({testResult.groq.keySource}, {testResult.groq.latencyMs}ms)</span>
+                            )}
+                            {testResult.groq.error && (
+                              <div className="mt-0.5 opacity-70 break-all">{testResult.groq.error.substring(0, 200)}</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </motion.div>
               )}

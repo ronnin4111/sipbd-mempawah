@@ -239,7 +239,7 @@ export async function groqChatCompletion(
         return {
           success: false,
           content: '',
-          error: `Gagal terhubung ke Groq API: ${message.substring(0, 200)}`,
+          error: `Gagal terhubung ke Groq API (model: ${modelId}): ${message.substring(0, 300)}`,
         };
       }
     }
@@ -248,7 +248,7 @@ export async function groqChatCompletion(
   return {
     success: false,
     content: '',
-    error: 'Gagal setelah beberapa percobaan ke Groq. Coba lagi nanti.',
+    error: `Gagal setelah mencoba semua model Groq (${modelsToTry.join(', ')}). Coba lagi nanti.`,
   };
 }
 
