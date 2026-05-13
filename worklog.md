@@ -162,3 +162,30 @@ Stage Summary:
 - Added retry button (RotateCcw icon) that re-triggers the same narration type
 - Added helpful message when API keys are not configured
 - Clean separation of narrative success vs error states
+
+---
+Task ID: fix-ai-narrate-chat-v2
+Agent: main
+Task: Fix AI chat year-aware defaults + Narasi Cerdas compact context + better error handling + deploy
+
+Work Log:
+- Diagnosed two problems: (1) AI chat says "data tidak tersedia" for year comparisons, (2) Narasi Cerdas AI not working on Vercel
+- Checked Turso production DB: 7 years of data (2019-2026), 2550 FishFarm records, 35 KUSUKA records
+- Found root cause for chat: resolveEffectiveFilters returned empty years when no UI filter, causing fetch functions to default to new Date().getFullYear() (2026) which has limited data
+- Found root cause for narrate: raw JSON.stringify(statsContext) was too large → Groq 413 errors, plus poor error messages
+- Used subagent to implement fixes across 3 files
+- Verified lint passes with no new errors in AI files
+- Seeded local SQLite with 2024/2025 data from Turso for testing (954 records)
+- Verified AI chat correctly answers "berapa jumlah kelompok tahun 2025" → 11 kelompok
+- Verified AI chat correctly answers "data tahun 2024" → shows 52 kelompok with details
+- Verified narrate endpoint works with compact text format
+- Deployed to GitHub: commit e34e878 → Vercel auto-deployment triggered
+
+Stage Summary:
+- AI chat now queries DB for available years instead of hardcoding current year
+- resolveEffectiveFilters is now async, defaults to latest 2 years from DB
+- Multi-year comparison context clearly shows "Data ditemukan" per year
+- System prompt explicitly tells AI not to say data unavailable if numbers exist
+- Narasi Cerdas uses compact text format (MAX 8000 chars) instead of raw JSON
+- Smart Narrator UI now shows error details, retry button, API key help
+- Deployed to Vercel via GitHub push
