@@ -67,3 +67,23 @@ model AppSetting {
   value     String
   updatedAt DateTime @updatedAt
 }
+
+model ChatMemory {
+  id          String    @id @default(cuid())
+  sessionId   String    @default("default")
+  category    String    @default("fact")    // fact | preference | correction | faq | insight
+  key         String    // topic/subject identifier (e.g., "preferred_kecamatan", "kelompok_Gemura_status")
+  value       String    // the memory content
+  context     String    @default("")        // original conversation context for the memory
+  confidence  Float     @default(1.0)       // 0.0-1.0, how confident we are about this memory
+  source      String    @default("user_told") // user_told | ai_inferred | correction | system
+  accessCount Int       @default(0)         // how many times this memory was used
+  lastAccessedAt DateTime? @default(now())
+  expiresAt   DateTime?                     // optional TTL — memories can decay
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([sessionId, category])
+  @@index([sessionId, key])
+  @@index([expiresAt])
+}

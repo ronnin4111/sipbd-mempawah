@@ -19,6 +19,7 @@ const QUICK_PROMPTS = [
   '🐟 Jenis ikan apa yang paling banyak diproduksi?',
   '📉 Bagaimana tren produksi 5 tahun terakhir?',
   '🎯 Berapa jumlah RTP dan kelompok?',
+  '🧠 Hapus semua memori AI',
 ];
 
 export function AIChatWidget() {
@@ -28,6 +29,16 @@ export function AIChatWidget() {
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // 🧠 Persistent session ID — stored in localStorage so memories survive across browser sessions
+  const [sessionId] = useState(() => {
+    if (typeof window === 'undefined') return 'default';
+    const stored = localStorage.getItem('sipbd-ai-session-id');
+    if (stored) return stored;
+    const newId = `session_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    localStorage.setItem('sipbd-ai-session-id', newId);
+    return newId;
+  });
 
   // Get current filter state for context
   const years = useFilterStore((s) => s.years);
@@ -125,6 +136,7 @@ export function AIChatWidget() {
           messages: history,
           statsContext,
           filters,
+          sessionId,  // 🧠 Session ID for memory persistence
         }),
       });
 

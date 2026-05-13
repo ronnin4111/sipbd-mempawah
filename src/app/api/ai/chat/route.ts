@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { callAI } from '@/lib/ai-sdk';
+import { retrieveMemories, storeMemories, extractMemoriesFromConversation, formatMemoriesForPrompt, clearMemories } from '@/lib/ai-memory';
 import { db } from '@/lib/db';
 import { generateFarmerId } from '@/lib/farmer-id';
 
@@ -41,7 +42,9 @@ Istilah:
 - Kelompok=poktan/pokdakan (kelompok pembudidaya ikan), Anggota=jumlah anggota kelompok
 - Jenis Usaha: Pembesaran=membesarkan ikan untuk dikonsumsi, Pembenihan=memijahkan/menghasilkan benih ikan
 - PENTING: "Desa" adalah alamat tempat tinggal pembudidaya, BUKAN alamat kelompok
-  Satu kelompok bisa memiliki anggota dari beberapa desa`;
+  Satu kelompok bisa memiliki anggota dari beberapa desa
+- MEMORI: Anda memiliki memori dari percakapan sebelumnya. Gunakan untuk jawaban yang lebih personal.
+  Namun jika memori bertentangan dengan DATA CONTEXT, prioritaskan DATA CONTEXT (data DB lebih akurat).`;
 
 /**
  * Classify the user's question type to determine what data to include.
@@ -582,6 +585,7 @@ export async function POST(request: NextRequest) {
         containerType: string[];
         businessType: string[];
       };
+      sessionId?: string;
     };
 
     if (!message || typeof message !== 'string') {
@@ -591,12 +595,33 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Get session ID for memory persistence (default to 'default')
+    const sessionId = body.sessionId || 'default';
+
+    // Handle memory clear command
+    if (/^(hapus|bersihkan|reset)\s*(semua)?\s*(memori|ingatan|memories)/i.test(message)) {
+      const count = await clearMemories(sessionId);
+      return NextResponse.json({
+        success: true,
+        response: `✅ ${count} memori telah dihapus. Saya akan memulai dari awal lagi.`,
+        model: 'system',
+        provider: 'memory',
+      });
+    }
+
     // Classify question type for smart context
     const questionType = classifyQuestion(message);
     const searchTerms = extractSearchTerms(message);
 
     // Build system prompt based on question type
     let systemPrompt = BASE_SYSTEM_PROMPT;
+
+    // 🧠 MEMORY: Retrieve relevant memories and inject into system prompt
+    const memories = await retrieveMemories(sessionId, message);
+    const memoryContext = formatMemoriesForPrompt(memories);
+    if (memoryContext) {
+      systemPrompt += memoryContext;
+    }
 
     // ALWAYS add full data context — AI needs accurate data for ALL question types
     const { dataContext, totalGroups } = await fetchFullDataContext(filters || {
@@ -619,7 +644,8 @@ export async function POST(request: NextRequest) {
     // Log prompt size for debugging
     const promptChars = systemPrompt.length;
     const estimatedTokens = Math.ceil(promptChars / 4);
-    console.log(`AI Chat: questionType=${questionType}, promptChars=${promptChars}, estTokens=${estimatedTokens}, searchTerms=${searchTerms.join(',')}, totalGroups=${totalGroups}`);
+    const memoryCount = memories.length;
+    console.log(`AI Chat: questionType=${questionType}, promptChars=${promptChars}, estTokens=${estimatedTokens}, searchTerms=${searchTerms.join(',')}, totalGroups=${totalGroups}, memories=${memoryCount}`);
 
     // Build conversation messages
     const chatMessages = [
@@ -656,11 +682,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 🧠 MEMORY: Extract and store memories from this conversation
+    // Run asynchronously — don't block the response
+    const aiResponse = result.content || 'Maaf, saya tidak dapat memproses pertanyaan Anda saat ini.';
+    const recentMsgs = (Array.isArray(messages) ? messages : []) as Array<{ role: 'user' | 'assistant'; content: string }>;
+
+    // Extract memories (fire-and-forget)
+    const extractedMemories = extractMemoriesFromConversation(
+      sessionId, message, aiResponse, recentMsgs
+    );
+    if (extractedMemories.length > 0) {
+      storeMemories(sessionId, extractedMemories).catch(err => {
+        console.error('[AI Chat] Memory store error:', err);
+      });
+    }
+
     return NextResponse.json({
       success: true,
-      response: result.content || 'Maaf, saya tidak dapat memproses pertanyaan Anda saat ini.',
+      response: aiResponse,
       model: result.model,
       provider: result.provider,
+      memoriesExtracted: extractedMemories.length,
+      memoriesUsed: memoryCount,
     });
   } catch (error: unknown) {
     console.error('AI Chat error:', error);
