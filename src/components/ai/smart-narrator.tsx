@@ -30,7 +30,14 @@ export function SmartNarrator() {
   const businessType = useFilterStore((s) => s.businessType);
 
   const generateNarration = async (type: NarrationType) => {
-    if (!stats || isLoading) return;
+    if (isLoading) return;
+    if (!stats) {
+      setErrorInfo({
+        error: 'Data statistik belum tersedia',
+        detail: 'Tunggu hingga data selesai dimuat, lalu coba lagi.',
+      });
+      return;
+    }
 
     setIsLoading(true);
     setActiveType(type);

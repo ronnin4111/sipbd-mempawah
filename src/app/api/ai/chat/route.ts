@@ -28,9 +28,11 @@ Anda juga bisa menjawab pertanyaan tentang data registrasi KUSUKA perorangan, st
 Aturan respons SANGAT PENTING:
 - WAJIB bahasa Indonesia
 - Angka format Indonesia (1.234.567 kg, Rp 25.000)
-- ⚠️ JANGAN MENGARANG DATA — HANYA gunakan data yang ada di DATA CONTEXT
+- ⚠️ ANTI-HALLUCINASI #1: JANGAN PERNAH mengarang/membuat angka yang TIDAK ADA di DATA CONTEXT. Jika DATA CONTEXT berkata "TIDAK ADA DATA", maka TIDAK ADA DATA — jangan membuat angka palsu.
+- ⚠️ ANTI-HALLUCINASI #2: HANYA gunakan kategori yang ada di DATA CONTEXT. Jika hanya ada "Produksi Pembesaran" dan "Produksi Pembenihan", JANGAN membuat kategori lain seperti "Produksi Laut" atau "Produksi Air Tawar".
+- ⚠️ ANTI-HALLUCINASI #3: JANGAN bilang "Mohon menunggu sambil saya mengakses database" — Anda TIDAK memiliki akses database secara langsung. Data sudah disediakan di DATA CONTEXT.
 - ⚠️ JANGAN menyebutkan nama kecamatan/kelompok/ikan yang TIDAK ada di DATA CONTEXT
-- Jika data tidak tersedia di konteks, katakan jujur "Data tidak tersedia di konteks yang diberikan"
+- Jika data tidak tersedia di konteks, katakan jujur "Data tidak tersedia di konteks yang diberikan" — JANGAN mengarang
 - ⚠️ PENTING: Jika data ADA di DATA CONTEXT, JANGAN bilang data tidak tersedia. Data di DATA CONTEXT sudah diambil langsung dari database sesuai pertanyaan Anda.
 - DATA CONTEXT berisi data yang SUDAH diquery dari database sesuai pertanyaan Anda. JANGAN bilang data tidak tersedia jika ada angka di DATA CONTEXT.
 - Jika nama kelompok/pembudidaya tidak ditemukan, sarankan nama mirip dari DATA CONTEXT
@@ -1234,8 +1236,28 @@ async function fetchMultiYearComparisonContext(resolvedFilters: {
       years.unshift(years[0] - 1);
     }
 
-    const lines: string[] = ['\n=== DATA PERBANDINGAN MULTI-TAHUN ==='];
-    lines.push('⚠️ PENTING: Data ini sudah diambil dari database untuk tahun yang Anda tanyakan. Gunakan data ini langsung — JANGAN bilang data tidak tersedia jika ada angka di bawah.');
+    const lines: string[] = ['\n=== DATA PERBANDINGAN MULTI-TAHUN (LANGSUNG DARI DATABASE) ==='];
+    lines.push('⚠️ PENTING: Data di bawah adalah data RESMI dari database. Gunakan ANGKA PERSIS seperti yang tercantum — JANGAN mengarang, membulatkan, atau mengubah satuan.');
+    lines.push('⚠️ JANGAN gunakan kategori yang TIDAK ADA di bawah (misalnya "Produksi Laut", "Produksi Air Tawar"). Kategori yang ada HANYA: Produksi Pembesaran (Kg) dan Produksi Pembenihan (Ekor).');
+    lines.push('⚠️ Jika data untuk suatu tahun TIDAK ADA di bawah, katakan "Data tahun tersebut tidak tersedia" — JANGAN membuat angka palsu.');
+
+    // Collect per-year data for comparison table
+    interface YearData {
+      year: number;
+      hasData: boolean;
+      totalGroups: number;
+      totalFarmers: number;
+      totalRtp: number;
+      totalPembesaranProd: number;
+      totalPembenihanProd: number;
+      pembesaranOnly: number;
+      pembenihanOnly: number;
+      bothBiz: number;
+      totalKusuka: number;
+      kecSummary: string;
+      fishTypeSummary: string;
+    }
+    const yearDataList: YearData[] = [];
 
     for (const year of years) {
       const where: Record<string, unknown> = { year };
@@ -1247,7 +1269,13 @@ async function fetchMultiYearComparisonContext(resolvedFilters: {
       const records = await db.fishFarm.findMany({ where });
 
       if (records.length === 0) {
-        lines.push(`\n--- Tahun ${year}: Tidak ada data di database untuk tahun ini ---`);
+        lines.push(`\n--- Tahun ${year}: ⛔ TIDAK ADA DATA di database untuk tahun ini. JANGAN membuat angka palsu untuk tahun ini. ---`);
+        yearDataList.push({
+          year, hasData: false, totalGroups: 0, totalFarmers: 0, totalRtp: 0,
+          totalPembesaranProd: 0, totalPembenihanProd: 0,
+          pembesaranOnly: 0, pembenihanOnly: 0, bothBiz: 0, totalKusuka: 0,
+          kecSummary: '', fishTypeSummary: '',
+        });
         continue;
       }
 
@@ -1260,6 +1288,9 @@ async function fetchMultiYearComparisonContext(resolvedFilters: {
 
       let totalPembesaranProd = 0;
       let totalPembenihanProd = 0;
+
+      // Per fish type production
+      const fishTypeProd = new Map<string, { pembesaran: number; pembenihan: number }>();
 
       records.forEach(r => {
         if (!r.groupName?.trim()) return;
@@ -1282,8 +1313,15 @@ async function fetchMultiYearComparisonContext(resolvedFilters: {
         // Sum production
         if (r.businessType === 'Pembesaran') {
           totalPembesaranProd += (r.productionQty || 0);
+          // Track per fish type
+          const ft = r.fishType || 'Lainnya';
+          if (!fishTypeProd.has(ft)) fishTypeProd.set(ft, { pembesaran: 0, pembenihan: 0 });
+          fishTypeProd.get(ft)!.pembesaran += (r.productionQty || 0);
         } else if (r.businessType === 'Pembenihan') {
           totalPembenihanProd += (r.productionQty || 0);
+          const ft = r.fishType || 'Lainnya';
+          if (!fishTypeProd.has(ft)) fishTypeProd.set(ft, { pembesaran: 0, pembenihan: 0 });
+          fishTypeProd.get(ft)!.pembenihan += (r.productionQty || 0);
         }
       });
 
@@ -1296,6 +1334,11 @@ async function fetchMultiYearComparisonContext(resolvedFilters: {
         else if (hasPembesaran) pembesaranOnly++;
         else if (hasPembenihan) pembenihanOnly++;
       }
+
+      // Count KUSUKA
+      const totalKusuka = allFarmerLatest.values()
+        ? [...allFarmerLatest.values()].filter(r => /^\d{16}$/.test(String(r.kusuka || '').trim())).length
+        : 0;
 
       // Per-kecamatan summary
       const kecGroupCounts = new Map<string, number>();
@@ -1312,25 +1355,90 @@ async function fetchMultiYearComparisonContext(resolvedFilters: {
         .map(([kec, count]) => `${kec}(${count}kel, ${kecFarmerCounts.get(kec) || 0}org)`)
         .join(', ');
 
+      // Fish type summary
+      const fishTypeSummary = [...fishTypeProd.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([ft, prod]) => `${ft}: Pembesaran=${prod.pembesaran.toLocaleString('id-ID')}Kg, Pembenihan=${prod.pembenihan.toLocaleString('id-ID')}Ekor`)
+        .join('; ');
+
       lines.push(`\n--- Tahun ${year} ---`);
       lines.push(`Kelompok: ${groupMap.size} (Pembesaran:${pembesaranOnly}, Pembenihan:${pembenihanOnly}, Campuran:${bothBiz})`);
-      lines.push(`Pembudidaya: ${allFarmerLatest.size}, RTP: ${records.reduce((sum, r) => sum + r.rtpCount, 0)}`);
+      lines.push(`Pembudidaya: ${allFarmerLatest.size}, RTP: ${records.reduce((sum, r) => sum + r.rtpCount, 0)}, KUSUKA valid: ${totalKusuka}`);
       lines.push(`Produksi Pembesaran: ${totalPembesaranProd.toLocaleString('id-ID')} Kg`);
       lines.push(`Produksi Pembenihan: ${totalPembenihanProd.toLocaleString('id-ID')} Ekor`);
+      if (fishTypeSummary) lines.push(`Per jenis ikan: ${fishTypeSummary}`);
       if (kecSummary) lines.push(`Per kecamatan: ${kecSummary}`);
+
+      yearDataList.push({
+        year, hasData: true,
+        totalGroups: groupMap.size,
+        totalFarmers: allFarmerLatest.size,
+        totalRtp: records.reduce((sum, r) => sum + r.rtpCount, 0),
+        totalPembesaranProd,
+        totalPembenihanProd,
+        pembesaranOnly,
+        pembenihanOnly,
+        bothBiz,
+        totalKusuka,
+        kecSummary,
+        fishTypeSummary,
+      });
     }
 
-    // Add side-by-side comparison summary
-    if (years.length >= 2) {
-      lines.push('\n--- RINGKASAN PERBANDINGAN ---');
-      lines.push(`Tahun: ${years.join(' vs ')}`);
-      lines.push('Untuk perbandingan detail per indikator, lihat data per tahun di atas.');
+    // ============================================================
+    // CRITICAL FIX: Add SIDE-BY-SIDE COMPARISON TABLE with real
+    // calculated numbers so the AI doesn't have to compute or guess.
+    // This prevents hallucination — the AI just reads the table.
+    // ============================================================
+    if (yearDataList.filter(y => y.hasData).length >= 2) {
+      lines.push('\n--- TABEL PERBANDINGAN (angka resmi dari database) ---');
+      const header = 'Indikator';
+      const yearHeaders = yearDataList.map(y => `Tahun ${y.year}`).join(' | ');
+      lines.push(`${header} | ${yearHeaders}`);
+      lines.push('--- | ' + yearDataList.map(() => '---').join(' | '));
+
+      // Row helper
+      const row = (label: string, values: string[]) => `${label} | ${values.join(' | ')}`;
+      // Change helper
+      const change = (old: number, nw: number): string => {
+        if (old === 0 && nw === 0) return '-';
+        if (old === 0) return 'N/A (divisi nol)';
+        const pct = ((nw - old) / old * 100).toFixed(1);
+        const sign = Number(pct) >= 0 ? '+' : '';
+        return `${sign}${pct}%`;
+      };
+
+      lines.push(row('Jumlah Kelompok', yearDataList.map(y => y.hasData ? String(y.totalGroups) : 'N/A')));
+      lines.push(row('Pembudidaya', yearDataList.map(y => y.hasData ? String(y.totalFarmers) : 'N/A')));
+      lines.push(row('RTP', yearDataList.map(y => y.hasData ? String(y.totalRtp) : 'N/A')));
+      lines.push(row('KUSUKA valid', yearDataList.map(y => y.hasData ? String(y.totalKusuka) : 'N/A')));
+      lines.push(row('Produksi Pembesaran (Kg)', yearDataList.map(y => y.hasData ? y.totalPembesaranProd.toLocaleString('id-ID') : 'N/A')));
+      lines.push(row('Produksi Pembenihan (Ekor)', yearDataList.map(y => y.hasData ? y.totalPembenihanProd.toLocaleString('id-ID') : 'N/A')));
+
+      // Add percentage changes between consecutive years
+      if (yearDataList.length === 2 && yearDataList[0].hasData && yearDataList[1].hasData) {
+        const y1 = yearDataList[0];
+        const y2 = yearDataList[1];
+        lines.push('');
+        lines.push(`--- PERUBAHAN ${y1.year} → ${y2.year} (dihitung dari angka di atas) ---`);
+        lines.push(`Jumlah Kelompok: ${y1.totalGroups} → ${y2.totalGroups} (${change(y1.totalGroups, y2.totalGroups)})`);
+        lines.push(`Pembudidaya: ${y1.totalFarmers} → ${y2.totalFarmers} (${change(y1.totalFarmers, y2.totalFarmers)})`);
+        lines.push(`RTP: ${y1.totalRtp} → ${y2.totalRtp} (${change(y1.totalRtp, y2.totalRtp)})`);
+        lines.push(`Produksi Pembesaran: ${y1.totalPembesaranProd.toLocaleString('id-ID')} → ${y2.totalPembesaranProd.toLocaleString('id-ID')} Kg (${change(y1.totalPembesaranProd, y2.totalPembesaranProd)})`);
+        lines.push(`Produksi Pembenihan: ${y1.totalPembenihanProd.toLocaleString('id-ID')} → ${y2.totalPembenihanProd.toLocaleString('id-ID')} Ekor (${change(y1.totalPembenihanProd, y2.totalPembenihanProd)})`);
+      }
+    } else if (yearDataList.filter(y => y.hasData).length === 1) {
+      const withData = yearDataList.find(y => y.hasData)!;
+      const withoutData = yearDataList.find(y => !y.hasData);
+      lines.push('\n--- CATATAN PENTING ---');
+      lines.push(`Data hanya tersedia untuk tahun ${withData.year}. Tahun ${withoutData?.year || 'lainnya'} TIDAK ADA DATA di database.`);
+      lines.push('JANGAN membuat angka palsu untuk tahun yang tidak ada datanya. Katakan "Data tidak tersedia" untuk tahun tersebut.');
     }
 
     return lines.join('\n');
   } catch (error) {
     console.error('Failed to fetch multi-year comparison context:', error);
-    return '\n=== DATA PERBANDINGAN ===\nGagal memuat data perbandingan.';
+    return '\n=== DATA PERBANDINGAN ===\nGagal memuat data perbandingan. Katakan "Maaf, gagal memuat data perbandingan" dan JANGAN mengarang angka.';
   }
 }
 

@@ -184,10 +184,19 @@ export async function POST(request: NextRequest) {
       contextText = truncated + '\n\n[Data dipangkas karena terlalu panjang. Data yang ditampilkan sudah cukup untuk analisis.]';
     }
 
+    const antiHallucinationRules = `
+
+⚠️ ATURAN ANTI-HALLUCINASI (WAJIB DIPATUHI):
+1. HANYA gunakan angka yang ada di data. JANGAN membuat angka, membulatkan, atau mengubah satuan.
+2. JANGAN menggunakan kategori yang tidak ada di data. Kategori yang ada: Produksi Pembesaran (Kg), Produksi Pembenihan (Ekor), RTP, Kelompok, Pembudidaya, KUSUKA.
+3. JANGAN membuat kategori baru seperti "Produksi Laut" atau "Produksi Air Tawar" — kategori tersebut TIDAK ADA.
+4. Jika data kosong atau tidak ada, katakan "Data tidak tersedia" — JANGAN mengarang angka.
+5. Format angka dengan separator ribuan Indonesia (1.234.567).`;
+
     const prompts: Record<string, string> = {
       summary: `Anda adalah narator laporan perikanan budidaya profesional. Buatkan narasi ringkasan produksi perikanan budidaya Kabupaten Mempawah berdasarkan data berikut.
 
-PENTING: Data yang diberikan sudah diquery dari database dan SUDAH BENAR. Gunakan angka-angka tersebut langsung — JANGAN bilang data tidak tersedia jika ada angka di data.
+PENTING: Data yang diberikan sudah diquery dari database dan SUDAH BENAR. Gunakan angka-angka tersebut langsung — JANGAN bilang data tidak tersedia jika ada angka di data.${antiHallucinationRules}
 
 Narasi harus:
 - Ditulis dalam Bahasa Indonesia yang formal namun mudah dipahami
@@ -199,7 +208,7 @@ Narasi harus:
 
       trend: `Anda adalah analis data perikanan budidaya. Analisis tren produksi 5 tahun terakhir Kabupaten Mempawah berdasarkan data berikut.
 
-PENTING: Data yang diberikan sudah diquery dari database dan SUDAH BENAR. Gunakan angka-angka tersebut langsung — JANGAN bilang data tidak tersedia jika ada angka di data.
+PENTING: Data yang diberikan sudah diquery dari database dan SUDAH BENAR. Gunakan angka-angka tersebut langsung — JANGAN bilang data tidak tersedia jika ada angka di data.${antiHallucinationRules}
 
 Fokuskan analisis pada:
 - Tren naik/turun per jenis usaha (Pembesaran/Pembenihan)
@@ -210,7 +219,7 @@ Fokuskan analisis pada:
 
       kecamatan: `Anda adalah analis perbandingan wilayah perikanan budidaya. Buatkan analisis perbandingan produksi antar kecamatan di Kabupaten Mempawah berdasarkan data berikut.
 
-PENTING: Data yang diberikan sudah diquery dari database dan SUDAH BENAR. Gunakan angka-angka tersebut langsung — JANGAN bilang data tidak tersedia jika ada angka di data.
+PENTING: Data yang diberikan sudah diquery dari database dan SUDAH BENAR. Gunakan angka-angka tersebut langsung — JANGAN bilang data tidak tersedia jika ada angka di data.${antiHallucinationRules}
 
 Fokuskan pada:
 - Kecamatan dengan produksi tertinggi dan terendah
@@ -221,7 +230,7 @@ Fokuskan pada:
 
       target: `Anda adalah evaluator pencapaian target perikanan budidaya. Analisis pencapaian target vs realisasi produksi Kabupaten Mempawah berdasarkan data berikut.
 
-PENTING: Data yang diberikan sudah diquery dari database dan SUDAH BENAR. Gunakan angka-angka tersebut langsung — JANGAN bilang data tidak tersedia jika ada angka di data.
+PENTING: Data yang diberikan sudah diquery dari database dan SUDAH BENAR. Gunakan angka-angka tersebut langsung — JANGAN bilang data tidak tersedia jika ada angka di data.${antiHallucinationRules}
 
 Fokuskan pada:
 - Jenis ikan yang melampaui target (overachieving)
