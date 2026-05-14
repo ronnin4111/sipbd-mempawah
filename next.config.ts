@@ -8,6 +8,7 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: [
     ".space-z.ai",
   ],
+  serverExternalPackages: ["xlsx", "mammoth"],
 };
 
 export default nextConfig;

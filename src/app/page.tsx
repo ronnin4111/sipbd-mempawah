@@ -14,6 +14,7 @@ import { ExportSection } from '@/components/import-export/export-section';
 import { DisagregasiSection } from '@/components/disaggregation/disagregasi-section';
 import { KusukaSection } from '@/components/kusuka/kusuka-section';
 import { KnowledgeBaseSection } from '@/components/knowledge-base/knowledge-base-section';
+import { KBWidget } from '@/components/knowledge-base/kb-widget';
 import { useFilterStore } from '@/store/filter-store';
 import { HeroBanner } from '@/components/layout/hero-banner';
 import { CommodityPricesTable } from '@/components/commodity-prices/commodity-prices-table';
@@ -34,6 +35,7 @@ function DashboardSection() {
       <HeroBanner />
       <FilterBar />
       <DashboardCharts />
+      <KBWidget />
       <SmartNarrator />
     </div>
   );

@@ -2,10 +2,11 @@
  * Document Parser Service
  * Parses uploaded files (Excel, DOCX, TXT, CSV) into text chunks
  * for the Knowledge Base system.
+ *
+ * NOTE: xlsx and mammoth are loaded dynamically to avoid
+ * build/compilation crashes on Vercel and Turbopack.
  */
 
-import * as XLSX from "xlsx";
-import mammoth from "mammoth";
 import crypto from "crypto";
 
 export interface ParsedChunk {
@@ -22,8 +23,6 @@ export interface ParsedDocument {
 
 // Maximum chunk size in characters (for AI context injection)
 const MAX_CHUNK_SIZE = 2000;
-// Overlap between chunks for better context continuity
-const CHUNK_OVERLAP = 200;
 
 /**
  * Parse a file buffer into structured chunks
@@ -39,7 +38,7 @@ export async function parseDocument(
   switch (fileType) {
     case "xlsx":
     case "xls":
-      chunks = parseExcel(buffer);
+      chunks = await parseExcel(buffer);
       break;
     case "docx":
       chunks = await parseDocx(buffer);
@@ -51,7 +50,7 @@ export async function parseDocument(
       chunks = parseCsv(buffer.toString("utf-8"), fileName);
       break;
     default:
-      throw new Error(`Unsupported file type: ${fileType}`);
+      throw new Error(`Tipe file tidak didukung: ${fileType}`);
   }
 
   // If chunks are too large, split them further
@@ -66,8 +65,10 @@ export async function parseDocument(
 
 /**
  * Parse Excel file into chunks (one per sheet)
+ * Uses dynamic import to avoid build issues with xlsx on Vercel
  */
-function parseExcel(buffer: Buffer): ParsedChunk[] {
+async function parseExcel(buffer: Buffer): Promise<ParsedChunk[]> {
+  const XLSX = await import("xlsx");
   const workbook = XLSX.read(buffer, { type: "buffer" });
   const chunks: ParsedChunk[] = [];
 
@@ -124,8 +125,10 @@ function parseExcel(buffer: Buffer): ParsedChunk[] {
 
 /**
  * Parse DOCX file into chunks
+ * Uses dynamic import to avoid build issues with mammoth on Vercel
  */
 async function parseDocx(buffer: Buffer): Promise<ParsedChunk[]> {
+  const mammoth = await import("mammoth");
   const result = await mammoth.extractRawText({ buffer });
   const text = result.value;
 
