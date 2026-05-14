@@ -61,7 +61,14 @@ Istilah:
 - PENTING: "Desa" adalah alamat tempat tinggal pembudidaya, BUKAN alamat kelompok
   Satu kelompok bisa memiliki anggota dari beberapa desa
 - MEMORI: Anda memiliki memori dari percakapan sebelumnya. Gunakan untuk jawaban yang lebih personal.
-  Namun jika memori bertentangan dengan DATA CONTEXT, prioritaskan DATA CONTEXT (data DB lebih akurat).`;
+  Namun jika memori bertentangan dengan DATA CONTEXT, prioritaskan DATA CONTEXT (data DB lebih akurat).
+
+VERIFIKASI WAJIB sebelum menjawab pertanyaan data:
+1. Cari angka yang diminta di DATA CONTEXT
+2. Jika angka DITEMUKAN → gunakan angka tersebut persis (jangan bulatkan, jangan ubah)
+3. Jika angka TIDAK DITEMUKAN → katakan "Data tidak tersedia" — JANGAN tebak atau estimasi
+4. JANGAN pernah menghitung/menjumlahkan angka yang tidak ada di DATA CONTEXT
+5. Jika ragu, prioritaskan kejujuran: "Saya tidak menemukan data tersebut dalam konteks yang tersedia"`;
 
 /**
  * Classify the user's question type to determine what data to include.

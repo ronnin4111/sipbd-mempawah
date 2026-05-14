@@ -99,8 +99,19 @@ async function getModel(envVarName: string, dbSettingKey: string): Promise<strin
  */
 async function callZAI(options: UnifiedAIOptions): Promise<UnifiedAIResult> {
   try {
+    // Dynamic import with cache busting to avoid stale module state
     const ZAI = (await import('z-ai-web-dev-sdk')).default;
-    const zai = await ZAI.create();
+
+    // Create a fresh instance each time
+    let zai;
+    try {
+      zai = await ZAI.create();
+    } catch (createError) {
+      // If create() fails (e.g., stale config), try once more after a brief delay
+      console.warn('[AI SDK] z-ai create() failed, retrying...', createError);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      zai = await ZAI.create();
+    }
 
     // z-ai uses 'assistant' role for system prompts
     const messages = options.messages.map(m => ({
@@ -214,6 +225,11 @@ export async function callAI(options: UnifiedAIOptions): Promise<UnifiedAIResult
     console.log('[AI SDK] Skipping Gemini — no API key');
   }
 
+  // Add delay before trying next provider to avoid rapid rate limit hits
+  if (geminiKey && groqKey) {
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+
   // 2. Try Groq as fallback — pass key directly
   if (groqKey) {
     console.log('[AI SDK] Trying Groq fallback...');
@@ -262,6 +278,70 @@ export async function callAI(options: UnifiedAIOptions): Promise<UnifiedAIResult
   }
 
   errors.push({ provider: 'z-ai', detail: zaiResult.error || 'Not available' });
+
+  // If all providers failed but at least one had a rate limit error,
+  // try the first available provider once more after a delay
+  const hasRateLimit = errors.some(e =>
+    e.detail.includes('429') || e.detail.includes('rate') || e.detail.includes('RESOURCE_EXHAUSTED')
+  );
+  if (hasRateLimit) {
+    console.log('[AI SDK] Rate limit detected, retrying primary provider after 3s delay...');
+    await new Promise(resolve => setTimeout(resolve, 3000));
+
+    if (geminiKey) {
+      try {
+        const result = await withTimeout(
+          geminiChatCompletion({
+            messages: options.messages,
+            temperature: options.temperature,
+            max_tokens: options.max_tokens,
+            apiKey: geminiKey,
+            model: geminiModel || undefined,
+          }),
+          30000,
+          'Gemini-retry'
+        );
+        if (result.success) {
+          console.log('[AI SDK] Gemini retry SUCCESS');
+          return {
+            success: true,
+            content: result.content,
+            provider: 'google-gemini-retry',
+            model: result.model || geminiModel || 'gemini-2.0-flash',
+          };
+        }
+      } catch {
+        // retry failed, continue to error return
+      }
+    }
+
+    if (groqKey) {
+      try {
+        const result = await withTimeout(
+          groqChatCompletion({
+            messages: options.messages,
+            temperature: options.temperature,
+            max_tokens: options.max_tokens,
+            apiKey: groqKey,
+            model: groqModel || undefined,
+          }),
+          30000,
+          'Groq-retry'
+        );
+        if (result.success) {
+          console.log('[AI SDK] Groq retry SUCCESS');
+          return {
+            success: true,
+            content: result.content,
+            provider: 'groq-retry',
+            model: result.model || groqModel || 'llama-3.3-70b-versatile',
+          };
+        }
+      } catch {
+        // retry failed, continue to error return
+      }
+    }
+  }
 
   const totalElapsed = Date.now() - startTime;
   console.error(`[AI SDK] ALL providers failed in ${totalElapsed}ms. Errors:`, JSON.stringify(errors));

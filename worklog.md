@@ -107,3 +107,23 @@ Work Log:
 Stage Summary:
 - All AI bug fixes pushed to GitHub
 - Auto-deploy to Vercel should trigger
+
+---
+Task ID: 3+5
+Agent: Fix AI hallucination + caching bug
+Task: Fix AI hallucination and AI chat caching bug
+
+Work Log:
+- Read route.ts to locate BASE_SYSTEM_PROMPT (lines 14-64)
+- Added VERIFIKASI WAJIB block (5 verification rules) at end of BASE_SYSTEM_PROMPT before closing backtick
+- Read ai-sdk.ts to locate callZAI function (lines 100-133) and callAI function (lines 163-297)
+- Replaced callZAI function with improved version: added try-catch around ZAI.create() with 1s retry on failure
+- Added 500ms delay between Gemini and Groq provider attempts to avoid rapid rate limit hits
+- Added rate-limit retry mechanism after all providers fail: if 429/rate/RESOURCE_EXHAUSTED detected, retries Gemini then Groq after 3s delay
+- Ran bun run lint — no new errors introduced (all 11 pre-existing errors unrelated to changes)
+- Verified dev server running correctly
+
+Stage Summary:
+- Bug 1 fixed: Added strong VERIFIKASI WAJIB instruction block to BASE_SYSTEM_PROMPT with 5 verification rules requiring AI to search DATA CONTEXT for numbers, use exact values, and say "Data tidak tersedia" if not found
+- Bug 2 fixed: Three changes to ai-sdk.ts: (1) callZAI now retries ZAI.create() on failure with 1s delay, (2) 500ms delay between Gemini→Groq attempts, (3) rate-limit-aware retry with 3s delay for Gemini and Groq before final error
+- No new lint errors; all pre-existing issues untouched
