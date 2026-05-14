@@ -140,14 +140,6 @@ export function AdminPanel() {
       section: 'disagregasi',
       gradient: 'linear-gradient(135deg, #F59E0B, #D97706)',
     },
-    {
-      id: 'kusuka',
-      title: 'Data KUSUKA',
-      description: 'Data registrasi KUSUKA pembudidaya ikan',
-      icon: Database,
-      section: 'data-kusuka',
-      gradient: 'linear-gradient(135deg, #8B5CF6, #7C3AED)',
-    },
   ];
 
   if (!isAdmin) {

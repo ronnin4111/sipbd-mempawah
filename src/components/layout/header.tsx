@@ -15,6 +15,7 @@ interface HeaderProps {
 const NAV_TABS = [
   { id: 'dashboard', label: 'Dashboard', adminOnly: false },
   { id: 'data-produksi', label: 'Data Pembudidaya', adminOnly: false },
+  { id: 'data-kusuka', label: 'Data KUSUKA', adminOnly: false },
   { id: 'peta-lokasi', label: 'Peta Lokasi', adminOnly: false },
   { id: 'tren-laporan', label: 'Tren & Laporan', adminOnly: false },
   { id: 'tren-v2', label: 'Tren V2', adminOnly: false },

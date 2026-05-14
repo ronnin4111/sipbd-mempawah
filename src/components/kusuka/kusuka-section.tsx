@@ -36,7 +36,11 @@ interface KusukaStats {
   totalKelompok: number;
 }
 
-export function KusukaSection() {
+interface KusukaSectionProps {
+  hideHeader?: boolean;
+}
+
+export function KusukaSection({ hideHeader = false }: KusukaSectionProps) {
   const [importOpen, setImportOpen] = useState(false);
   const [search, setSearch] = useState('');
 
@@ -79,26 +83,28 @@ export function KusukaSection() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold flex items-center gap-2">
-            <CreditCard className="h-6 w-6 text-teal-600" />
-            Data Registrasi KUSUKA
-          </h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            Data pendaftaran Kartu Identitas Usaha Perikanan perorangan
-          </p>
+      {/* Header - hidden when shown as standalone page with its own banner */}
+      {!hideHeader && (
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-bold flex items-center gap-2">
+              <CreditCard className="h-6 w-6 text-teal-600" />
+              Data Registrasi KUSUKA
+            </h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Data pendaftaran Kartu Identitas Usaha Perikanan perorangan
+            </p>
+          </div>
+          <Button
+            onClick={() => setImportOpen(true)}
+            className="gap-2 shrink-0"
+            style={{ background: 'linear-gradient(135deg, #06B6D4, #0891B2)' }}
+          >
+            <Upload className="h-4 w-4" />
+            <span>Import KUSUKA</span>
+          </Button>
         </div>
-        <Button
-          onClick={() => setImportOpen(true)}
-          className="gap-2 shrink-0"
-          style={{ background: 'linear-gradient(135deg, #06B6D4, #0891B2)' }}
-        >
-          <Upload className="h-4 w-4" />
-          <span>Import KUSUKA</span>
-        </Button>
-      </div>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

@@ -130,9 +130,57 @@ function HargaKomoditasSection() {
 }
 
 function KusukaDataSection() {
+  const setActiveSection = useFilterStore((s) => s.setActiveSection);
+  const { theme } = useTheme();
+  const mounted = useMounted();
+  const isDark = mounted ? theme === 'dark' : true;
+
   return (
-    <div className="space-y-4">
-      <KusukaSection />
+    <div className="space-y-6">
+      {/* Page Header Banner */}
+      <div
+        className="rounded-xl p-5 sm:p-6"
+        style={{
+          background: isDark
+            ? 'linear-gradient(135deg, rgba(139,92,246,0.15), rgba(124,58,237,0.08))'
+            : 'linear-gradient(135deg, rgba(139,92,246,0.08), rgba(124,58,237,0.04))',
+          border: `1px solid ${isDark ? 'rgba(139,92,246,0.2)' : 'rgba(139,92,246,0.15)'}`,
+        }}
+      >
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div
+              className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
+              style={{
+                background: 'linear-gradient(135deg, #8B5CF6, #7C3AED)',
+                boxShadow: '0 4px 20px rgba(139,92,246,0.4)',
+              }}
+            >
+              <CreditCard className="h-6 w-6 text-white" />
+            </div>
+            <div>
+              <h2 className="font-bold text-lg" style={{ fontFamily: 'Syne, sans-serif' }}>
+                Data Registrasi KUSUKA
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Kartu Identitas Usaha Perikanan — Data publik pembudidaya ikan Kab. Mempawah
+              </p>
+            </div>
+          </div>
+          <Button
+            onClick={() => setActiveSection('dashboard')}
+            variant="outline"
+            size="sm"
+            className="gap-1.5 text-xs shrink-0"
+          >
+            <LayoutDashboard className="h-3.5 w-3.5" />
+            Ke Dashboard
+          </Button>
+        </div>
+      </div>
+
+      {/* KUSUKA Content */}
+      <KusukaSection hideHeader />
     </div>
   );
 }
@@ -208,7 +256,6 @@ function AdminLoginSection() {
             { id: 'knowledge-base', title: 'Basis Pengetahuan AI', desc: 'Upload & kelola dokumen', icon: Brain, gradient: 'linear-gradient(135deg, #06B6D4, #0891B2)' },
             { id: 'import-export', title: 'Import / Export', desc: 'Import Excel atau export data', icon: FileSpreadsheet, gradient: 'linear-gradient(135deg, #10B981, #059669)' },
             { id: 'disagregasi', title: 'Disagregasi Data', desc: 'Pecah data agregat per desa', icon: Split, gradient: 'linear-gradient(135deg, #F59E0B, #D97706)' },
-            { id: 'data-kusuka', title: 'Data KUSUKA', desc: 'Registrasi KUSUKA', icon: CreditCard, gradient: 'linear-gradient(135deg, #8B5CF6, #7C3AED)' },
           ].map((feature) => {
             const Icon = feature.icon;
             return (
