@@ -2,11 +2,12 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { CreditCard, Upload, Users, CheckCircle2, UserCheck, Building2, Loader2, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { CreditCard, Upload, Users, CheckCircle2, UserCheck, Building2, Loader2, Search, ChevronLeft, ChevronRight, Rows3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { KusukaImportDialog } from './kusuka-import-dialog';
 
 interface KusukaStats {
@@ -46,21 +47,22 @@ interface KusukaSectionProps {
   hideHeader?: boolean;
 }
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE_OPTIONS = [20, 30, 50];
 
 export function KusukaSection({ hideHeader = false }: KusukaSectionProps) {
   const [importOpen, setImportOpen] = useState(false);
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   const { data: stats, isLoading, refetch } = useQuery<KusukaStats>({
-    queryKey: ['kusuka-stats', searchQuery, currentPage],
+    queryKey: ['kusuka-stats', searchQuery, currentPage, pageSize],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (searchQuery) params.set('search', searchQuery);
       params.set('page', String(currentPage));
-      params.set('pageSize', String(PAGE_SIZE));
+      params.set('pageSize', String(pageSize));
       const res = await fetch(`/api/kusuka/stats?${params}`);
       if (!res.ok) throw new Error('Failed to fetch KUSUKA stats');
       return res.json();
@@ -86,6 +88,13 @@ export function KusukaSection({ hideHeader = false }: KusukaSectionProps) {
   const handleClearSearch = () => {
     setSearchInput('');
     setSearchQuery('');
+    setCurrentPage(1);
+  };
+
+  // Handle page size change
+  const handlePageSizeChange = (value: string) => {
+    const newSize = parseInt(value, 10);
+    setPageSize(newSize);
     setCurrentPage(1);
   };
 
@@ -369,7 +378,7 @@ export function KusukaSection({ hideHeader = false }: KusukaSectionProps) {
                 {stats?.recent.map((r, index) => (
                   <tr key={r.id} className="border-t hover:bg-muted/30">
                     <td className="px-3 py-2 text-muted-foreground text-xs">
-                      {(page - 1) * PAGE_SIZE + index + 1}
+                      {(page - 1) * pageSize + index + 1}
                     </td>
                     <td className="px-3 py-2 font-medium">{r.nama}</td>
                     <td className="px-3 py-2">{r.kecamatan}</td>
@@ -395,53 +404,73 @@ export function KusukaSection({ hideHeader = false }: KusukaSectionProps) {
           </div>
 
           {/* Pagination Controls */}
-          {totalPages > 1 && (
+          {totalCount > 0 && (
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4 pt-3 border-t">
-              <p className="text-xs text-muted-foreground">
-                Menampilkan {((page - 1) * PAGE_SIZE) + 1}–{Math.min(page * PAGE_SIZE, totalCount)} dari {totalCount} data
-              </p>
-              <div className="flex items-center gap-1">
-                {/* Previous button */}
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => handlePageChange(page - 1)}
-                  disabled={page <= 1}
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-
-                {/* Page numbers */}
-                {getPageNumbers().map((p, idx) =>
-                  p === 'ellipsis' ? (
-                    <span key={`ellipsis-${idx}`} className="px-1 text-muted-foreground text-sm">
-                      …
-                    </span>
-                  ) : (
-                    <Button
-                      key={p}
-                      variant={p === page ? 'default' : 'outline'}
-                      size="icon"
-                      className={`h-8 w-8 text-xs ${p === page ? 'bg-teal-600 hover:bg-teal-700' : ''}`}
-                      onClick={() => handlePageChange(p)}
-                    >
-                      {p}
-                    </Button>
-                  )
-                )}
-
-                {/* Next button */}
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => handlePageChange(page + 1)}
-                  disabled={page >= totalPages}
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
+              <div className="flex items-center gap-3">
+                <p className="text-xs text-muted-foreground">
+                  Menampilkan {((page - 1) * pageSize) + 1}–{Math.min(page * pageSize, totalCount)} dari {totalCount} data
+                </p>
+                {/* Page Size Selector */}
+                <div className="flex items-center gap-1.5">
+                  <Rows3 className="h-3.5 w-3.5 text-muted-foreground" />
+                  <Select value={String(pageSize)} onValueChange={handlePageSizeChange}>
+                    <SelectTrigger className="h-7 w-[70px] text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PAGE_SIZE_OPTIONS.map((size) => (
+                        <SelectItem key={size} value={String(size)} className="text-xs">
+                          {size} baris
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
+              {totalPages > 1 && (
+                <div className="flex items-center gap-1">
+                  {/* Previous button */}
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => handlePageChange(page - 1)}
+                    disabled={page <= 1}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+
+                  {/* Page numbers */}
+                  {getPageNumbers().map((p, idx) =>
+                    p === 'ellipsis' ? (
+                      <span key={`ellipsis-${idx}`} className="px-1 text-muted-foreground text-sm">
+                        …
+                      </span>
+                    ) : (
+                      <Button
+                        key={p}
+                        variant={p === page ? 'default' : 'outline'}
+                        size="icon"
+                        className={`h-8 w-8 text-xs ${p === page ? 'bg-teal-600 hover:bg-teal-700' : ''}`}
+                        onClick={() => handlePageChange(p)}
+                      >
+                        {p}
+                      </Button>
+                    )
+                  )}
+
+                  {/* Next button */}
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => handlePageChange(page + 1)}
+                    disabled={page >= totalPages}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </CardContent>
