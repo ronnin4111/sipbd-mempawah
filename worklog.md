@@ -246,3 +246,64 @@ Stage Summary:
 - KB upload 404 fixed — root cause was file not in git + import chain issue
 - Admin features now accessible from dashboard main page (not just sidebar)
 - All tested and working on production
+
+---
+Task ID: 12
+Agent: Main Agent
+Task: Fix AI hallucination when answering Knowledge Base questions - AI ignores Data Pegawai and hallucinates from KUSUKA data
+
+Work Log:
+- Diagnosed core problem: When user asks "Apa jabatan Roni Irama?", AI finds Roni Irama in KUSUKA data (where he's mentioned as data entry person) but MISSES the Data Pegawai file where his actual job position is listed
+- Root causes identified:
+  1. searchKnowledgeBase only returned 3 results with NO document diversity - all results came from KUSUKA file
+  2. Upload route stored chunks with empty keywords (keywords: []) for TXT files
+  3. No multi-word entity matching - "Roni Irama" wasn't searched as a unit
+  4. AI chat didn't prioritize KB data properly - weak system prompt
+  5. extractSearchTerms didn't extract person names as entities
+  6. classifyQuestion didn't recognize pegawai/person questions
+
+Fixes implemented:
+1. **knowledge-base.ts** - Complete rewrite of searchKnowledgeBase:
+   - Increased max results from 5→8 (default) and added maxPerDocument=3 for diversity
+   - Added extractMultiWordEntities() for person name matching (high bonus score +25)
+   - Improved extractQueryKeywords() to preserve multi-word entities
+   - Added extractKeywordsFromContent() export for reindex use
+   - getKnowledgeBaseContext() now includes stronger anti-hallucination instructions
+   - Result format includes document category for better source attribution
+
+2. **upload/route.ts** - Auto-extract keywords:
+   - Added extractKeywordsFromText() function that extracts:
+     * Multi-word capitalized entities (e.g., "roni irama")
+     * Individual capitalized words (names, places)
+     * Top 10 most frequent significant words
+   - Applied to ALL file types (txt, csv, xlsx, docx)
+   - Keywords limited to 30 per chunk
+
+3. **ai/chat/route.ts** - Better KB integration:
+   - Increased KB search from 3→8 results
+   - Added secondary entity-based search using extractSearchTerms
+   - Stronger system prompt with KB priority rules:
+     * BASIS PENGETAHUAN > DATA CONTEXT > DATA KUSUKA for pegawai/dokumen questions
+     * WAJIB search KB first for relevant questions
+     * JANGAN mengarang if data exists in KB
+   - Added pegawai/person patterns to classifyQuestion (jabatan, pegawai, pangkat, etc.)
+   - Enhanced extractSearchTerms with multi-word entity extraction
+   - Added new patterns: jabatan, nama, pegawai for search term extraction
+
+4. **reindex/route.ts** - New API endpoint:
+   - POST /api/knowledge-base/reindex with admin password
+   - Re-extracts keywords for chunks with empty keywords
+   - Enriches keywords for chunks with <3 keywords
+   - Returns count of updated and refreshed chunks
+
+5. **knowledge-base-section.tsx** - UI improvements:
+   - Added "Re-index" button (admin only) to trigger keyword backfill
+   - Shows success/error message after re-index
+   - Uses Brain icon for the button
+
+Stage Summary:
+- AI should now correctly find Data Pegawai information when asked about pegawai
+- Document diversity ensures results from ALL uploaded files, not just one
+- Keywords auto-extracted on upload and can be backfilled via Re-index
+- Deployed to Vercel (commit f6302a1)
+- User needs to click "Re-index" button in Basis Pengetahuan to backfill keywords for already-uploaded files
