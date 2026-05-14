@@ -7,7 +7,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const password = request.headers.get("x-admin-password");
-    
+
     // Simple password check - inline to avoid any import issues
     if (!password) {
       return NextResponse.json({ error: "Password admin diperlukan" }, { status: 401 });
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
 
     // Parse document based on type using dynamic imports
     let chunks: Array<{ content: string; source: string; keywords: string[] }> = [];
-    
+
     if (ext === "txt") {
       const text = buffer.toString("utf-8");
       if (text.trim()) {
@@ -49,13 +49,19 @@ export async function POST(request: NextRequest) {
         let currentContent = "";
         for (const line of lines) {
           if (currentContent.length + line.length > 2000) {
-            if (currentContent) chunks.push({ content: currentContent.trim(), source: `File: ${file.name}`, keywords: [] });
+            if (currentContent) {
+              const kws = extractKeywordsFromText(currentContent);
+              chunks.push({ content: currentContent.trim(), source: `File: ${file.name}`, keywords: kws });
+            }
             currentContent = line;
           } else {
             currentContent += "\n" + line;
           }
         }
-        if (currentContent.trim()) chunks.push({ content: currentContent.trim(), source: `File: ${file.name}`, keywords: [] });
+        if (currentContent.trim()) {
+          const kws = extractKeywordsFromText(currentContent);
+          chunks.push({ content: currentContent.trim(), source: `File: ${file.name}`, keywords: kws });
+        }
       }
     } else if (ext === "csv") {
       const text = buffer.toString("utf-8");
@@ -68,7 +74,8 @@ export async function POST(request: NextRequest) {
           const values = lines[i].split(/[,;\t|]/).map((v) => v.trim().replace(/^"|"$/g, ""));
           content += headers.map((h, idx) => `${h}: ${values[idx] ?? ""}`).join(" | ") + "\n";
         }
-        chunks.push({ content, source: `CSV: ${file.name}`, keywords: [] });
+        const kws = [...headers.map(h => h.toLowerCase()), ...extractKeywordsFromText(content)];
+        chunks.push({ content, source: `CSV: ${file.name}`, keywords: kws });
       }
     } else if (ext === "xlsx" || ext === "xls") {
       const XLSX = await import("xlsx");
@@ -84,7 +91,8 @@ export async function POST(request: NextRequest) {
         for (let i = 0; i < maxRows; i++) {
           content += headers.map((h) => `${h}: ${jsonData[i][h] ?? ""}`).join(" | ") + "\n";
         }
-        chunks.push({ content, source: `Sheet: ${sheetName}`, keywords: [] });
+        const kws = [...headers.map(h => h.toLowerCase()), ...extractKeywordsFromText(content)];
+        chunks.push({ content, source: `Sheet: ${sheetName}`, keywords: kws });
       }
     } else if (ext === "docx") {
       const mammoth = await import("mammoth");
@@ -95,13 +103,19 @@ export async function POST(request: NextRequest) {
         let currentContent = "";
         for (const para of paragraphs) {
           if (currentContent.length + para.length > 2000) {
-            if (currentContent) chunks.push({ content: currentContent.trim(), source: "Word", keywords: [] });
+            if (currentContent) {
+              const kws = extractKeywordsFromText(currentContent);
+              chunks.push({ content: currentContent.trim(), source: "Word", keywords: kws });
+            }
             currentContent = para;
           } else {
             currentContent += "\n\n" + para;
           }
         }
-        if (currentContent.trim()) chunks.push({ content: currentContent.trim(), source: "Word", keywords: [] });
+        if (currentContent.trim()) {
+          const kws = extractKeywordsFromText(currentContent);
+          chunks.push({ content: currentContent.trim(), source: "Word", keywords: kws });
+        }
       }
     }
 
@@ -118,7 +132,7 @@ export async function POST(request: NextRequest) {
 
     // Database operations using dynamic import
     const { db } = await import("@/lib/db");
-    
+
     // Check for duplicate
     const existing = await db.knowledgeDocument.findFirst({
       where: { contentHash, isActive: true },
@@ -143,7 +157,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Create chunks
+    // Create chunks with keywords
     await db.knowledgeChunk.createMany({
       data: chunks.map((chunk, index) => ({
         documentId: document.id,
@@ -170,4 +184,82 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+/**
+ * Extract keywords from text content.
+ * Includes:
+ * - Capitalized multi-word entities (person names like "Roni Irama")
+ * - Individual capitalized words (names, places)
+ * - High-frequency significant words
+ */
+function extractKeywordsFromText(text: string): string[] {
+  const stopWords = new Set([
+    "yang", "dan", "di", "ke", "dari", "dengan", "untuk", "pada", "adalah",
+    "ini", "itu", "atau", "dalam", "tidak", "akan", "oleh", "juga", "sudah",
+    "ada", "karena", "seperti", "lebih", "setelah", "bisa", "buat", "lain",
+    "saja", "hanya", "masih", "sangat", "serta", "bahwa", "apakah", "berapa",
+    "bagaimana", "mengapa", "kapan", "dimana", "siapa", "apa", "sih", "dong",
+    "kok", "kan", "lah", "pun", "per", "tentang", "menurut", "seberapa",
+    "the", "a", "an", "is", "are", "was", "were", "be", "been", "what",
+    "how", "why", "when", "where", "who", "which", "can", "do", "does",
+    "nomor", "nama", "tanggal", "alamat", "telepon", "email", "status",
+    "jenis", "tipe", "kode", "id", "no", "nrp", "nip", "jabatan", "golongan",
+    "unit", "bidang", "seksi", "sub", "bagian", "lapangan", "kantor",
+    "kabupaten", "kecamatan", "desa", "kelurahan", "provinsi", "kota",
+    "dinas", "badan", "inspektorat", "sekretariat", "kepala", "pegawai",
+    "tahun", "bulan", "hari", "kerja", "pensiun", "mutasi", "pangkat",
+  ]);
+
+  const keywords = new Set<string>();
+
+  // 1. Extract multi-word entities (consecutive capitalized words)
+  // e.g., "Roni Irama" from "Roni Irama adalah kepala bidang"
+  const entityPattern = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b/g;
+  let entityMatch;
+  while ((entityMatch = entityPattern.exec(text)) !== null) {
+    const entity = entityMatch[1].trim().toLowerCase();
+    if (entity.length > 3) {
+      keywords.add(entity);
+      // Also add individual words of the entity
+      for (const part of entity.split(/\s+/)) {
+        if (part.length > 2 && !stopWords.has(part)) {
+          keywords.add(part);
+        }
+      }
+    }
+  }
+
+  // 2. Extract individual capitalized words (potential names/places)
+  const wordPattern = /\b([A-Z][a-z]{2,})\b/g;
+  let wordMatch;
+  while ((wordMatch = wordPattern.exec(text)) !== null) {
+    const word = wordMatch[1].toLowerCase();
+    if (!stopWords.has(word)) {
+      keywords.add(word);
+    }
+  }
+
+  // 3. Extract top frequent words
+  const allWords = text
+    .toLowerCase()
+    .replace(/[^\w\s]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 3 && !stopWords.has(w));
+
+  const freq: Record<string, number> = {};
+  for (const w of allWords) {
+    freq[w] = (freq[w] || 0) + 1;
+  }
+
+  const topWords = Object.entries(freq)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 10)
+    .map(([w]) => w);
+
+  for (const w of topWords) {
+    keywords.add(w);
+  }
+
+  return [...keywords].slice(0, 30); // Limit to 30 keywords per chunk
 }

@@ -113,6 +113,10 @@ function classifyQuestion(message: string): 'specific' | 'stats' | 'general' | '
     /perorangan/i, /pembenih\s+perorangan/i, /nama\s+pembudidaya/i,
     /alamat\s+pembudidaya/i,
     /status\s+kusuka/i, /draf\s+kusuka/i, /valid\s+kusuka/i,
+    // Pegawai/person-specific patterns — these need KB search
+    /jabatan/i, /pegawai/i, /karyawan/i, /staff/i, /staf/i,
+    /pangkat/i, /golongan/i, /unit\s+kerja/i, /bidang/i,
+    /nama\s+\w+/i,  // "nama Roni" pattern
   ];
   if (specificPatterns.some(p => p.test(lower))) return 'specific';
 
@@ -139,6 +143,7 @@ function classifyQuestion(message: string): 'specific' | 'stats' | 'general' | '
 
 /**
  * Extract potential search keywords from the user's message.
+ * Includes person names as multi-word entities.
  */
 function extractSearchTerms(message: string): string[] {
   const terms: string[] = [];
@@ -151,6 +156,16 @@ function extractSearchTerms(message: string): string[] {
     return [];
   }
 
+  // Extract multi-word entities (person names like "Roni Irama")
+  const entityPattern = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b/g;
+  let entityMatch;
+  while ((entityMatch = entityPattern.exec(message)) !== null) {
+    const entity = entityMatch[1].trim();
+    if (entity.length > 3) {
+      terms.push(entity);
+    }
+  }
+
   const patterns = [
     /anggota\s+kelompok\s+([^\?,\.\!]+)/i,
     /kelompok\s+([^\?,\.\!]+)/i,
@@ -158,6 +173,9 @@ function extractSearchTerms(message: string): string[] {
     /kelompok\s+(\w+(?:\s+\w+)*)/i,
     /grup\s+([^\?,\.\!]+)/i,
     /["']([^"']+)["']/,
+    /jabatan\s+([^\?,\.\!]+)/i,
+    /nama\s+([^\?,\.\!]+)/i,
+    /pegawai\s+([^\?,\.\!]+)/i,
   ];
 
   for (const pattern of patterns) {
@@ -182,6 +200,8 @@ function extractSearchTerms(message: string): string[] {
     'seluruh', 'tampilkan', 'sebutkan',
     'pembenih', 'pembenihan', 'pembesaran',  // handled specially, not as search terms
     'registrasi', 'pendaftaran', 'perorangan', 'kartu',  // KUSUKA keywords, not search terms
+    'jabatan', 'pegawai', 'karyawan', 'staff', 'staf',  // question context, not search terms
+    'pangkat', 'golongan', 'unit', 'bidang',  // question context
   ]);
 
   const words = message.split(/\s+/);
@@ -1777,15 +1797,37 @@ export async function POST(request: NextRequest) {
     const kbContext = await getKnowledgeBaseContext();
     if (kbContext) {
       systemPrompt += kbContext;
-      systemPrompt += `\nKETENTUAN BASIS PENGETAHUAN: Jika pertanyaan user berkaitan dengan dokumen di Basis Pengetahuan, cari informasi di sana. Gunakan data dari Basis Pengetahuan sebagai sumber utama jika relevan.\n`;
+      systemPrompt += `\nKETENTUAN BASIS PENGETAHUAN:
+- Jika pertanyaan user berkaitan dengan dokumen di Basis Pengetahuan, WAJIB cari informasi di sana TERLEBIH DAHULU.
+- Data dari Basis Pengetahuan adalah sumber UTAMA untuk pertanyaan tentang pegawai, dokumen internal, atau data yang diupload.
+- JANGAN mengarang informasi jika data ada di BASIS PENGETAHUAN — baca dengan teliti.
+- Jika menemukan nama orang di BASIS PENGETAHUAN, sebutkan detailnya (jabatan, unit, dll) sesuai data yang ada.
+- PRIORITAS: BASIS PENGETAHUAN > DATA CONTEXT > DATA KUSUKA untuk pertanyaan tentang pegawai/dokumen internal.
+\n`;
     }
 
     // Search Knowledge Base for relevant content
+    // Use MORE results (8) and also search with extracted entity names
     let kbSearchResults: string[] = [];
     try {
-      kbSearchResults = await searchKnowledgeBase(message, 3);
+      // Primary search with the full message
+      kbSearchResults = await searchKnowledgeBase(message, 8);
+
+      // If we have search terms (like person names), also do a targeted search
+      if (searchTerms.length > 0) {
+        const entitySearchQuery = searchTerms.join(' ');
+        const entityResults = await searchKnowledgeBase(entitySearchQuery, 5);
+        // Merge results (avoid duplicates)
+        const existingContents = new Set(kbSearchResults.map(r => r.substring(0, 100)));
+        for (const result of entityResults) {
+          if (!existingContents.has(result.substring(0, 100))) {
+            kbSearchResults.push(result);
+          }
+        }
+      }
+
       if (kbSearchResults.length > 0) {
-        const kbContent = `\n\n=== DATA RELEVAN DARI BASIS PENGETAHUAN ===\n${kbSearchResults.join("\n\n---\n\n")}\n=== AKHIR DATA BASIS PENGETAHUAN ===\n`;
+        const kbContent = `\n\n=== DATA RELEVAN DARI BASIS PENGETAHUAN (${kbSearchResults.length} hasil) ===\n⚠️ INSTRUKSI: Gunakan data di bawah ini sebagai sumber UTAMA jika relevan dengan pertanyaan. Baca dengan teliti, jangan lewatkan detail.\n\n${kbSearchResults.join("\n\n---\n\n")}\n=== AKHIR DATA BASIS PENGETAHUAN ===\n`;
         systemPrompt += kbContent;
       }
     } catch (e) {

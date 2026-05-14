@@ -121,6 +121,10 @@ export function KnowledgeBaseSection() {
   const [searchResults, setSearchResults] = useState<string[]>([]);
   const [searching, setSearching] = useState(false);
 
+  // Re-index state
+  const [reindexing, setReindexing] = useState(false);
+  const [reindexMessage, setReindexMessage] = useState('');
+
   // Filter
   const [filterCategory, setFilterCategory] = useState('semua');
 
@@ -492,10 +496,53 @@ export function KnowledgeBaseSection() {
             ))}
           </SelectContent>
         </Select>
+        {isAdmin && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2 text-xs"
+            disabled={reindexing}
+            onClick={async () => {
+              const password = prompt('Masukkan password admin untuk re-index:');
+              if (!password) return;
+              setReindexing(true);
+              setReindexMessage('');
+              try {
+                const res = await fetch('/api/knowledge-base/reindex', {
+                  method: 'POST',
+                  headers: { 'x-admin-password': password },
+                });
+                const data = await res.json();
+                if (data.success) {
+                  setReindexMessage(data.message);
+                  fetchDocuments();
+                } else {
+                  setReindexMessage(data.error || 'Gagal re-index');
+                }
+              } catch (err) {
+                setReindexMessage('Gagal re-index');
+              } finally {
+                setReindexing(false);
+                setTimeout(() => setReindexMessage(''), 5000);
+              }
+            }}
+          >
+            {reindexing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Brain className="h-3 w-3" />}
+            Re-index
+          </Button>
+        )}
         <Button variant="outline" size="icon" onClick={fetchDocuments} className="shrink-0">
           <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
         </Button>
       </div>
+
+      {/* Re-index Message */}
+      {reindexMessage && (
+        <div className="flex items-center gap-2 text-xs text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 rounded-lg px-3 py-2">
+          <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+          {reindexMessage}
+        </div>
+      )}
 
       {/* Search Results */}
       {searchResults.length > 0 && (
