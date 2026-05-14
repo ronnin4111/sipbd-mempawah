@@ -244,13 +244,14 @@ function TrendChart() {
     lines = categories.map((cat, i) => ({
       key: cat,
       color: CHART_COLORS[i % CHART_COLORS.length],
-      name: cat,
+      name: `${cat} (Kg)`,
     }));
     data = sortedYears.map(year => {
       const row: Record<string, unknown> = { year };
       categories.forEach(cat => {
         const val = trendData[cat]?.[year];
-        row[cat] = val ? val.pembesaran + val.pembenihan : 0;
+        // Use only pembesaran (Kg) — pembenihan (Ekor) has different units
+        row[cat] = val ? val.pembesaran : 0;
       });
       return row;
     });
@@ -268,6 +269,11 @@ function TrendChart() {
             value={viewBy}
             onChange={(v) => setViewBy(v as TrendViewBy)}
           />
+          {viewBy !== 'jenis-usaha' && (
+            <p className="text-[10px] mt-1.5 italic" style={{ color: 'var(--muted-foreground)' }}>
+              Pembesaran (Kg) — Pembenihan (Ekor) ditampilkan terpisah
+            </p>
+          )}
         </div>
 
         <div className="h-72 sm:h-80">
@@ -282,7 +288,7 @@ function TrendChart() {
                     const unit = name.includes('Pembesaran') ? ' Kg' : ' Ekor';
                     return formatNumber(value) + unit;
                   }
-                  return formatNumber(value);
+                  return formatNumber(value) + ' Kg';
                 }}
                 contentStyle={tooltipStyle}
               />
@@ -524,7 +530,8 @@ function ProduksiKecamatanChart() {
       { key: 'Pembenihan', color: '#22C55E', name: 'Pembenihan' },
     ];
   } else if (viewBy === 'jenis-ikan') {
-    // Cross-tab: Kecamatan x FishType (stacked)
+    // Cross-tab: Kecamatan x FishType (stacked) — Pembesaran (Kg) only
+    // Note: Pembenihan (Ekor) cannot be stacked with Pembesaran (Kg) due to different units
     const crossData = stats.productionByKecamatanByFishType;
     const allFishTypes = new Set<string>();
     Object.values(crossData).forEach(ft => Object.keys(ft).forEach(f => allFishTypes.add(f)));
@@ -532,18 +539,19 @@ function ProduksiKecamatanChart() {
     series = sortedFishTypes.map((ft, i) => ({
       key: ft,
       color: CHART_COLORS[i % CHART_COLORS.length],
-      name: ft,
+      name: `${ft} (Kg)`,
     }));
     data = allKecamatan.map(kec => {
       const row: Record<string, unknown> = { name: kec };
       sortedFishTypes.forEach(ft => {
         const val = crossData[kec]?.[ft];
-        row[ft] = val ? val.pembesaran + val.pembenihan : 0;
+        row[ft] = val ? val.pembesaran : 0;
       });
       return row;
     });
   } else if (viewBy === 'wadah') {
-    // Cross-tab: Kecamatan x ContainerType (stacked)
+    // Cross-tab: Kecamatan x ContainerType (stacked) — Pembesaran (Kg) only
+    // Note: Pembenihan (Ekor) cannot be stacked with Pembesaran (Kg) due to different units
     const crossData = stats.productionByKecamatanByContainer;
     const allContainers = new Set<string>();
     Object.values(crossData).forEach(ct => Object.keys(ct).forEach(c => allContainers.add(c)));
@@ -551,13 +559,13 @@ function ProduksiKecamatanChart() {
     series = sortedContainers.map((ct, i) => ({
       key: ct,
       color: CHART_COLORS[i % CHART_COLORS.length],
-      name: ct,
+      name: `${ct} (Kg)`,
     }));
     data = allKecamatan.map(kec => {
       const row: Record<string, unknown> = { name: kec };
       sortedContainers.forEach(ct => {
         const val = crossData[kec]?.[ct];
-        row[ct] = val ? val.pembesaran + val.pembenihan : 0;
+        row[ct] = val ? val.pembesaran : 0;
       });
       return row;
     });
@@ -609,6 +617,17 @@ function ProduksiKecamatanChart() {
     return v.toFixed(0);
   };
 
+  // Unit label for subtitle
+  const unitLabel = viewBy === 'jenis-ikan' || viewBy === 'wadah'
+    ? 'Pembesaran (Kg) — Pembenihan (Ekor) ditampilkan terpisah'
+    : viewBy === 'produksi' || viewBy === 'jenis-usaha'
+    ? 'Pembesaran (Kg) & Pembenihan (Ekor)'
+    : viewBy === 'pelaku-usaha'
+    ? 'Jumlah Pelaku Usaha (orang)'
+    : viewBy === 'kelompok'
+    ? 'Jumlah Kelompok'
+    : '';
+
   return (
     <ChartCard title={title} index={2}>
       <div id="chart-produksi-kecamatan">
@@ -621,6 +640,11 @@ function ProduksiKecamatanChart() {
             value={viewBy}
             onChange={(v) => setViewBy(v as KecamatanViewBy)}
           />
+          {unitLabel && (
+            <p className="text-[10px] mt-1.5 italic" style={{ color: 'var(--muted-foreground)' }}>
+              {unitLabel}
+            </p>
+          )}
         </div>
 
         <div className="h-80 sm:h-96">
@@ -696,12 +720,13 @@ export function PdfDashboardCharts() {
     Object.values(trendDataSource).forEach(ym => Object.keys(ym).forEach(y => allYears.add(y)));
     const sortedYears = Array.from(allYears).sort();
     const categories = Object.keys(trendDataSource).sort();
-    trendLines = categories.map((cat, i) => ({ key: cat, color: CHART_COLORS[i % CHART_COLORS.length], name: cat }));
+    trendLines = categories.map((cat, i) => ({ key: cat, color: CHART_COLORS[i % CHART_COLORS.length], name: `${cat} (Kg)` }));
     trendData = sortedYears.map(year => {
       const row: Record<string, unknown> = { year };
       categories.forEach(cat => {
         const val = trendDataSource[cat]?.[year];
-        row[cat] = val ? val.pembesaran + val.pembenihan : 0;
+        // Use only pembesaran (Kg) — pembenihan (Ekor) has different units
+        row[cat] = val ? val.pembesaran : 0;
       });
       return row;
     });
@@ -738,10 +763,10 @@ export function PdfDashboardCharts() {
     const allFT = new Set<string>();
     Object.values(crossData).forEach(ft => Object.keys(ft).forEach(f => allFT.add(f)));
     const sortedFT = Array.from(allFT).sort();
-    kecSeries = sortedFT.map((ft, i) => ({ key: ft, color: CHART_COLORS[i % CHART_COLORS.length], name: ft }));
+    kecSeries = sortedFT.map((ft, i) => ({ key: ft, color: CHART_COLORS[i % CHART_COLORS.length], name: `${ft} (Kg)` }));
     kecData = allKecForPdf.map(kec => {
       const row: Record<string, unknown> = { name: kec };
-      sortedFT.forEach(ft => { const val = crossData[kec]?.[ft]; row[ft] = val ? val.pembesaran + val.pembenihan : 0; });
+      sortedFT.forEach(ft => { const val = crossData[kec]?.[ft]; row[ft] = val ? val.pembesaran : 0; });
       return row;
     });
   } else if (kecamatanViewBy === 'wadah') {
@@ -749,10 +774,10 @@ export function PdfDashboardCharts() {
     const allCT = new Set<string>();
     Object.values(crossData).forEach(ct => Object.keys(ct).forEach(c => allCT.add(c)));
     const sortedCT = Array.from(allCT).sort();
-    kecSeries = sortedCT.map((ct, i) => ({ key: ct, color: CHART_COLORS[i % CHART_COLORS.length], name: ct }));
+    kecSeries = sortedCT.map((ct, i) => ({ key: ct, color: CHART_COLORS[i % CHART_COLORS.length], name: `${ct} (Kg)` }));
     kecData = allKecForPdf.map(kec => {
       const row: Record<string, unknown> = { name: kec };
-      sortedCT.forEach(ct => { const val = crossData[kec]?.[ct]; row[ct] = val ? val.pembesaran + val.pembenihan : 0; });
+      sortedCT.forEach(ct => { const val = crossData[kec]?.[ct]; row[ct] = val ? val.pembesaran : 0; });
       return row;
     });
   } else if (kecamatanViewBy === 'pelaku-usaha') {
