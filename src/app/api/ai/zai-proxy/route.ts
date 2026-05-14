@@ -59,10 +59,16 @@ function loadZAIConfig(): ZAIConfig | null {
 }
 
 let cachedConfig: ZAIConfig | null = null;
+let cachedConfigTime = 0;
+const CONFIG_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 function getConfig(): ZAIConfig | null {
-  if (cachedConfig) return cachedConfig;
+  // Invalidate cache after 5 minutes to pick up config changes
+  if (cachedConfig && Date.now() - cachedConfigTime < CONFIG_CACHE_TTL_MS) {
+    return cachedConfig;
+  }
   cachedConfig = loadZAIConfig();
+  cachedConfigTime = Date.now();
   return cachedConfig;
 }
 

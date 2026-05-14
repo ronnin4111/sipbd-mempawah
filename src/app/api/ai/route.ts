@@ -1,17 +1,20 @@
 import { NextResponse } from 'next/server';
-import { isGeminiConfigured, getGeminiModel } from '@/lib/gemini-ai';
-import { isGroqConfigured, getGroqModel } from '@/lib/groq-ai';
+import { isGeminiConfiguredAsync, getGeminiModel } from '@/lib/gemini-ai';
+import { isGroqConfiguredAsync, getGroqModel } from '@/lib/groq-ai';
 
 export async function GET() {
-  const geminiReady = isGeminiConfigured();
-  const groqReady = isGroqConfigured();
+  // Use async checks that also check DB-stored keys
+  const [geminiReady, groqReady] = await Promise.all([
+    isGeminiConfiguredAsync(),
+    isGroqConfiguredAsync(),
+  ]);
 
   const anyReady = geminiReady || groqReady;
 
   return NextResponse.json({
     status: anyReady ? 'configured' : 'no-provider',
     service: 'SIPBD AI Chat',
-    version: '3.0',
+    version: '3.1',
     providers: {
       primary: {
         name: 'Google Gemini',
@@ -46,7 +49,7 @@ export async function GET() {
       'Multi-provider fallback: auto-switches between Gemini → Groq → z-ai',
     ],
     help: !anyReady
-      ? 'Set GEMINI_API_KEY (https://aistudio.google.com/apikey) dan/atau GROQ_API_KEY (https://console.groq.com) — keduanya gratis!'
+      ? 'Set GEMINI_API_KEY (https://aistudio.google.com/apikey) dan/atau GROQ_API_KEY (https://console.groq.com) — keduanya gratis! Atau simpan key via Settings di chat AI.'
       : undefined,
   });
 }

@@ -60,10 +60,31 @@ const RETRY_DELAY_MS = 2000;
 // env vars + DB each call). No module-level caching of instances.
 
 /**
- * Check if Google Gemini API is configured (has API key in env)
+ * Check if Google Gemini API is configured.
+ * Checks both environment variables AND database-stored keys.
+ * Sync version for quick checks; use isGeminiConfiguredAsync() for full check.
  */
 export function isGeminiConfigured(): boolean {
   return !!process.env.GEMINI_API_KEY;
+}
+
+/**
+ * Async version: checks both env vars AND database for API key.
+ * This is the accurate check — the sync version only checks env vars.
+ */
+export async function isGeminiConfiguredAsync(): Promise<boolean> {
+  if (process.env.GEMINI_API_KEY) return true;
+  try {
+    const { db } = await import('./db');
+    const setting = await db.appSetting.findUnique({ where: { key: 'ai_gemini_api_key' } });
+    if (setting?.value) {
+      const parsed = JSON.parse(setting.value);
+      return typeof parsed === 'string' && parsed.trim().length > 0;
+    }
+  } catch {
+    // DB error — fall through
+  }
+  return false;
 }
 
 /**

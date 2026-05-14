@@ -96,7 +96,9 @@ function classifyQuestion(message: string): 'specific' | 'stats' | 'general' | '
     /semua\s+kelompok/i, /seluruh\s+kelompok/i,
     /tampilkan\s+semua/i, /tampilkan\s+seluruh/i, /daftar\s+kelompok/i,
     /kelompok\s+(pembenih|pembenihan|pembesaran)/i,
-    /pembenih|pembenihan|pembesaran/i,
+    // NOTE: Removed standalone /pembenih|pembenihan|pembesaran/i — too broad.
+    // It matched ANY mention of pembesaran, even in counting questions like
+    // "berapa produksi pembesaran" which should be 'stats'.
     /nama\s+anggota/i, /anggota\s+dari/i,
     // KUSUKA-specific patterns
     /kusuka/i, /kartu\s+usaha/i, /registrasi/i, /pendaftaran/i,
@@ -217,6 +219,7 @@ interface CachedList {
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 let kecamatanCache: CachedList | null = null;
 let fishTypeCache: CachedList | null = null;
+let yearsCache: CachedList | null = null;
 
 /**
  * Get distinct kecamatan names from the database.
@@ -275,18 +278,28 @@ async function getDynamicFishTypeList(): Promise<string[]> {
 /**
  * Get available years from the database.
  * Returns distinct years sorted descending.
+ * Results are cached in memory for 5 minutes.
  */
 async function getAvailableYears(): Promise<number[]> {
+  if (yearsCache && Date.now() - yearsCache.updatedAt < CACHE_TTL_MS) {
+    return yearsCache.values.map(Number);
+  }
   try {
     const result = await db.fishFarm.findMany({
       select: { year: true },
       distinct: ['year'],
       orderBy: { year: 'desc' },
     });
-    return result.map(r => r.year).filter((y): y is number => typeof y === 'number');
+    const values = result.map(r => r.year).filter((y): y is number => typeof y === 'number');
+    if (values.length > 0) {
+      yearsCache = { values: values.map(String), updatedAt: Date.now() };
+      console.log(`[getAvailableYears] Loaded ${values.length} years from DB:`, values.join(', '));
+      return values;
+    }
   } catch {
-    return [];
+    // fall through
   }
+  return [];
 }
 
 /**
@@ -873,13 +886,12 @@ async function fetchStatsDataContext(filters: {
     const totalGroups = groupMap.size;
     const totalFarmers = allFarmerLatest.size;
 
-    // Per-kecamatan group count
-    const kecGroupCounts = new Map<string, number>();
-    for (const r of records) {
-      if (!r.groupName?.trim()) continue;
-      // Count unique groups per kecamatan
-      const kec = r.kecamatan;
-      kecGroupCounts.set(kec, (kecGroupCounts.get(kec) || 0) + 1);
+    // Per-kecamatan group count (use groupMap for unique groups, NOT raw records)
+    const kecGroupCounts = new Map<string, Set<string>>();
+    for (const [key, group] of groupMap) {
+      const kec = group.kecamatan;
+      if (!kecGroupCounts.has(kec)) kecGroupCounts.set(kec, new Set());
+      kecGroupCounts.get(kec)!.add(key);
     }
 
     const kecDesaLines = [...desaByKec.entries()]
@@ -903,6 +915,8 @@ Desa per kecamatan: ${kecDesaLines}
 Jenis ikan: ${fishTypeList.join(', ')}
 Jenis usaha: ${businessTypeList.join(', ')}
 Wadah budidaya: ${containerTypeList.join(', ')}
+
+Kelompok per kecamatan: ${[...kecGroupCounts.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([kec, keys]) => `${kec} (${keys.size})`).join(', ')}
 
 CATATAN: Untuk daftar nama kelompok atau anggota, tanyakan secara spesifik.`;
 

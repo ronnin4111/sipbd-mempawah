@@ -1,5 +1,5 @@
-import { geminiChatCompletion, isGeminiConfigured, getGeminiModel } from './gemini-ai';
-import { groqChatCompletion, isGroqConfigured, getGroqModel } from './groq-ai';
+import { geminiChatCompletion, isGeminiConfigured, isGeminiConfiguredAsync, getGeminiModel } from './gemini-ai';
+import { groqChatCompletion, isGroqConfigured, isGroqConfiguredAsync, getGroqModel } from './groq-ai';
 import { db } from './db';
 
 /**
@@ -297,14 +297,54 @@ export async function callAI(options: UnifiedAIOptions): Promise<UnifiedAIResult
 }
 
 /**
- * Check if any AI provider is available
+ * Check if any AI provider is available (sync — only checks env vars)
  */
 export function isAIAvailable(): boolean {
   return isGeminiConfigured() || isGroqConfigured(); // z-ai is dynamically checked
 }
 
 /**
- * Get status info about available AI providers
+ * Check if any AI provider is available (async — checks env vars AND DB)
+ * This is the accurate check for server-side use.
+ */
+export async function isAIAvailableAsync(): Promise<boolean> {
+  const [gemini, groq] = await Promise.all([
+    isGeminiConfiguredAsync(),
+    isGroqConfiguredAsync(),
+  ]);
+  return gemini || groq; // z-ai is dynamically checked at call time
+}
+
+/**
+ * Get status info about available AI providers (async — checks env vars AND DB)
+ */
+export async function getAIProviderStatusAsync(): Promise<{
+  gemini: { configured: boolean; model: string };
+  groq: { configured: boolean; model: string };
+  zai: { available: boolean };
+}> {
+  const [geminiReady, groqReady] = await Promise.all([
+    isGeminiConfiguredAsync(),
+    isGroqConfiguredAsync(),
+  ]);
+  return {
+    gemini: {
+      configured: geminiReady,
+      model: getGeminiModel(),
+    },
+    groq: {
+      configured: groqReady,
+      model: getGroqModel(),
+    },
+    zai: {
+      available: false, // dynamically checked at call time
+    },
+  };
+}
+
+/**
+ * Get status info about available AI providers (sync — only checks env vars)
+ * @deprecated Use getAIProviderStatusAsync() for accurate DB-aware checks
  */
 export function getAIProviderStatus(): {
   gemini: { configured: boolean; model: string };
