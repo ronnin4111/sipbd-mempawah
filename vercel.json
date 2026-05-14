@@ -1,7 +1,0 @@
-{
-  "functions": {
-    "src/app/api/knowledge-base/upload/route.ts": {
-      "maxDuration": 60
-    }
-  }
-}
