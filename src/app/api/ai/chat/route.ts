@@ -3,6 +3,7 @@ import { callAI } from '@/lib/ai-sdk';
 import { retrieveMemories, storeMemories, extractMemoriesFromConversation, formatMemoriesForPrompt, clearMemories } from '@/lib/ai-memory';
 import { db } from '@/lib/db';
 import { generateFarmerId } from '@/lib/farmer-id';
+import { searchKnowledgeBase, getKnowledgeBaseContext } from "@/lib/knowledge-base";
 
 /**
  * Compact system prompt for SIPBD AI assistant.
@@ -1770,6 +1771,25 @@ export async function POST(request: NextRequest) {
     if (effectiveQuestionType === 'stats' || effectiveQuestionType === 'general') {
       statsSection = buildCompactStats(statsContext);
       systemPrompt += statsSection;
+    }
+
+    // Knowledge Base context - inject summary of available documents
+    const kbContext = await getKnowledgeBaseContext();
+    if (kbContext) {
+      systemPrompt += kbContext;
+      systemPrompt += `\nKETENTUAN BASIS PENGETAHUAN: Jika pertanyaan user berkaitan dengan dokumen di Basis Pengetahuan, cari informasi di sana. Gunakan data dari Basis Pengetahuan sebagai sumber utama jika relevan.\n`;
+    }
+
+    // Search Knowledge Base for relevant content
+    let kbSearchResults: string[] = [];
+    try {
+      kbSearchResults = await searchKnowledgeBase(message, 3);
+      if (kbSearchResults.length > 0) {
+        const kbContent = `\n\n=== DATA RELEVAN DARI BASIS PENGETAHUAN ===\n${kbSearchResults.join("\n\n---\n\n")}\n=== AKHIR DATA BASIS PENGETAHUAN ===\n`;
+        systemPrompt += kbContent;
+      }
+    } catch (e) {
+      console.error("KB search error:", e);
     }
 
     // Add targeted results for specific questions (group/farmer details with member names)

@@ -13,6 +13,7 @@ import { ImportDialog } from '@/components/import-export/import-dialog';
 import { ExportSection } from '@/components/import-export/export-section';
 import { DisagregasiSection } from '@/components/disaggregation/disagregasi-section';
 import { KusukaSection } from '@/components/kusuka/kusuka-section';
+import { KnowledgeBaseSection } from '@/components/knowledge-base/knowledge-base-section';
 import { useFilterStore } from '@/store/filter-store';
 import { HeroBanner } from '@/components/layout/hero-banner';
 import { CommodityPricesTable } from '@/components/commodity-prices/commodity-prices-table';
@@ -130,6 +131,14 @@ function KusukaDataSection() {
   );
 }
 
+function KnowledgeBasePageSection() {
+  return (
+    <div className="space-y-4">
+      <KnowledgeBaseSection />
+    </div>
+  );
+}
+
 function ImportExportSection() {
   const [importOpen, setImportOpen] = useState(false);
 
@@ -175,6 +184,8 @@ export default function Home() {
         return <HargaKomoditasSection />;
       case 'data-kusuka':
         return <KusukaDataSection />;
+      case 'knowledge-base':
+        return <KnowledgeBasePageSection />;
       case 'disagregasi':
         return <DisagregasiSection />;
       case 'import-export':

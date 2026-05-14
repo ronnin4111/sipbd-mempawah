@@ -16,6 +16,7 @@ import {
   LogOut,
   Shield,
   CreditCard,
+  Brain,
 } from 'lucide-react';
 import { useFilterStore } from '@/store/filter-store';
 import { useTheme } from 'next-themes';
@@ -31,6 +32,7 @@ const menuItems = [
   { id: 'tren-v2', label: 'Tren V2 (Triwulan)', icon: ExternalLink, description: 'Data tren versi triwulan', adminOnly: false },
   { id: 'harga-komoditas', label: 'Harga Komoditas', icon: DollarSign, description: 'Daftar harga ikan', adminOnly: false },
   { id: 'data-kusuka', label: 'Data KUSUKA', icon: CreditCard, description: 'Registrasi KUSUKA', adminOnly: false },
+  { id: 'knowledge-base', label: 'Basis Pengetahuan', icon: Brain, description: 'Upload dokumen untuk AI', adminOnly: false },
   { id: 'disagregasi', label: 'Disagregasi Data', icon: Split, description: 'Distribusi data agregat', adminOnly: true },
   { id: 'import-export', label: 'Import / Export', icon: FileSpreadsheet, description: 'Kelola data Excel/PDF', adminOnly: false },
 ];

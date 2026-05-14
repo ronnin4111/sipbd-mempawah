@@ -117,3 +117,40 @@ model KusukaRegistration {
   @@index([statusKusuka])
   @@index([profesiUtama])
 }
+
+model KnowledgeDocument {
+  id            String   @id @default(cuid())
+  title         String   // Display name / filename
+  fileType      String   // xlsx | docx | txt | csv | pdf
+  fileSize      Int      @default(0)  // bytes
+  description   String   @default("") // Optional user description
+  category      String   @default("umum") // kusuka | kebijakan | laporan | catatan | umum
+  contentHash   String   @default("") // SHA256 hash to detect duplicates
+  totalChunks   Int      @default(0)
+  isActive      Boolean  @default(true)
+  uploadedBy    String   @default("admin")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  chunks        KnowledgeChunk[]
+
+  @@index([category])
+  @@index([isActive])
+  @@index([contentHash])
+}
+
+model KnowledgeChunk {
+  id           String            @id @default(cuid())
+  documentId   String
+  document     KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  chunkIndex   Int               // Order within the document
+  content      String            // The actual text content of this chunk
+  source       String            @default("") // Source reference (sheet name, page, etc.)
+  keywords     String            @default("") // Extracted keywords for search (comma-separated)
+  accessCount  Int               @default(0)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@index([documentId])
+  @@index([chunkIndex])
+  @@index([keywords])
+}

@@ -160,3 +160,57 @@ Stage Summary:
 - Export Excel requires export password (not admin password)
 - Changing password requires current admin password for authorization
 - Build compiles successfully, API verified working
+
+---
+Task ID: 3
+Agent: Knowledge Base API Builder
+Task: Build Knowledge Base API routes
+
+Work Log:
+- Created upload route at /api/knowledge-base/upload
+- Created list route at /api/knowledge-base/list  
+- Created delete route at /api/knowledge-base/delete
+- Created search route at /api/knowledge-base/search
+
+Stage Summary:
+- All 4 API endpoints created with password protection on mutations
+- Search endpoint available for AI integration
+
+---
+Task ID: 4
+Agent: AI Integration Builder
+Task: Integrate Knowledge Base into AI chat context
+
+Work Log:
+- Added KB imports to AI chat route
+- Injected KB document summary into system prompt
+- Added KB search for user questions before AI call
+
+Stage Summary:
+- AI chat now has access to Knowledge Base content
+- KB summary injected into every system prompt
+- KB search results added for relevant questions
+
+---
+Task ID: 10
+Agent: Main Agent
+Task: Build complete Knowledge Base feature (Basis Pengetahuan)
+
+Work Log:
+- Added KnowledgeDocument and KnowledgeChunk models to Prisma schema
+- Pushed schema to database (db:push)
+- Installed mammoth package for DOCX parsing
+- Created src/lib/document-parser.ts — parses Excel, DOCX, TXT, CSV into text chunks with keyword extraction
+- Created src/lib/knowledge-base.ts — service layer for upload, delete, list, search, stats, cache
+- Created 4 API routes: /api/knowledge-base/upload, list, delete, search
+- Integrated Knowledge Base into AI chat route (system prompt injection + search on user question)
+- Created src/components/knowledge-base/knowledge-base-section.tsx — full UI with stats, upload, search, filter, delete
+- Added "Basis Pengetahuan" menu item to sidebar (Brain icon)
+- Added knowledge-base section to page.tsx routing
+
+Stage Summary:
+- Complete Knowledge Base feature: upload Excel/DOCX/TXT/CSV → auto-parse → AI can read & answer questions
+- No deploy needed for new documents — upload via UI, AI immediately knows
+- Password-protected upload/delete (admin password)
+- Keyword-based search with relevance scoring
+- AI integration: KB summary always in system prompt + targeted search results per question
