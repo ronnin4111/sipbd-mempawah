@@ -4,78 +4,12 @@
  */
 
 import { db } from "@/lib/db";
-import { parseDocument, getFileExtension, isSupportedFileType } from "./document-parser";
+// NOTE: document-parser is NOT imported here to avoid build issues on Vercel/Turbopack.
+// The upload route inlines its own document parsing logic with dynamic imports.
 
 // Cache for knowledge base context (refreshed every 5 minutes)
 let kbContextCache: { content: string; timestamp: number } | null = null;
 const KB_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-
-/**
- * Upload and parse a document into the Knowledge Base
- */
-export async function uploadDocument(
-  buffer: Buffer,
-  fileName: string,
-  category: string = "umum",
-  description: string = ""
-) {
-  const ext = getFileExtension(fileName);
-  if (!isSupportedFileType(fileName)) {
-    throw new Error(`Tipe file tidak didukung: .${ext}. Gunakan .xlsx, .docx, .txt, atau .csv`);
-  }
-
-  // Parse the document
-  const parsed = await parseDocument(buffer, fileName, ext);
-
-  if (parsed.chunks.length === 0) {
-    throw new Error("File kosong atau tidak dapat dibaca");
-  }
-
-  // Check for duplicate by content hash
-  const existing = await db.knowledgeDocument.findFirst({
-    where: { contentHash: parsed.contentHash, isActive: true },
-  });
-
-  if (existing) {
-    throw new Error(
-      `Dokumen dengan konten yang sama sudah ada: "${existing.title}". Gunakan hapus lalu upload ulang jika ingin memperbaharui.`
-    );
-  }
-
-  // Create document and chunks in a transaction
-  const document = await db.knowledgeDocument.create({
-    data: {
-      title: fileName,
-      fileType: ext,
-      fileSize: buffer.length,
-      description,
-      category,
-      contentHash: parsed.contentHash,
-      totalChunks: parsed.totalChunks,
-    },
-  });
-
-  // Create chunks
-  await db.knowledgeChunk.createMany({
-    data: parsed.chunks.map((chunk, index) => ({
-      documentId: document.id,
-      chunkIndex: index,
-      content: chunk.content,
-      source: chunk.source,
-      keywords: chunk.keywords.join(","),
-    })),
-  });
-
-  // Invalidate cache
-  invalidateKbCache();
-
-  return {
-    id: document.id,
-    title: fileName,
-    fileType: ext,
-    totalChunks: parsed.totalChunks,
-  };
-}
 
 /**
  * Delete a document and its chunks
