@@ -663,6 +663,26 @@ async function fetchKusukaDataContext(): Promise<string> {
     const withKelompok = registrations.filter(r => r.namaKelompok && r.namaKelompok.trim() !== '').length;
     const withoutKelompok = total - withKelompok;
 
+    // Count per desa (grouped by kecamatan)
+    const desaCount = new Map<string, Map<string, number>>(); // kecamatan -> desa -> count
+    for (const r of registrations) {
+      const kec = r.kecamatan || '-';
+      const desa = r.kelDesa || '-';
+      if (!desaCount.has(kec)) desaCount.set(kec, new Map());
+      const desaMap = desaCount.get(kec)!;
+      desaMap.set(desa, (desaMap.get(desa) || 0) + 1);
+    }
+    const desaLines = [...desaCount.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([kec, desas]) => {
+        const desaDetail = [...desas.entries()]
+          .sort(([, a], [, b]) => b - a)
+          .map(([desa, count]) => `${desa}:${count}`)
+          .join(', ');
+        return `${kec} → ${desaDetail}`;
+      })
+      .join('\n');
+
     // List unique kelompok with member counts
     const kelompokMap = new Map<string, number>();
     for (const r of registrations) {
@@ -686,7 +706,10 @@ Per profesi utama: ${profesiLines}
 Per bentuk usaha: ${bentukLines}
 No.KUSUKA valid (16 digit): ${validKusukaCard}
 Dengan kelompok: ${withKelompok}, Mandiri (tanpa kelompok): ${withoutKelompok}
-Kelompok (${kelompokMap.size}): ${kelompokLines}${kelompokExtra}`;
+Kelompok (${kelompokMap.size}): ${kelompokLines}${kelompokExtra}
+
+Per desa (kecamatan → desa:jumlah):
+${desaLines}`;
 
     return dataContext;
   } catch (error) {
