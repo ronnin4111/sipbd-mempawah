@@ -95,16 +95,20 @@ export function KusukaSection({ hideHeader = false }: KusukaSectionProps) {
               Data pendaftaran Kartu Identitas Usaha Perikanan perorangan
             </p>
           </div>
-          <Button
-            onClick={() => setImportOpen(true)}
-            className="gap-2 shrink-0"
-            style={{ background: 'linear-gradient(135deg, #06B6D4, #0891B2)' }}
-          >
-            <Upload className="h-4 w-4" />
-            <span>Import KUSUKA</span>
-          </Button>
         </div>
       )}
+
+      {/* Import KUSUKA button - always visible */}
+      <div className="flex justify-end">
+        <Button
+          onClick={() => setImportOpen(true)}
+          className="gap-2 shrink-0"
+          style={{ background: 'linear-gradient(135deg, #06B6D4, #0891B2)' }}
+        >
+          <Upload className="h-4 w-4" />
+          <span>Import KUSUKA</span>
+        </Button>
+      </div>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
