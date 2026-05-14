@@ -5,7 +5,8 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search')?.trim();
-    const limit = Math.min(parseInt(searchParams.get('limit') || '50', 10), 200);
+    const page = Math.max(parseInt(searchParams.get('page') || '1', 10), 1);
+    const pageSize = Math.min(Math.max(parseInt(searchParams.get('pageSize') || '20', 10), 1), 100);
 
     const where: Record<string, unknown> = {};
 
@@ -23,7 +24,7 @@ export async function GET(request: NextRequest) {
 
     const registrations = await db.kusukaRegistration.findMany({ where });
 
-    // Summary stats
+    // Summary stats (computed from all data, not paginated)
     const total = registrations.length;
     const validStatus = registrations.filter(r => r.statusKusuka === 'Valid').length;
     const drafStatus = registrations.filter(r => r.statusKusuka === 'Draf').length;
@@ -78,27 +79,29 @@ export async function GET(request: NextRequest) {
       .slice(0, 50)
       .map(k => ({ nama: k.nama, kecamatan: [...k.kecamatan].join(', '), count: k.count }));
 
-    // Recent registrations
-    const recent = registrations
-      .sort((a, b) => {
-        const dateA = a.tglDibuat ? new Date(a.tglDibuat).getTime() : 0;
-        const dateB = b.tglDibuat ? new Date(b.tglDibuat).getTime() : 0;
-        return dateB - dateA;
-      })
-      .slice(0, limit)
-      .map(r => ({
-        id: r.id,
-        nama: r.nama,
-        kecamatan: r.kecamatan,
-        kelDesa: r.kelDesa,
-        namaKelompok: r.namaKelompok,
-        bentukUsaha: r.bentukUsaha,
-        profesiUtama: r.profesiUtama,
-        noKusuka: r.noKusuka,
-        statusKusuka: r.statusKusuka,
-        alamat: r.alamat,
-        tglDibuat: r.tglDibuat,
-      }));
+    // Paginated recent registrations (sorted by tglDibuat descending)
+    const sorted = registrations.sort((a, b) => {
+      const dateA = a.tglDibuat ? new Date(a.tglDibuat).getTime() : 0;
+      const dateB = b.tglDibuat ? new Date(b.tglDibuat).getTime() : 0;
+      return dateB - dateA;
+    });
+
+    const totalCount = sorted.length;
+    const totalPages = Math.ceil(totalCount / pageSize);
+    const skip = (page - 1) * pageSize;
+    const paginatedRecent = sorted.slice(skip, skip + pageSize).map(r => ({
+      id: r.id,
+      nama: r.nama,
+      kecamatan: r.kecamatan,
+      kelDesa: r.kelDesa,
+      namaKelompok: r.namaKelompok,
+      bentukUsaha: r.bentukUsaha,
+      profesiUtama: r.profesiUtama,
+      noKusuka: r.noKusuka,
+      statusKusuka: r.statusKusuka,
+      alamat: r.alamat,
+      tglDibuat: r.tglDibuat,
+    }));
 
     return NextResponse.json({
       total,
@@ -112,8 +115,15 @@ export async function GET(request: NextRequest) {
       byProfesi,
       byBentukUsaha,
       kelompokList,
-      recent,
+      recent: paginatedRecent,
       totalKelompok: kelompokMap.size,
+      // Pagination info
+      pagination: {
+        page,
+        pageSize,
+        totalCount,
+        totalPages,
+      },
     });
   } catch (error) {
     console.error('KUSUKA Stats error:', error);

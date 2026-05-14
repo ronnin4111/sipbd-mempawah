@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { CreditCard, Upload, Users, CheckCircle2, FileEdit, UserCheck, Building2, Loader2 } from 'lucide-react';
+import { CreditCard, Upload, Users, CheckCircle2, UserCheck, Building2, Loader2, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -34,29 +34,96 @@ interface KusukaStats {
     tglDibuat: string;
   }>;
   totalKelompok: number;
+  pagination: {
+    page: number;
+    pageSize: number;
+    totalCount: number;
+    totalPages: number;
+  };
 }
 
 interface KusukaSectionProps {
   hideHeader?: boolean;
 }
 
+const PAGE_SIZE = 20;
+
 export function KusukaSection({ hideHeader = false }: KusukaSectionProps) {
   const [importOpen, setImportOpen] = useState(false);
-  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
 
   const { data: stats, isLoading, refetch } = useQuery<KusukaStats>({
-    queryKey: ['kusuka-stats', search],
+    queryKey: ['kusuka-stats', searchQuery, currentPage],
     queryFn: async () => {
-      const params = search ? `?search=${encodeURIComponent(search)}` : '';
-      const res = await fetch(`/api/kusuka/stats${params}`);
+      const params = new URLSearchParams();
+      if (searchQuery) params.set('search', searchQuery);
+      params.set('page', String(currentPage));
+      params.set('pageSize', String(PAGE_SIZE));
+      const res = await fetch(`/api/kusuka/stats?${params}`);
       if (!res.ok) throw new Error('Failed to fetch KUSUKA stats');
       return res.json();
     },
     staleTime: 30000,
   });
 
+  // Handle Enter key press for search
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      setSearchQuery(searchInput);
+      setCurrentPage(1);
+    }
+  };
+
+  // Handle search button click
+  const handleSearchClick = () => {
+    setSearchQuery(searchInput);
+    setCurrentPage(1);
+  };
+
+  // Clear search
+  const handleClearSearch = () => {
+    setSearchInput('');
+    setSearchQuery('');
+    setCurrentPage(1);
+  };
+
   const handleImportComplete = () => {
     refetch();
+  };
+
+  const totalPages = stats?.pagination?.totalPages ?? 1;
+  const totalCount = stats?.pagination?.totalCount ?? 0;
+  const page = stats?.pagination?.page ?? 1;
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+    }
+  };
+
+  // Generate page numbers to display
+  const getPageNumbers = () => {
+    const pages: (number | 'ellipsis')[] = [];
+    const total = totalPages;
+
+    if (total <= 7) {
+      for (let i = 1; i <= total; i++) pages.push(i);
+    } else {
+      pages.push(1);
+      if (currentPage > 3) pages.push('ellipsis');
+
+      const start = Math.max(2, currentPage - 1);
+      const end = Math.min(total - 1, currentPage + 1);
+
+      for (let i = start; i <= end; i++) pages.push(i);
+
+      if (currentPage < total - 2) pages.push('ellipsis');
+      pages.push(total);
+    }
+
+    return pages;
   };
 
   const statusBadge = (status: string) => {
@@ -238,21 +305,58 @@ export function KusukaSection({ hideHeader = false }: KusukaSectionProps) {
       {/* Recent Registrations Table */}
       <Card>
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base">Registrasi Terbaru</CardTitle>
-            <Input
-              placeholder="Cari nama, kecamatan, kelompok..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="max-w-xs h-8 text-sm"
-            />
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <CardTitle className="text-base">
+              Registrasi Terbaru
+              {totalCount > 0 && (
+                <span className="text-xs font-normal text-muted-foreground ml-2">
+                  ({totalCount} data)
+                </span>
+              )}
+            </CardTitle>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <div className="relative flex-1 sm:flex-initial">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  placeholder="Cari nama, kecamatan, kelompok... (Enter)"
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  onKeyDown={handleSearchKeyDown}
+                  className="max-w-xs h-8 text-sm pl-8 pr-8"
+                />
+                {searchInput && (
+                  <button
+                    onClick={handleClearSearch}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs"
+                    aria-label="Hapus pencarian"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+              <Button
+                onClick={handleSearchClick}
+                size="sm"
+                variant="outline"
+                className="h-8 gap-1.5 text-xs shrink-0"
+              >
+                <Search className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Cari</span>
+              </Button>
+            </div>
           </div>
+          {searchQuery && (
+            <p className="text-xs text-muted-foreground mt-1">
+              Hasil pencarian untuk: &quot;{searchQuery}&quot; ({totalCount} data ditemukan)
+            </p>
+          )}
         </CardHeader>
         <CardContent className="p-4 pt-0">
-          <div className="border rounded-lg overflow-auto max-h-96 custom-scrollbar">
+          <div className="border rounded-lg overflow-auto custom-scrollbar">
             <table className="w-full text-sm">
               <thead className="bg-muted/50 sticky top-0">
                 <tr>
+                  <th className="px-3 py-2 text-left font-medium w-10">#</th>
                   <th className="px-3 py-2 text-left font-medium">Nama</th>
                   <th className="px-3 py-2 text-left font-medium">Kecamatan</th>
                   <th className="px-3 py-2 text-left font-medium hidden md:table-cell">Desa</th>
@@ -262,8 +366,11 @@ export function KusukaSection({ hideHeader = false }: KusukaSectionProps) {
                 </tr>
               </thead>
               <tbody>
-                {stats?.recent.map((r) => (
+                {stats?.recent.map((r, index) => (
                   <tr key={r.id} className="border-t hover:bg-muted/30">
+                    <td className="px-3 py-2 text-muted-foreground text-xs">
+                      {(page - 1) * PAGE_SIZE + index + 1}
+                    </td>
                     <td className="px-3 py-2 font-medium">{r.nama}</td>
                     <td className="px-3 py-2">{r.kecamatan}</td>
                     <td className="px-3 py-2 hidden md:table-cell">{r.kelDesa}</td>
@@ -278,14 +385,65 @@ export function KusukaSection({ hideHeader = false }: KusukaSectionProps) {
                 ))}
                 {(!stats?.recent || stats.recent.length === 0) && (
                   <tr>
-                    <td colSpan={6} className="text-center py-8 text-muted-foreground">
-                      Belum ada data registrasi KUSUKA
+                    <td colSpan={7} className="text-center py-8 text-muted-foreground">
+                      {searchQuery ? 'Tidak ada data yang cocok dengan pencarian' : 'Belum ada data registrasi KUSUKA'}
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4 pt-3 border-t">
+              <p className="text-xs text-muted-foreground">
+                Menampilkan {((page - 1) * PAGE_SIZE) + 1}–{Math.min(page * PAGE_SIZE, totalCount)} dari {totalCount} data
+              </p>
+              <div className="flex items-center gap-1">
+                {/* Previous button */}
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => handlePageChange(page - 1)}
+                  disabled={page <= 1}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+
+                {/* Page numbers */}
+                {getPageNumbers().map((p, idx) =>
+                  p === 'ellipsis' ? (
+                    <span key={`ellipsis-${idx}`} className="px-1 text-muted-foreground text-sm">
+                      …
+                    </span>
+                  ) : (
+                    <Button
+                      key={p}
+                      variant={p === page ? 'default' : 'outline'}
+                      size="icon"
+                      className={`h-8 w-8 text-xs ${p === page ? 'bg-teal-600 hover:bg-teal-700' : ''}`}
+                      onClick={() => handlePageChange(p)}
+                    >
+                      {p}
+                    </Button>
+                  )
+                )}
+
+                {/* Next button */}
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => handlePageChange(page + 1)}
+                  disabled={page >= totalPages}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
