@@ -25,6 +25,15 @@ Anda juga fleksibel:
 
 Anda juga bisa menjawab pertanyaan tentang data registrasi KUSUKA perorangan, status kartu, dan detail alamat pembudidaya.
 
+⚠️ BATAS DATA (DATA BOUNDARIES) — SANGAT PENTING:
+- Sistem ini HANYA mencakup data Kabupaten Mempawah, Kalimantan Barat
+- Daftar kecamatan yang tersedia akan dicantumkan di DATA CONTEXT — HANYA gunakan kecamatan yang ada di sana
+- Daftar jenis ikan yang tersedia akan dicantumkan di DATA CONTEXT — HANYA gunakan jenis ikan yang ada di sana
+- Tahun data yang tersedia akan dicantumkan di informasi "Tahun data tersedia di database"
+- Jika user menanyakan kecamatan/tahun/jenis ikan yang TIDAK ada di DATA CONTEXT, katakan: "Data untuk [item] tidak tersedia" — JANGAN membuat data palsu untuk itu
+- CONTOH: Jika user bertanya tentang "Weda Selatan" tapi itu TIDAK ada di daftar kecamatan DATA CONTEXT, katakan "Data untuk Kecamatan Weda Selatan tidak tersedia di sistem SIPBD Kab. Mempawah"
+- JANGAN pernah menyebutkan kecamatan, desa, atau jenis ikan yang TIDAK ada di DATA CONTEXT, bahkan jika Anda tahu itu ada di dunia nyata
+
 Aturan respons SANGAT PENTING:
 - WAJIB bahasa Indonesia
 - Angka format Indonesia (1.234.567 kg, Rp 25.000)
@@ -177,22 +186,91 @@ function extractSearchTerms(message: string): string[] {
 }
 
 /**
- * Known kecamatan names from DB data.
+ * Fallback kecamatan names — used only if DB query fails.
+ * NOTE: "Weda Selatan" is NOT in Mempawah (it's in Halmahera!)
+ * and has been removed. The DB-driven list is the source of truth.
  */
-const KNOWN_KECAMATAN = [
+const FALLBACK_KECAMATAN = [
   'Siantan', 'Mempawah Hilir', 'Mempawah Hulu', 'Segedong',
   'Salo', 'Toho', 'Lubuk Bandung', 'Batu Ampar',
-  'Terentang', 'Weda Selatan',
+  'Terentang',
 ];
 
 /**
- * Known fish type names from DB data.
+ * Fallback fish type names — used only if DB query fails.
  */
-const KNOWN_FISH_TYPES = [
+const FALLBACK_FISH_TYPES = [
   'Nila', 'Lele', 'Mas', 'Patin', 'Gabus', 'Bawal',
   'Kerapu', 'Udang', 'Bandeng', 'Pari', 'Belanak',
   'Kakap', 'Napol', 'Barramundi',
 ];
+
+/**
+ * In-memory cache for dynamic lists from DB, with 5-minute TTL.
+ * Avoids hitting the database on every request while still
+ * staying up-to-date when new kecamatan/fish types are added.
+ */
+interface CachedList {
+  values: string[];
+  updatedAt: number;
+}
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+let kecamatanCache: CachedList | null = null;
+let fishTypeCache: CachedList | null = null;
+
+/**
+ * Get distinct kecamatan names from the database.
+ * Results are cached in memory for 5 minutes.
+ * Falls back to FALLBACK_KECAMATAN if the DB query fails.
+ */
+async function getDynamicKecamatanList(): Promise<string[]> {
+  if (kecamatanCache && Date.now() - kecamatanCache.updatedAt < CACHE_TTL_MS) {
+    return kecamatanCache.values;
+  }
+  try {
+    const result = await db.fishFarm.findMany({
+      select: { kecamatan: true },
+      distinct: ['kecamatan'],
+      orderBy: { kecamatan: 'asc' },
+    });
+    const values = result.map(r => r.kecamatan).filter(Boolean);
+    if (values.length > 0) {
+      kecamatanCache = { values, updatedAt: Date.now() };
+      console.log(`[parseQuestionContext] Loaded ${values.length} kecamatan from DB:`, values.join(', '));
+      return values;
+    }
+  } catch (err) {
+    console.error('[parseQuestionContext] DB query for kecamatan failed, using fallback:', err);
+  }
+  return FALLBACK_KECAMATAN;
+}
+
+/**
+ * Get distinct fish type names from the database.
+ * Results are cached in memory for 5 minutes.
+ * Falls back to FALLBACK_FISH_TYPES if the DB query fails.
+ */
+async function getDynamicFishTypeList(): Promise<string[]> {
+  if (fishTypeCache && Date.now() - fishTypeCache.updatedAt < CACHE_TTL_MS) {
+    return fishTypeCache.values;
+  }
+  try {
+    const result = await db.fishFarm.findMany({
+      select: { fishType: true },
+      distinct: ['fishType'],
+      orderBy: { fishType: 'asc' },
+    });
+    const values = result.map(r => r.fishType).filter(Boolean);
+    if (values.length > 0) {
+      fishTypeCache = { values, updatedAt: Date.now() };
+      console.log(`[parseQuestionContext] Loaded ${values.length} fish types from DB:`, values.join(', '));
+      return values;
+    }
+  } catch (err) {
+    console.error('[parseQuestionContext] DB query for fish types failed, using fallback:', err);
+  }
+  return FALLBACK_FISH_TYPES;
+}
 
 /**
  * Get available years from the database.
@@ -230,8 +308,12 @@ interface QuestionContext {
  * like years, kecamatan, fish types, etc.
  * This is used to override UI filters so the AI fetches
  * the right data regardless of what the UI shows.
+ *
+ * Uses dynamic lists from the database (cached for 5 min)
+ * to avoid hardcoding kecamatan/fish types that may be wrong
+ * (e.g. "Weda Selatan" which is in Halmahera, not Mempawah).
  */
-function parseQuestionContext(message: string): QuestionContext {
+async function parseQuestionContext(message: string): Promise<QuestionContext> {
   const ctx: QuestionContext = {
     years: [],
     kecamatan: [],
@@ -311,24 +393,26 @@ function parseQuestionContext(message: string): QuestionContext {
   ctx.years = [...explicitYears].sort((a, b) => a - b);
 
   // ===== Parse kecamatan =====
-  for (const kec of KNOWN_KECAMATAN) {
+  const dynamicKecamatan = await getDynamicKecamatanList();
+  for (const kec of dynamicKecamatan) {
     if (lower.includes(kec.toLowerCase())) {
       ctx.kecamatan.push(kec);
     }
   }
   // Fuzzy match: also check partial kecamatan names in the question
-  const kecPartialPatterns: Record<string, string[]> = {
-    'Siantan': ['siantan'],
-    'Mempawah Hilir': ['mempawah hilir', 'hilir'],
-    'Mempawah Hulu': ['mempawah hulu', 'hulu'],
-    'Segedong': ['segedong'],
-    'Salo': ['salo'],
-    'Toho': ['toho'],
-    'Lubuk Bandung': ['lubuk bandung', 'lubuk'],
-    'Batu Ampar': ['batu ampar'],
-    'Terentang': ['terentang'],
-    'Weda Selatan': ['weda selatan', 'weda'],
-  };
+  // Build partial patterns dynamically from DB kecamatan names
+  const kecPartialPatterns: Record<string, string[]> = {};
+  for (const kec of dynamicKecamatan) {
+    const patterns = [kec.toLowerCase()];
+    // For multi-word kecamatan, add the last word as a partial pattern
+    const parts = kec.split(' ');
+    if (parts.length > 1) {
+      for (const part of parts) {
+        if (part.length > 3) patterns.push(part.toLowerCase());
+      }
+    }
+    kecPartialPatterns[kec] = patterns;
+  }
   for (const [kec, patterns] of Object.entries(kecPartialPatterns)) {
     if (ctx.kecamatan.includes(kec)) continue; // already matched
     for (const p of patterns) {
@@ -348,7 +432,8 @@ function parseQuestionContext(message: string): QuestionContext {
   }
 
   // ===== Parse fish type =====
-  for (const fish of KNOWN_FISH_TYPES) {
+  const dynamicFishTypes = await getDynamicFishTypeList();
+  for (const fish of dynamicFishTypes) {
     if (lower.includes(fish.toLowerCase())) {
       ctx.fishType.push(fish);
     }
@@ -356,12 +441,12 @@ function parseQuestionContext(message: string): QuestionContext {
 
   // ===== Parse desa (capitalized words that might be desa names) =====
   const skipWords = new Set([
-    ...KNOWN_KECAMATAN.map(k => k.toLowerCase()),
+    ...dynamicKecamatan.map(k => k.toLowerCase()),
     'mempawah', 'kabupaten', 'dinas', 'perikanan', 'budidaya',
     'kelompok', 'pembudidaya', 'anggota', 'jumlah', 'berapa',
     'data', 'tahun', 'desa', 'kecamatan', 'ikan', 'jenis',
     'usaha', 'rtp', 'kusuka', 'produksi', 'pembesaran', 'pembenihan',
-    ...KNOWN_FISH_TYPES.map(f => f.toLowerCase()),
+    ...dynamicFishTypes.map(f => f.toLowerCase()),
   ]);
   const words = message.split(/\s+/);
   for (const word of words) {
@@ -1572,7 +1657,7 @@ export async function POST(request: NextRequest) {
     // This overrides UI filters so the AI fetches the right data
     // regardless of what the UI currently shows.
     // ============================================================
-    const questionCtx = parseQuestionContext(message);
+    const questionCtx = await parseQuestionContext(message);
     const defaultFilters = {
       years: [], kecamatan: [], desa: [], fishType: [],
       containerType: [], businessType: [],

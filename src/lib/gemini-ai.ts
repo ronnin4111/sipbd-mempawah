@@ -55,29 +55,9 @@ const DEFAULT_MAX_TOKENS = 2048;
 const MAX_RETRIES = 1; // Reduced from 2 to 1 — avoid consuming rate limit budget
 const RETRY_DELAY_MS = 2000;
 
-// Singleton instance (for env-var-based usage)
-let genAIInstance: GoogleGenerativeAI | null = null;
-
-/**
- * Reset the singleton instance (used when API key changes dynamically)
- */
-export function resetGeminiInstance(): void {
-  genAIInstance = null;
-}
-
-/**
- * Get or create the GoogleGenerativeAI instance from env var.
- * NOTE: For DB-stored keys, pass apiKey directly to chatCompletion instead.
- */
-function getGenAIInstance(): GoogleGenerativeAI | null {
-  if (genAIInstance) return genAIInstance;
-
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return null;
-
-  genAIInstance = new GoogleGenerativeAI(apiKey);
-  return genAIInstance;
-}
+// NOTE: Singleton pattern removed — apiKey is always passed directly
+// to geminiChatCompletion() from ai-sdk.ts (which resolves keys from
+// env vars + DB each call). No module-level caching of instances.
 
 /**
  * Check if Google Gemini API is configured (has API key in env)

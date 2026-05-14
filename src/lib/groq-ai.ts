@@ -64,29 +64,9 @@ const DEFAULT_MAX_TOKENS = 2048;
 const MAX_RETRIES = 1; // Reduced from 2 to 1 — avoid consuming rate limit budget
 const RETRY_DELAY_MS = 2000;
 
-// Singleton instance (for env-var-based usage)
-let groqInstance: Groq | null = null;
-
-/**
- * Reset the singleton instance (used when API key changes dynamically)
- */
-export function resetGroqInstance(): void {
-  groqInstance = null;
-}
-
-/**
- * Get or create the Groq instance from env var.
- * NOTE: For DB-stored keys, pass apiKey directly to chatCompletion instead.
- */
-function getGroqInstance(): Groq | null {
-  if (groqInstance) return groqInstance;
-
-  const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey) return null;
-
-  groqInstance = new Groq({ apiKey });
-  return groqInstance;
-}
+// NOTE: Singleton pattern removed — apiKey is always passed directly
+// to groqChatCompletion() from ai-sdk.ts (which resolves keys from
+// env vars + DB each call). No module-level caching of instances.
 
 /**
  * Check if Groq API is configured (has API key in env)

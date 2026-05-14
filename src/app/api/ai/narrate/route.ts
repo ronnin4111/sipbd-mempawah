@@ -32,33 +32,57 @@ function formatStatsContextToText(statsContext: Record<string, unknown>): string
   if (s.totalKusuka !== undefined) lines.push(`Total KUSUKA: ${Number(s.totalKusuka).toLocaleString('id-ID')}`);
 
   // Production by fish type (compact)
+  // Stats API returns: Record<string, { pembesaran: number; pembenihan: number }>
   if (s.productionByFishType && typeof s.productionByFishType === 'object') {
-    const fishData = s.productionByFishType as Record<string, number>;
+    const fishData = s.productionByFishType as Record<string, { pembesaran: number; pembenihan: number }>;
     lines.push('Produksi per jenis ikan:');
     for (const [k, v] of Object.entries(fishData)) {
-      lines.push(`  ${k}: ${Number(v).toLocaleString('id-ID')}`);
+      if (typeof v === 'object' && v !== null) {
+        const pemb = Number(v.pembesaran || 0).toLocaleString('id-ID');
+        const pemben = Number(v.pembenihan || 0).toLocaleString('id-ID');
+        lines.push(`  ${k}: Pembesaran=${pemb}Kg, Pembenihan=${pemben}Ekor`);
+      } else {
+        lines.push(`  ${k}: ${Number(v).toLocaleString('id-ID')}`);
+      }
     }
   }
 
   // Production by kecamatan (compact)
+  // Stats API returns: Record<string, { pembesaran: number; pembenihan: number }>
   if (s.productionByKecamatan && typeof s.productionByKecamatan === 'object') {
-    const kecData = s.productionByKecamatan as Record<string, number>;
+    const kecData = s.productionByKecamatan as Record<string, { pembesaran: number; pembenihan: number }>;
     lines.push('Produksi per kecamatan:');
-    for (const [k, v] of Object.entries(kecData).sort(([, a], [, b]) => Number(b) - Number(a))) {
-      lines.push(`  ${k}: ${Number(v).toLocaleString('id-ID')}`);
+    const sorted = Object.entries(kecData).sort(([, a], [, b]) => {
+      const totalA = Number(a.pembesaran || 0) + Number(a.pembenihan || 0);
+      const totalB = Number(b.pembesaran || 0) + Number(b.pembenihan || 0);
+      return totalB - totalA;
+    });
+    for (const [k, v] of sorted) {
+      if (typeof v === 'object' && v !== null) {
+        const pemb = Number(v.pembesaran || 0).toLocaleString('id-ID');
+        const pemben = Number(v.pembenihan || 0).toLocaleString('id-ID');
+        lines.push(`  ${k}: Pembesaran=${pemb}Kg, Pembenihan=${pemben}Ekor`);
+      } else {
+        lines.push(`  ${k}: ${Number(v).toLocaleString('id-ID')}`);
+      }
     }
   }
 
   // Kecamatan detail (compact — just top level summary)
+  // Stats API returns: Record<string, { rtp, farmer, group, pembesaranProduction, pembenihanProduction, ... }>
   if (s.productionByKecamatanDetail && typeof s.productionByKecamatanDetail === 'object') {
     const kecDetail = s.productionByKecamatanDetail as Record<string, unknown>;
     lines.push('Detail per kecamatan:');
     for (const [kec, detail] of Object.entries(kecDetail).slice(0, 10)) {
       const d = detail as Record<string, unknown>;
+      const pembProd = d.pembesaranProduction ? `Pembesaran:${Number(d.pembesaranProduction).toLocaleString('id-ID')}Kg` : '';
+      const pembenProd = d.pembenihanProduction ? `Pembenihan:${Number(d.pembenihanProduction).toLocaleString('id-ID')}Ekor` : '';
       const summary = [
-        d.totalRtp ? `RTP:${Number(d.totalRtp).toLocaleString('id-ID')}` : '',
-        d.totalFarmer ? `Pembudidaya:${Number(d.totalFarmer).toLocaleString('id-ID')}` : '',
-        d.totalGroup ? `Kelompok:${Number(d.totalGroup).toLocaleString('id-ID')}` : '',
+        pembProd,
+        pembenProd,
+        d.rtp ? `RTP:${Number(d.rtp).toLocaleString('id-ID')}` : '',
+        d.farmer ? `Pembudidaya:${Number(d.farmer).toLocaleString('id-ID')}` : '',
+        d.group ? `Kelompok:${Number(d.group).toLocaleString('id-ID')}` : '',
       ].filter(Boolean).join(', ');
       lines.push(`  ${kec}: ${summary}`);
     }
@@ -68,6 +92,7 @@ function formatStatsContextToText(statsContext: Record<string, unknown>): string
   }
 
   // Fish type detail (compact)
+  // Stats API returns: Record<string, { pembesaranProduction, pembenihanProduction, rtp, farmer, group, ... }>
   if (s.productionByFishTypeDetail && typeof s.productionByFishTypeDetail === 'object') {
     const fishDetail = s.productionByFishTypeDetail as Record<string, unknown>;
     lines.push('Detail per jenis ikan:');
@@ -76,21 +101,25 @@ function formatStatsContextToText(statsContext: Record<string, unknown>): string
       const summary = [
         d.pembesaranProduction ? `Pembesaran:${Number(d.pembesaranProduction).toLocaleString('id-ID')}Kg` : '',
         d.pembenihanProduction ? `Pembenihan:${Number(d.pembenihanProduction).toLocaleString('id-ID')}Ekor` : '',
+        d.rtp ? `RTP:${Number(d.rtp).toLocaleString('id-ID')}` : '',
+        d.farmer ? `Pembudidaya:${Number(d.farmer).toLocaleString('id-ID')}` : '',
+        d.group ? `Kelompok:${Number(d.group).toLocaleString('id-ID')}` : '',
       ].filter(Boolean).join(', ');
       if (summary) lines.push(`  ${fish}: ${summary}`);
     }
   }
 
   // 5-year trend
-  if (s.trend5Year && Array.isArray(s.trend5Year)) {
-    const trend = s.trend5Year as Array<Record<string, unknown>>;
-    if (trend.length > 0) {
+  // Stats API returns: Record<string, { pembesaran: number; pembenihan: number }> (key = year as string)
+  if (s.trend5Year && typeof s.trend5Year === 'object') {
+    const trend = s.trend5Year as Record<string, { pembesaran: number; pembenihan: number }>;
+    const trendEntries = Object.entries(trend).sort(([a], [b]) => Number(a) - Number(b));
+    if (trendEntries.length > 0) {
       lines.push('Tren 5 tahun:');
-      for (const t of trend) {
-        const pemb = Number(t.pembesaranProduction || 0).toLocaleString('id-ID');
-        const pemben = Number(t.pembenihanProduction || 0).toLocaleString('id-ID');
-        const rtp = t.totalRtp ? `, RTP:${Number(t.totalRtp).toLocaleString('id-ID')}` : '';
-        lines.push(`  ${t.year}: Pembesaran=${pemb}Kg, Pembenihan=${pemben}Ekor${rtp}`);
+      for (const [year, v] of trendEntries) {
+        const pemb = Number(v.pembesaran || 0).toLocaleString('id-ID');
+        const pemben = Number(v.pembenihan || 0).toLocaleString('id-ID');
+        lines.push(`  ${year}: Pembesaran=${pemb}Kg, Pembenihan=${pemben}Ekor`);
       }
     }
   }

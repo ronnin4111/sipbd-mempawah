@@ -64,6 +64,7 @@ export function SmartNarrator() {
         activeFilters: {
           years: years.length > 0 ? years : 'Semua tahun',
           kecamatan: kecamatan.length > 0 ? kecamatan : 'Semua kecamatan',
+          desa: desa.length > 0 ? desa : 'Semua desa',
           fishType: fishType.length > 0 ? fishType : 'Semua jenis ikan',
           containerType: containerType.length > 0 ? containerType : 'Semua wadah',
           businessType: businessType.length > 0 ? businessType : 'Semua jenis usaha',

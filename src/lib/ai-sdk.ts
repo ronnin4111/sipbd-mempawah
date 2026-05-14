@@ -43,20 +43,20 @@ export interface UnifiedAIResult {
  * Logs DB errors for debugging (instead of silently ignoring).
  */
 async function getApiKey(envVarName: string, dbSettingKey: string): Promise<string | null> {
-  // 1. Check environment variable first
+  // 1. Check environment variable first (always fresh, no caching issues)
   const envKey = process.env[envVarName];
   if (envKey) {
     console.log(`[AI SDK] ${envVarName} found in env var`);
     return envKey;
   }
 
-  // 2. Check database setting
+  // 2. Check database setting (fresh query each call — no stale cache)
   try {
     const setting = await db.appSetting.findUnique({ where: { key: dbSettingKey } });
     if (setting?.value) {
       const parsed = JSON.parse(setting.value);
       if (typeof parsed === 'string' && parsed.trim()) {
-        console.log(`[AI SDK] ${envVarName} found in database (key=${dbSettingKey})`);
+        console.log(`[AI SDK] ${envVarName} found in database (key=${dbSettingKey}), updated=${setting.updatedAt?.toISOString()}`);
         return parsed.trim();
       }
       console.warn(`[AI SDK] ${envVarName} in database is empty or invalid (key=${dbSettingKey})`);
@@ -65,7 +65,9 @@ async function getApiKey(envVarName: string, dbSettingKey: string): Promise<stri
     }
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : 'Unknown DB error';
+    const errStack = err instanceof Error ? err.stack : '';
     console.error(`[AI SDK] DB error reading ${dbSettingKey}:`, errMsg);
+    console.error(`[AI SDK] Stack:`, errStack?.substring(0, 500));
   }
 
   return null;
