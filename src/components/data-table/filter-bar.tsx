@@ -20,14 +20,7 @@ import {
   CommandList,
 } from '@/components/ui/command';
 import { useFilterStore } from '@/store/filter-store';
-import {
-  KECAMATAN_LIST,
-  ALL_DESA,
-  FISH_TYPES,
-  CONTAINER_TYPES,
-  BUSINESS_TYPES,
-} from '@/lib/constants';
-import { useAvailableYears, useGroupNames, useFishFarms } from '@/hooks/use-fish-farms';
+import { useFilterOptions, useFishFarms } from '@/hooks/use-fish-farms';
 import { useMemo } from 'react';
 
 interface MultiSelectFilterProps {
@@ -105,30 +98,58 @@ export function FilterBar() {
     resetFilters,
   } = useFilterStore();
 
-  const { data: yearsData } = useAvailableYears();
+  // Fetch all filter options dynamically from the database
+  const { data: filterOptionsData } = useFilterOptions();
+
   const yearOptions = useMemo(() => {
-    if (yearsData?.years && yearsData.years.length > 0) {
-      return yearsData.years.map(String);
+    if (filterOptionsData?.years && filterOptionsData.years.length > 0) {
+      return filterOptionsData.years.map(String);
     }
     return ['2020', '2021', '2022', '2023', '2024'];
-  }, [yearsData]);
+  }, [filterOptionsData]);
 
-  const { data: groupNamesData } = useGroupNames();
-  const groupOptions = useMemo(() => {
-    if (groupNamesData?.groupNames && groupNamesData.groupNames.length > 0) {
-      return groupNamesData.groupNames;
+  const kecamatanOptions = useMemo(() => {
+    if (filterOptionsData?.kecamatan && filterOptionsData.kecamatan.length > 0) {
+      return filterOptionsData.kecamatan;
     }
     return [];
-  }, [groupNamesData]);
+  }, [filterOptionsData]);
 
-  const filteredDesaOptions = useMemo(() => {
-    if (kecamatan.length === 0) {
-      return ALL_DESA.map((d) => d.desa);
+  // Desa options are already filtered by the API based on selected kecamatan
+  const desaOptions = useMemo(() => {
+    if (filterOptionsData?.desa && filterOptionsData.desa.length > 0) {
+      return filterOptionsData.desa;
     }
-    return ALL_DESA
-      .filter((d) => kecamatan.includes(d.kecamatan))
-      .map((d) => d.desa);
-  }, [kecamatan]);
+    return [];
+  }, [filterOptionsData]);
+
+  const groupOptions = useMemo(() => {
+    if (filterOptionsData?.groupNames && filterOptionsData.groupNames.length > 0) {
+      return filterOptionsData.groupNames;
+    }
+    return [];
+  }, [filterOptionsData]);
+
+  const fishTypeOptions = useMemo(() => {
+    if (filterOptionsData?.fishTypes && filterOptionsData.fishTypes.length > 0) {
+      return filterOptionsData.fishTypes;
+    }
+    return [];
+  }, [filterOptionsData]);
+
+  const containerTypeOptions = useMemo(() => {
+    if (filterOptionsData?.containerTypes && filterOptionsData.containerTypes.length > 0) {
+      return filterOptionsData.containerTypes;
+    }
+    return [];
+  }, [filterOptionsData]);
+
+  const businessTypeOptions = useMemo(() => {
+    if (filterOptionsData?.businessTypes && filterOptionsData.businessTypes.length > 0) {
+      return filterOptionsData.businessTypes;
+    }
+    return [];
+  }, [filterOptionsData]);
 
   const toggleValue = (current: string[], setter: (v: string[]) => void, value: string) => {
     if (current.includes(value)) {
@@ -231,29 +252,20 @@ export function FilterBar() {
             />
             <MultiSelectFilter
               label="Kecamatan"
-              options={KECAMATAN_LIST}
+              options={kecamatanOptions}
               selected={kecamatan}
               onToggle={(v) => {
                 toggleValue(kecamatan, setKecamatan, v);
-                const newKecamatan = kecamatan.includes(v)
-                  ? kecamatan.filter((k) => k !== v)
-                  : [...kecamatan, v];
-                if (newKecamatan.length > 0) {
-                  const validDesa = ALL_DESA
-                    .filter((d) => newKecamatan.includes(d.kecamatan))
-                    .map((d) => d.desa);
-                  const filteredDesa = desa.filter((d) => validDesa.includes(d));
-                  if (filteredDesa.length !== desa.length) {
-                    setDesa(filteredDesa);
-                  }
-                }
+                // Clear desa selections when kecamatan changes to avoid stale selections.
+                // The API will return filtered desa options based on the new kecamatan.
+                setDesa([]);
               }}
               searchPlaceholder="Cari kecamatan..."
               emptyText="Kecamatan tidak ditemukan"
             />
             <MultiSelectFilter
               label="Desa"
-              options={filteredDesaOptions}
+              options={desaOptions}
               selected={desa}
               onToggle={(v) => toggleValue(desa, setDesa, v)}
               searchPlaceholder="Cari desa..."
@@ -269,7 +281,7 @@ export function FilterBar() {
             />
             <MultiSelectFilter
               label="Jenis Ikan"
-              options={FISH_TYPES}
+              options={fishTypeOptions}
               selected={fishType}
               onToggle={(v) => toggleValue(fishType, setFishType, v)}
               searchPlaceholder="Cari jenis ikan..."
@@ -277,7 +289,7 @@ export function FilterBar() {
             />
             <MultiSelectFilter
               label="Jenis Wadah"
-              options={CONTAINER_TYPES}
+              options={containerTypeOptions}
               selected={containerType}
               onToggle={(v) => toggleValue(containerType, setContainerType, v)}
               searchPlaceholder="Cari jenis wadah..."
@@ -285,7 +297,7 @@ export function FilterBar() {
             />
             <MultiSelectFilter
               label="Jenis Usaha"
-              options={BUSINESS_TYPES}
+              options={businessTypeOptions}
               selected={businessType}
               onToggle={(v) => toggleValue(businessType, setBusinessType, v)}
               searchPlaceholder="Cari jenis usaha..."

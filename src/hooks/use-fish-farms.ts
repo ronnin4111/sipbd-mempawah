@@ -198,6 +198,57 @@ export function useGroupNames() {
   });
 }
 
+export interface FilterOptionsResponse {
+  years: number[];
+  kecamatan: string[];
+  desa: string[];
+  groupNames: string[];
+  fishTypes: string[];
+  containerTypes: string[];
+  businessTypes: string[];
+}
+
+export function useFilterOptions() {
+  const years = useFilterStore((s) => s.years);
+  const kecamatan = useFilterStore((s) => s.kecamatan);
+  const desa = useFilterStore((s) => s.desa);
+  const groupName = useFilterStore((s) => s.groupName);
+  const fishType = useFilterStore((s) => s.fishType);
+  const containerType = useFilterStore((s) => s.containerType);
+  const businessType = useFilterStore((s) => s.businessType);
+
+  return useQuery<FilterOptionsResponse>({
+    queryKey: [
+      'fish-farms-filter-options',
+      years,
+      kecamatan,
+      desa,
+      groupName,
+      fishType,
+      containerType,
+      businessType,
+    ],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (years.length > 0) params.set('year', years.join(','));
+      if (kecamatan.length > 0) params.set('kecamatan', kecamatan.join(','));
+      if (desa.length > 0) params.set('desa', desa.join(','));
+      if (groupName.length > 0) params.set('groupName', groupName.join(','));
+      if (fishType.length > 0) params.set('fishType', fishType.join(','));
+      if (containerType.length > 0)
+        params.set('containerType', containerType.join(','));
+      if (businessType.length > 0)
+        params.set('businessType', businessType.join(','));
+      const res = await fetch(
+        `/api/fish-farms/filter-options?${params.toString()}`
+      );
+      if (!res.ok) throw new Error('Failed to fetch filter options');
+      return res.json();
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+}
+
 export function useAllFishFarms() {
   const years = useFilterStore((s) => s.years);
   const kecamatan = useFilterStore((s) => s.kecamatan);
