@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { DEFAULT_COMMODITY_PRICES, DEFAULT_PEMBENIHAN_PRICES, FISH_TYPES, CONTAINER_TYPES, IMPORT_PASSWORD } from '@/lib/constants';
+import { DEFAULT_COMMODITY_PRICES, DEFAULT_PEMBENIHAN_PRICES, FISH_TYPES, CONTAINER_TYPES } from '@/lib/constants';
+import { verifyPassword } from '@/lib/passwords';
 
 // GET /api/commodity-prices - Get all commodity prices in matrix format
 export async function GET() {
@@ -46,7 +47,8 @@ export async function PUT(request: NextRequest) {
     };
 
     // Verify password
-    if (password !== IMPORT_PASSWORD) {
+    const valid = await verifyPassword(password, 'admin');
+    if (!valid) {
       return NextResponse.json(
         { error: 'Password tidak valid' },
         { status: 401 }
@@ -109,7 +111,8 @@ export async function POST(request: NextRequest) {
     };
 
     // Verify password
-    if (password !== IMPORT_PASSWORD) {
+    const valid = await verifyPassword(password, 'admin');
+    if (!valid) {
       return NextResponse.json(
         { error: 'Password tidak valid' },
         { status: 401 }

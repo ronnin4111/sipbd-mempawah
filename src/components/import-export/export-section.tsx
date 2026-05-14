@@ -59,7 +59,7 @@ export function ExportSection() {
       const res = await fetch('/api/auth/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: exportPassword }),
+        body: JSON.stringify({ password: exportPassword, type: 'export' }),
       });
       const data = await res.json();
       if (data.valid) {
@@ -72,7 +72,7 @@ export function ExportSection() {
           resetExportPassword();
         }, 300);
       } else {
-        toast.error('Sandi salah');
+        toast.error('Sandi export salah. Gunakan sandi khusus export Excel (bukan sandi admin).');
       }
     } catch {
       toast.error('Gagal memverifikasi sandi');
@@ -237,14 +237,14 @@ export function ExportSection() {
               Verifikasi Sandi Export Excel
             </DialogTitle>
             <DialogDescription>
-              Masukkan sandi admin untuk melanjutkan export Excel.
+              Masukkan sandi export Excel untuk melanjutkan. (Sandi ini berbeda dari sandi admin)
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <form onSubmit={(e) => { e.preventDefault(); handleVerifyExportPassword(); }} className="flex gap-2">
               <Input
                 type="password"
-                placeholder="Masukkan sandi admin..."
+                placeholder="Masukkan sandi export Excel..."
                 value={exportPassword}
                 onChange={(e) => setExportPassword(e.target.value)}
                 disabled={exportVerified}

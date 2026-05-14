@@ -72,13 +72,23 @@ export function CommodityPricesTable() {
     setPassword('');
   };
 
-  const handlePasswordSubmit = () => {
-    if (password === 'diskan2026') {
-      setEditing(true);
-      setPasswordDialog(false);
-      toast.success('Mode edit diaktifkan');
-    } else {
-      toast.error('Password tidak valid');
+  const handlePasswordSubmit = async () => {
+    try {
+      const res = await fetch('/api/auth/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, type: 'admin' }),
+      });
+      const data = await res.json();
+      if (data.valid) {
+        setEditing(true);
+        setPasswordDialog(false);
+        toast.success('Mode edit diaktifkan');
+      } else {
+        toast.error('Password tidak valid');
+      }
+    } catch {
+      toast.error('Gagal memverifikasi password');
     }
   };
 
@@ -107,7 +117,7 @@ export function CommodityPricesTable() {
       const res = await fetch('/api/commodity-prices', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: 'diskan2026', data: updates }),
+        body: JSON.stringify({ password, data: updates }),
       });
 
       if (!res.ok) {

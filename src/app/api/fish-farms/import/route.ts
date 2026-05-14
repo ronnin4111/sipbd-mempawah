@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { IMPORT_PASSWORD } from '@/lib/constants';
+import { verifyPassword } from '@/lib/passwords';
 import { generateFarmerId } from '@/lib/farmer-id';
 
 interface ImportFishFarm {
@@ -92,7 +92,8 @@ export async function POST(request: NextRequest) {
     const { password, data, replaceAll } = body as { password: string; data: ImportFishFarm[]; replaceAll?: boolean };
 
     // Verify password
-    if (password !== IMPORT_PASSWORD) {
+    const valid = await verifyPassword(password, 'admin');
+    if (!valid) {
       return NextResponse.json(
         { error: 'Password tidak valid' },
         { status: 401 }

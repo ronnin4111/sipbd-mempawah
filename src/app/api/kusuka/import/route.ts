@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { IMPORT_PASSWORD } from '@/lib/constants';
+import { verifyPassword } from '@/lib/passwords';
 import * as XLSX from 'xlsx';
 
 // Column header → Prisma model field mapping
@@ -233,7 +233,8 @@ export async function POST(request: NextRequest) {
         data?: Record<string, unknown>[];
       };
 
-      if (password !== IMPORT_PASSWORD) {
+      const valid = await verifyPassword(password, 'admin');
+      if (!valid) {
         return NextResponse.json({ error: 'Password tidak valid' }, { status: 401 });
       }
 
@@ -317,7 +318,8 @@ export async function POST(request: NextRequest) {
     const file = formData.get('file') as File;
     const replaceAll = formData.get('replaceAll') === 'true';
 
-    if (password !== IMPORT_PASSWORD) {
+    const valid = await verifyPassword(password, 'admin');
+    if (!valid) {
       return NextResponse.json({ error: 'Password tidak valid' }, { status: 401 });
     }
 

@@ -18,6 +18,7 @@ import {
   Shield,
   ArrowLeft,
   Info,
+  KeyRound,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -48,8 +49,8 @@ import {
   KECAMATAN_DESA,
   FISH_TYPES,
   CONTAINER_TYPES,
-  IMPORT_PASSWORD,
 } from '@/lib/constants';
+import { PasswordSettings } from './password-settings';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -112,6 +113,7 @@ export function DisagregasiSection() {
   const [step, setStep] = useState(0); // 0 = password gate, 1 = input, 2 = distribution, 3 = save
   const [passwordInput, setPasswordInput] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [adminTab, setAdminTab] = useState<'disagregasi' | 'password'>('disagregasi');
 
   // Step 1 — Aggregate input
   const [form, setForm] = useState<AgregatForm>({
@@ -205,12 +207,22 @@ export function DisagregasiSection() {
 
   // ─── Password gate ──────────────────────────────────────────────────────
 
-  const handlePasswordSubmit = () => {
-    if (passwordInput === IMPORT_PASSWORD) {
-      setStep(1);
-      setPasswordError('');
-    } else {
-      setPasswordError('Password salah!');
+  const handlePasswordSubmit = async () => {
+    try {
+      const res = await fetch('/api/auth/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: passwordInput, type: 'admin' }),
+      });
+      const data = await res.json();
+      if (data.valid) {
+        setStep(1);
+        setPasswordError('');
+      } else {
+        setPasswordError('Password salah!');
+      }
+    } catch {
+      setPasswordError('Gagal memverifikasi password');
     }
   };
 
@@ -732,87 +744,134 @@ export function DisagregasiSection() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
       >
-        <div className="flex items-center gap-3 mb-1">
-          <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center"
-            style={{
-              background: 'linear-gradient(135deg, #06B6D4, #0891B2)',
-              boxShadow: '0 4px 12px rgba(6,182,212,0.3)',
-            }}
-          >
-            <Split className="h-5 w-5 text-white" />
-          </div>
-          <div>
-            <h2 className="text-base sm:text-lg font-bold">Disagregasi Data Agregat</h2>
-            <p className="text-xs text-muted-foreground">
-              Distribusikan data produksi agregat ke data individual pembudidaya
-            </p>
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center gap-3">
+            <div
+              className="w-9 h-9 rounded-xl flex items-center justify-center"
+              style={{
+                background: 'linear-gradient(135deg, #06B6D4, #0891B2)',
+                boxShadow: '0 4px 12px rgba(6,182,212,0.3)',
+              }}
+            >
+              <Split className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h2 className="text-base sm:text-lg font-bold">Area Admin</h2>
+              <p className="text-xs text-muted-foreground">
+                Disagregasi Data & Pengaturan Password
+              </p>
+            </div>
           </div>
         </div>
       </motion.div>
 
-      {/* Step indicators */}
-      <div className="flex items-center gap-1 sm:gap-2 py-1">
-        {steps.map((s, i) => (
-          <div key={s.num} className="flex items-center gap-1 sm:gap-2 flex-1">
-            <button
-              onClick={() => {
-                if (s.num < step) setStep(s.num);
-              }}
-              className="flex items-center gap-1.5 flex-1 group"
-              disabled={s.num >= step}
-            >
-              <div
-                className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 transition-all"
-                style={{
-                  background:
-                    step >= s.num
-                      ? 'linear-gradient(135deg, #06B6D4, #0891B2)'
-                      : 'rgba(255,255,255,0.06)',
-                  color: step >= s.num ? 'white' : 'var(--muted-foreground)',
-                  boxShadow: step === s.num ? '0 0 12px rgba(6,182,212,0.4)' : 'none',
-                }}
-              >
-                {step > s.num ? <CheckCircle2 className="h-4 w-4" /> : s.num}
-              </div>
-              <span
-                className="text-xs font-medium hidden sm:block truncate"
-                style={{
-                  color: step >= s.num ? '#06B6D4' : 'var(--muted-foreground)',
-                }}
-              >
-                {s.label}
-              </span>
-            </button>
-            {i < steps.length - 1 && (
-              <div
-                className="h-px flex-1 max-w-[40px]"
-                style={{
-                  background:
-                    step > s.num
-                      ? 'linear-gradient(90deg, #06B6D4, #0891B2)'
-                      : 'rgba(255,255,255,0.08)',
-                }}
-              />
-            )}
-          </div>
-        ))}
+      {/* Admin sub-tabs */}
+      <div
+        className="flex gap-1 p-1 rounded-lg"
+        style={{
+          background: 'rgba(6,182,212,0.06)',
+          border: '1px solid rgba(6,182,212,0.12)',
+        }}
+      >
+        <button
+          onClick={() => setAdminTab('disagregasi')}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all flex-1 justify-center"
+          style={{
+            background: adminTab === 'disagregasi'
+              ? 'linear-gradient(135deg, #06B6D4, #0891B2)'
+              : 'transparent',
+            color: adminTab === 'disagregasi' ? 'white' : 'var(--muted-foreground)',
+            boxShadow: adminTab === 'disagregasi' ? '0 2px 8px rgba(6,182,212,0.3)' : 'none',
+          }}
+        >
+          <Split className="h-3.5 w-3.5" />
+          Disagregasi
+        </button>
+        <button
+          onClick={() => setAdminTab('password')}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all flex-1 justify-center"
+          style={{
+            background: adminTab === 'password'
+              ? 'linear-gradient(135deg, #06B6D4, #0891B2)'
+              : 'transparent',
+            color: adminTab === 'password' ? 'white' : 'var(--muted-foreground)',
+            boxShadow: adminTab === 'password' ? '0 2px 8px rgba(6,182,212,0.3)' : 'none',
+          }}
+        >
+          <KeyRound className="h-3.5 w-3.5" />
+          Pengaturan Password
+        </button>
       </div>
 
-      {/* Step content */}
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={step}
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -20 }}
-          transition={{ duration: 0.2 }}
-        >
-          {step === 1 && renderStep1()}
-          {step === 2 && renderStep2()}
-          {step === 3 && renderStep3()}
-        </motion.div>
-      </AnimatePresence>
+      {/* Tab content */}
+      {adminTab === 'password' ? (
+        <PasswordSettings />
+      ) : (
+        <>
+          {/* Step indicators */}
+          <div className="flex items-center gap-1 sm:gap-2 py-1">
+            {steps.map((s, i) => (
+              <div key={s.num} className="flex items-center gap-1 sm:gap-2 flex-1">
+                <button
+                  onClick={() => {
+                    if (s.num < step) setStep(s.num);
+                  }}
+                  className="flex items-center gap-1.5 flex-1 group"
+                  disabled={s.num >= step}
+                >
+                  <div
+                    className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 transition-all"
+                    style={{
+                      background:
+                        step >= s.num
+                          ? 'linear-gradient(135deg, #06B6D4, #0891B2)'
+                          : 'rgba(255,255,255,0.06)',
+                      color: step >= s.num ? 'white' : 'var(--muted-foreground)',
+                      boxShadow: step === s.num ? '0 0 12px rgba(6,182,212,0.4)' : 'none',
+                    }}
+                  >
+                    {step > s.num ? <CheckCircle2 className="h-4 w-4" /> : s.num}
+                  </div>
+                  <span
+                    className="text-xs font-medium hidden sm:block truncate"
+                    style={{
+                      color: step >= s.num ? '#06B6D4' : 'var(--muted-foreground)',
+                    }}
+                  >
+                    {s.label}
+                  </span>
+                </button>
+                {i < steps.length - 1 && (
+                  <div
+                    className="h-px flex-1 max-w-[40px]"
+                    style={{
+                      background:
+                        step > s.num
+                          ? 'linear-gradient(90deg, #06B6D4, #0891B2)'
+                          : 'rgba(255,255,255,0.08)',
+                    }}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Step content */}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={step}
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.2 }}
+            >
+              {step === 1 && renderStep1()}
+              {step === 2 && renderStep2()}
+              {step === 3 && renderStep3()}
+            </motion.div>
+          </AnimatePresence>
+        </>
+      )}
     </div>
   );
 

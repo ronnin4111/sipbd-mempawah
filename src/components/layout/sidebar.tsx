@@ -22,7 +22,6 @@ import { useTheme } from 'next-themes';
 import { useMounted } from '@/hooks/use-mounted';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { IMPORT_PASSWORD } from '@/lib/constants';
 
 const menuItems = [
   { id: 'dashboard', label: 'Ringkasan Produksi', icon: LayoutDashboard, description: 'Ringkasan & statistik', adminOnly: false },
@@ -64,16 +63,26 @@ export function Sidebar({ open, onClose }: SidebarProps) {
     onClose();
   };
 
-  const handleAdminLogin = () => {
-    if (adminPassword === IMPORT_PASSWORD) {
-      setIsAdmin(true);
-      setShowLogin(false);
-      setAdminPassword('');
-      setLoginError('');
-      setActiveSection('disagregasi');
-      onClose();
-    } else {
-      setLoginError('Password salah!');
+  const handleAdminLogin = async () => {
+    try {
+      const res = await fetch('/api/auth/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: adminPassword, type: 'admin' }),
+      });
+      const data = await res.json();
+      if (data.valid) {
+        setIsAdmin(true);
+        setShowLogin(false);
+        setAdminPassword('');
+        setLoginError('');
+        setActiveSection('disagregasi');
+        onClose();
+      } else {
+        setLoginError('Password salah!');
+      }
+    } catch {
+      setLoginError('Gagal memverifikasi password');
     }
   };
 

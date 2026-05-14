@@ -200,7 +200,7 @@ export function DataTable({ page, pageSize, onPageChange, onPageSizeChange }: Da
       const res = await fetch('/api/auth/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: adminPassword }),
+        body: JSON.stringify({ password: adminPassword, type: 'admin' }),
       });
       const result = await res.json();
       if (result.valid) {
@@ -211,7 +211,7 @@ export function DataTable({ page, pageSize, onPageChange, onPageSizeChange }: Da
           // If purpose was to edit/add, the dialog will open after unlock
         }
       } else {
-        toast.error('Password salah');
+        toast.error('Password admin salah');
       }
     } catch {
       toast.error('Gagal memverifikasi password');

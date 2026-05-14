@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { verifyPassword } from '@/lib/passwords';
 
 // GET /api/settings?key=columnVisibility — get a setting
 export async function GET(request: NextRequest) {
@@ -18,7 +19,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// PUT /api/settings — save a setting (requires password)
+// PUT /api/settings — save a setting (requires admin password)
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
@@ -33,13 +34,8 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Password diperlukan' }, { status: 401 });
     }
 
-    const verifyRes = await fetch(new URL('/api/auth/verify', request.url), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password }),
-    });
-    const verifyResult = await verifyRes.json();
-    if (!verifyResult.valid) {
+    const valid = await verifyPassword(password, 'admin');
+    if (!valid) {
       return NextResponse.json({ error: 'Password salah' }, { status: 403 });
     }
 

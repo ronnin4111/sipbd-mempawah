@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { IMPORT_PASSWORD } from '@/lib/constants';
+import { verifyPassword } from '@/lib/passwords';
 
 export async function PUT(
   request: NextRequest,
@@ -15,7 +15,8 @@ export async function PUT(
     };
 
     // Verify password
-    if (password !== IMPORT_PASSWORD) {
+    const valid = await verifyPassword(password, 'admin');
+    if (!valid) {
       return NextResponse.json(
         { error: 'Password tidak valid' },
         { status: 401 }
@@ -79,7 +80,8 @@ export async function DELETE(
     const { password } = body as { password: string };
 
     // Verify password
-    if (password !== IMPORT_PASSWORD) {
+    const valid = await verifyPassword(password, 'admin');
+    if (!valid) {
       return NextResponse.json(
         { error: 'Password tidak valid' },
         { status: 401 }

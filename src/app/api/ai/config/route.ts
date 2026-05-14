@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { verifyPassword } from '@/lib/passwords';
 
 // Keys stored in AppSetting table
 const AI_KEY_SETTINGS = {
@@ -61,13 +62,8 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Password diperlukan' }, { status: 401 });
     }
 
-    const verifyRes = await fetch(new URL('/api/auth/verify', request.url), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password }),
-    });
-    const verifyResult = await verifyRes.json();
-    if (!verifyResult.valid) {
+    const valid = await verifyPassword(password, 'admin');
+    if (!valid) {
       return NextResponse.json({ error: 'Password salah' }, { status: 403 });
     }
 

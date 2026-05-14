@@ -127,3 +127,36 @@ Stage Summary:
 - Bug 1 fixed: Added strong VERIFIKASI WAJIB instruction block to BASE_SYSTEM_PROMPT with 5 verification rules requiring AI to search DATA CONTEXT for numbers, use exact values, and say "Data tidak tersedia" if not found
 - Bug 2 fixed: Three changes to ai-sdk.ts: (1) callZAI now retries ZAI.create() on failure with 1s delay, (2) 500ms delay between Gemini→Groq attempts, (3) rate-limit-aware retry with 3s delay for Gemini and Groq before final error
 - No new lint errors; all pre-existing issues untouched
+---
+Task ID: 9
+Agent: Main Agent
+Task: Add separate export Excel password and password management UI
+
+Work Log:
+- Added EXPORT_PASSWORD = "export2026" constant to src/lib/constants.ts
+- Created src/lib/passwords.ts helper module with:
+  - getPasswords(): reads passwords from DB (AppSetting keys: password_admin, password_export) with hardcoded fallback + 60s memory cache
+  - verifyPassword(password, type): verify against specific password type ('admin' | 'export')
+  - verifyAnyPassword(password): check against both types
+  - changePassword(currentAdminPwd, type, newPassword): change password in DB (requires admin auth)
+  - invalidatePasswordCache(): clear memory cache
+- Updated /api/auth/verify/route.ts to support `type` param ('admin' | 'export'), uses passwords.ts helper
+- Created /api/auth/change-password/route.ts for password changes
+- Updated export-section.tsx to use `type: 'export'` for export Excel password verification
+- Created password-settings.tsx component with UI for changing both admin and export passwords
+- Updated disagregasi-section.tsx:
+  - Added admin sub-tabs: "Disagregasi" and "Pengaturan Password"
+  - Changed header from "Disagregasi Data Agregat" to "Area Admin"
+  - Password gate now uses /api/auth/verify API instead of hardcoded IMPORT_PASSWORD
+- Updated all 9+ backend API routes to use verifyPassword() from passwords.ts instead of IMPORT_PASSWORD
+- Updated all frontend components to use API-based password verification with type parameter
+- Updated sidebar login, data-table, commodity-prices, import-dialog, kusuka-import-dialog
+- Updated settings route and AI config route to use verifyPassword() helper
+
+Stage Summary:
+- Two separate passwords: admin (diskan2026) and export (export2026)
+- Passwords stored in database, changeable from UI (Disagregasi > Pengaturan Password tab)
+- All password checks use DB-first with hardcoded fallback
+- Export Excel requires export password (not admin password)
+- Changing password requires current admin password for authorization
+- Build compiles successfully, API verified working

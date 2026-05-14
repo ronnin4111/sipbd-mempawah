@@ -151,7 +151,7 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
       const res = await fetch('/api/auth/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ password, type: 'admin' }),
       });
       const data = await res.json();
       if (data.valid) {
