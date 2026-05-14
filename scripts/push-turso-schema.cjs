@@ -1,8 +1,20 @@
 const { createClient } = require('@libsql/client');
 
+// Load environment variables from .env file
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env.local') });
+
+const TURSO_URL = process.env.TURSO_DATABASE_URL;
+const TURSO_TOKEN = process.env.TURSO_AUTH_TOKEN;
+
+if (!TURSO_URL || !TURSO_TOKEN) {
+  console.error('❌ Missing TURSO_DATABASE_URL or TURSO_AUTH_TOKEN environment variables');
+  console.error('   Create a .env.local file with these values');
+  process.exit(1);
+}
+
 const client = createClient({
-  url: 'libsql://sipbd-mempawah-ronnin4111.aws-ap-northeast-1.turso.io',
-  authToken: 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJleHAiOjE3ODA2NTI0MDIsImlhdCI6MTc3ODA2MDQwMiwiaWQiOiIwMTlkZmNhNy0wYTAxLTc2NTYtODhhZC0zMjBiNTVjM2ZmYjYiLCJyaWQiOiIyYWI1NjA2ZC1kMzJhLTQ0MmItYTU5MC0xNWQzYjljOTc1YmIifQ.zGrpac_GfYS-ZPaCaU4T-vG2LeKdci0CVGZ52JMoYWkJLJB0oC5ELPDksVbPAS8Ca07vcWu0tA9WXT2kp5cvCQ',
+  url: TURSO_URL,
+  authToken: TURSO_TOKEN,
 });
 
 async function main() {

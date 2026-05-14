@@ -252,7 +252,7 @@ export async function GET(request: NextRequest) {
  * Save disaggregated data as individual FishFarm records.
  *
  * Body:
- *   password      - "diskan2026"
+ *   password      - admin password (set via ADMIN_PASSWORD env var)
  *   year          - target year
  *   triwulan      - Q1/Q2/Q3/Q4
  *   kecamatan     - string[] or string (multi-select support)

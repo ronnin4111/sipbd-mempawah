@@ -1,10 +1,11 @@
 /**
  * ZAI API Proxy Mini-Service
  * Port: 3050
- * Forwards requests to internal ZAI API at 172.25.136.193:8080
+ * Forwards requests to internal ZAI API
+ * Set ZAI_API_BASE_URL environment variable (e.g. http://172.25.136.193:8080)
  */
 
-const ZAI_API_BASE = 'http://172.25.136.193:8080';
+const ZAI_API_BASE = process.env.ZAI_API_BASE_URL || 'http://localhost:8080';
 const PORT = 3050;
 
 Bun.serve({

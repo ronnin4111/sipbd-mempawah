@@ -1,6 +1,14 @@
 import { db } from '@/lib/db';
 import { IMPORT_PASSWORD, EXPORT_PASSWORD } from '@/lib/constants';
 
+// Warn if passwords are not set in environment variables
+if (!IMPORT_PASSWORD) {
+  console.warn('⚠️ ADMIN_PASSWORD environment variable is not set!');
+}
+if (!EXPORT_PASSWORD) {
+  console.warn('⚠️ EXPORT_PASSWORD environment variable is not set!');
+}
+
 // Cache passwords in memory for 60 seconds to avoid DB hit on every request
 let passwordCache: { admin: string; exportPwd: string; fetchedAt: number } | null = null;
 const CACHE_TTL = 60_000; // 60 seconds

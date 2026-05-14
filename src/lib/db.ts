@@ -5,10 +5,11 @@ const globalForPrisma = globalThis as unknown as {
 }
 
 // Turso database configuration
-// Environment variables take precedence, with embedded fallback for Vercel deployment
+// IMPORTANT: Credentials must be provided via environment variables.
+// Set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN in your .env file.
 const TURSO_CONFIG = {
-  url: process.env.TURSO_DATABASE_URL || 'libsql://sipbd-mempawah-ronnin4111.aws-ap-northeast-1.turso.io',
-  authToken: process.env.TURSO_AUTH_TOKEN || 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJleHAiOjE3ODA2NTI0MDIsImlhdCI6MTc3ODA2MDQwMiwiaWQiOiIwMTlkZmNhNy0wYTAxLTc2NTYtODhhZC0zMjBiNTVjM2ZmYjYiLCJyaWQiOiIyYWI1NjA2ZC1kMzJhLTQ0MmItYTU5MC0xNWQzYjljOTc1YmIifQ.zGrpac_GfYS-ZPaCaU4T-vG2LeKdci0CVGZ52JMoYWkJLJB0oC5ELPDksVbPAS8Ca07vcWu0tA9WXT2kp5cvCQ',
+  url: process.env.TURSO_DATABASE_URL || '',
+  authToken: process.env.TURSO_AUTH_TOKEN || '',
 }
 
 function createPrismaClient(): PrismaClient {

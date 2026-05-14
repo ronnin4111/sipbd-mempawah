@@ -20,7 +20,11 @@ import { HeroBanner } from '@/components/layout/hero-banner';
 import { CommodityPricesTable } from '@/components/commodity-prices/commodity-prices-table';
 import { ExternalIframe } from '@/components/external-iframe';
 import { Button } from '@/components/ui/button';
-import { Upload } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Upload, Lock, Shield, Loader2, LogOut, Brain, FileSpreadsheet, Split, CreditCard, LayoutDashboard } from 'lucide-react';
+import { useTheme } from 'next-themes';
+import { useMounted } from '@/hooks/use-mounted';
 import { SmartNarrator } from '@/components/ai/smart-narrator';
 
 // Dynamic import PdfDashboardCharts with ssr:false to avoid recharts SSR crash on Vercel
@@ -141,6 +145,200 @@ function KnowledgeBasePageSection() {
   );
 }
 
+function AdminLoginSection() {
+  const isAdmin = useFilterStore((s) => s.isAdmin);
+  const setIsAdmin = useFilterStore((s) => s.setIsAdmin);
+  const setActiveSection = useFilterStore((s) => s.setActiveSection);
+  const { theme } = useTheme();
+  const mounted = useMounted();
+  const isDark = mounted ? theme === 'dark' : true;
+
+  const [adminPassword, setAdminPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [loginLoading, setLoginLoading] = useState(false);
+
+  const handleAdminLogin = async () => {
+    if (!adminPassword.trim()) return;
+    setLoginLoading(true);
+    setLoginError('');
+    try {
+      const res = await fetch('/api/auth/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: adminPassword, type: 'admin' }),
+      });
+      const data = await res.json();
+      if (data.valid) {
+        setIsAdmin(true);
+        setAdminPassword('');
+        setLoginError('');
+      } else {
+        setLoginError('Password salah!');
+      }
+    } catch {
+      setLoginError('Gagal memverifikasi password');
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const handleAdminLogout = () => {
+    setIsAdmin(false);
+    setAdminPassword('');
+  };
+
+  if (isAdmin) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-3">
+          <div
+            className="w-12 h-12 rounded-xl flex items-center justify-center"
+            style={{ background: 'linear-gradient(135deg, #06B6D4, #0891B2)', boxShadow: '0 4px 20px rgba(6,182,212,0.4)' }}
+          >
+            <Shield className="h-6 w-6 text-white" />
+          </div>
+          <div>
+            <h2 className="font-bold text-lg" style={{ fontFamily: 'Syne, sans-serif' }}>Admin Aktif</h2>
+            <p className="text-xs text-muted-foreground">Anda sudah login sebagai admin</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {[
+            { id: 'knowledge-base', title: 'Basis Pengetahuan AI', desc: 'Upload & kelola dokumen', icon: Brain, gradient: 'linear-gradient(135deg, #06B6D4, #0891B2)' },
+            { id: 'import-export', title: 'Import / Export', desc: 'Import Excel atau export data', icon: FileSpreadsheet, gradient: 'linear-gradient(135deg, #10B981, #059669)' },
+            { id: 'disagregasi', title: 'Disagregasi Data', desc: 'Pecah data agregat per desa', icon: Split, gradient: 'linear-gradient(135deg, #F59E0B, #D97706)' },
+            { id: 'data-kusuka', title: 'Data KUSUKA', desc: 'Registrasi KUSUKA', icon: CreditCard, gradient: 'linear-gradient(135deg, #8B5CF6, #7C3AED)' },
+          ].map((feature) => {
+            const Icon = feature.icon;
+            return (
+              <Card
+                key={feature.id}
+                className={`group hover:border-cyan-500/30 transition-all cursor-pointer ${isDark ? 'bg-gradient-to-br from-[#0D1B2E] to-[#0A1628] border-cyan-500/10' : 'bg-white border-gray-200'}`}
+                onClick={() => setActiveSection(feature.id)}
+              >
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+                      style={{ background: feature.gradient }}
+                    >
+                      <Icon className="h-4.5 w-4.5 text-white" />
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="font-semibold text-sm">{feature.title}</h4>
+                      <p className="text-[10px] text-muted-foreground">{feature.desc}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+
+        <div className="flex gap-3">
+          <Button
+            onClick={() => setActiveSection('dashboard')}
+            variant="outline"
+            className="gap-2"
+          >
+            <LayoutDashboard className="h-4 w-4" />
+            Ke Dashboard
+          </Button>
+          <Button
+            onClick={handleAdminLogout}
+            variant="destructive"
+            className="gap-2"
+          >
+            <LogOut className="h-4 w-4" />
+            Logout Admin
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-center min-h-[60vh]">
+      <Card className={`w-full max-w-md ${isDark ? 'bg-gradient-to-br from-[#0D1B2E] to-[#0A1628] border-cyan-500/10' : 'bg-white border-gray-200'}`}>
+        <CardContent className="p-6 sm:p-8">
+          <div className="text-center mb-6">
+            <div
+              className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4"
+              style={{ background: 'linear-gradient(135deg, #06B6D4, #0891B2)', boxShadow: '0 8px 32px rgba(6,182,212,0.4)' }}
+            >
+              <Lock className="h-8 w-8 text-white" />
+            </div>
+            <h2 className="font-bold text-xl mb-1" style={{ fontFamily: 'Syne, sans-serif' }}>
+              Login Admin
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Masukkan password untuk mengakses fitur admin
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+                Password Admin
+              </label>
+              <Input
+                type="password"
+                placeholder="Masukkan password admin..."
+                value={adminPassword}
+                onChange={(e) => {
+                  setAdminPassword(e.target.value);
+                  setLoginError('');
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleAdminLogin();
+                }}
+                className="h-11"
+                autoFocus
+              />
+            </div>
+
+            {loginError && (
+              <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-2.5">
+                <p className="text-xs text-red-400 flex items-center gap-1.5">
+                  <span className="text-sm">⚠️</span>
+                  {loginError}
+                </p>
+              </div>
+            )}
+
+            <Button
+              onClick={handleAdminLogin}
+              disabled={loginLoading || !adminPassword.trim()}
+              className="w-full h-11 gap-2"
+              style={{ background: 'linear-gradient(135deg, #06B6D4, #0891B2)' }}
+            >
+              {loginLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Memverifikasi...
+                </>
+              ) : (
+                <>
+                  <Lock className="h-4 w-4" />
+                  Masuk sebagai Admin
+                </>
+              )}
+            </Button>
+          </div>
+
+          <div className="mt-5 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+            <p className="text-[10px] text-muted-foreground text-center leading-relaxed">
+              Fitur admin: Import/Export data, Basis Pengetahuan AI,<br />
+              Disagregasi Data, dan pengaturan sistem
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 function ImportExportSection() {
   const [importOpen, setImportOpen] = useState(false);
 
@@ -190,6 +388,8 @@ export default function Home() {
         return <KnowledgeBasePageSection />;
       case 'disagregasi':
         return <DisagregasiSection />;
+      case 'admin-login':
+        return <AdminLoginSection />;
       case 'import-export':
         return <ImportExportSection />;
       default:

@@ -230,10 +230,12 @@ export const DESA_COORDS: Record<string, { lat: number; lng: number }> = {
   "Mempawah Timur|Parit Banjar": { lat: 0.3049102, lng: 109.0205707 },
 };
 
-export const IMPORT_PASSWORD = "diskan2026";
+// Passwords are loaded from environment variables for security.
+// Set ADMIN_PASSWORD and EXPORT_PASSWORD in your .env file.
+export const IMPORT_PASSWORD = process.env.ADMIN_PASSWORD || '';
 
 // Separate password for Excel export (different from admin password)
-export const EXPORT_PASSWORD = "export2026";
+export const EXPORT_PASSWORD = process.env.EXPORT_PASSWORD || '';
 
 // Default commodity prices per fish type x container type (Pembesaran - Rp/Kg)
 // Pembenihan prices are flat per fish type (Rp/Ekor)

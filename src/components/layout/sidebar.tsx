@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import {
   LayoutDashboard,
   Database,
@@ -21,8 +20,6 @@ import {
 import { useFilterStore } from '@/store/filter-store';
 import { useTheme } from 'next-themes';
 import { useMounted } from '@/hooks/use-mounted';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 
 const menuItems = [
   { id: 'dashboard', label: 'Ringkasan Produksi', icon: LayoutDashboard, description: 'Ringkasan & statistik', adminOnly: false },
@@ -35,6 +32,7 @@ const menuItems = [
   { id: 'knowledge-base', label: 'Basis Pengetahuan', icon: Brain, description: 'Upload dokumen untuk AI', adminOnly: false },
   { id: 'disagregasi', label: 'Disagregasi Data', icon: Split, description: 'Distribusi data agregat', adminOnly: true },
   { id: 'import-export', label: 'Import / Export', icon: FileSpreadsheet, description: 'Kelola data Excel/PDF', adminOnly: false },
+  { id: 'admin-login', label: 'Login Admin', icon: Lock, description: 'Akses fitur khusus admin', adminOnly: false },
 ];
 
 interface SidebarProps {
@@ -51,46 +49,21 @@ export function Sidebar({ open, onClose }: SidebarProps) {
   const mounted = useMounted();
   const isDark = mounted ? theme === 'dark' : true;
 
-  const [adminPassword, setAdminPassword] = useState('');
-  const [showLogin, setShowLogin] = useState(false);
-  const [loginError, setLoginError] = useState('');
-
   const handleMenuClick = (section: string) => {
     const item = menuItems.find((m) => m.id === section);
     if (item?.adminOnly && !isAdmin) {
-      setShowLogin(true);
+      // Redirect to admin login section instead of showing inline form
+      setActiveSection('admin-login');
+      onClose();
       return;
     }
     setActiveSection(section);
     onClose();
   };
 
-  const handleAdminLogin = async () => {
-    try {
-      const res = await fetch('/api/auth/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: adminPassword, type: 'admin' }),
-      });
-      const data = await res.json();
-      if (data.valid) {
-        setIsAdmin(true);
-        setShowLogin(false);
-        setAdminPassword('');
-        setLoginError('');
-        setActiveSection('disagregasi');
-        onClose();
-      } else {
-        setLoginError('Password salah!');
-      }
-    } catch {
-      setLoginError('Gagal memverifikasi password');
-    }
-  };
-
   const handleAdminLogout = () => {
     setIsAdmin(false);
-    if (activeSection === 'disagregasi') {
+    if (activeSection === 'disagregasi' || activeSection === 'admin-login') {
       setActiveSection('dashboard');
     }
   };
@@ -153,7 +126,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           </p>
         </div>
 
-        {/* Admin login section */}
+        {/* Admin status section */}
         <div
           className="shrink-0 px-4 py-3"
           style={{ borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}` }}
@@ -183,53 +156,12 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                 Logout
               </button>
             </div>
-          ) : showLogin ? (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 mb-1">
-                <Lock className="h-3.5 w-3.5" style={{ color: '#06B6D4' }} />
-                <span className="text-xs font-medium">Login Admin</span>
-              </div>
-              <div className="flex gap-1.5">
-                <Input
-                  type="password"
-                  placeholder="Sandi admin..."
-                  value={adminPassword}
-                  onChange={(e) => {
-                    setAdminPassword(e.target.value);
-                    setLoginError('');
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleAdminLogin();
-                  }}
-                  className="h-7 text-xs flex-1"
-                  autoFocus
-                />
-                <Button
-                  onClick={handleAdminLogin}
-                  size="sm"
-                  className="h-7 text-xs px-2"
-                  style={{ background: 'linear-gradient(135deg, #06B6D4, #0891B2)' }}
-                >
-                  Masuk
-                </Button>
-              </div>
-              {loginError && (
-                <p className="text-[10px] text-red-400">{loginError}</p>
-              )}
-              <button
-                onClick={() => {
-                  setShowLogin(false);
-                  setAdminPassword('');
-                  setLoginError('');
-                }}
-                className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Batal
-              </button>
-            </div>
           ) : (
             <button
-              onClick={() => setShowLogin(true)}
+              onClick={() => {
+                setActiveSection('admin-login');
+                onClose();
+              }}
               className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground transition-colors"
               style={{
                 background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
