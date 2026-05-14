@@ -214,3 +214,35 @@ Stage Summary:
 - Password-protected upload/delete (admin password)
 - Keyword-based search with relevance scoring
 - AI integration: KB summary always in system prompt + targeted search results per question
+
+---
+Task ID: 11
+Agent: Main Agent
+Task: Fix Knowledge Base upload 404 error + Add Admin Panel to dashboard
+
+Work Log:
+- Diagnosed upload route returning 404 on Vercel production
+- Root cause 1: upload/route.ts was NOT tracked by git (never pushed to GitHub!)
+- Root cause 2: Even when pushed, Turbopack silently dropped the route because knowledge-base.ts imported document-parser.ts which imports xlsx/mammoth statically
+- Fix 1: Force-added upload/route.ts to git tracking
+- Fix 2: Made upload route fully self-contained with ALL imports dynamic (xlsx, mammoth, db, passwords, crypto)
+- Fix 3: Removed document-parser import from knowledge-base.ts to prevent import chain issues
+- Added serverExternalPackages: ["xlsx", "mammoth"] to next.config.ts
+- Created AdminPanel component on main dashboard with quick access cards for all admin features:
+  - Basis Pengetahuan AI
+  - Import/Export Data
+  - Disagregasi Data
+  - Data KUSUKA
+- Non-admin users see login prompt instead of feature cards
+- Deleted old KBWidget (replaced by more comprehensive AdminPanel)
+- Deployed to Vercel and verified:
+  - Upload GET health check returns 200
+  - TXT file upload works (200, success)
+  - Excel file upload works (200, success)
+  - List/Search/Delete all work
+- Set production alias to latest deployment
+
+Stage Summary:
+- KB upload 404 fixed — root cause was file not in git + import chain issue
+- Admin features now accessible from dashboard main page (not just sidebar)
+- All tested and working on production
