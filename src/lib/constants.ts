@@ -232,6 +232,9 @@ export const DESA_COORDS: Record<string, { lat: number; lng: number }> = {
 
 export const IMPORT_PASSWORD = "diskan2026";
 
+// Separate password for Excel export (different from admin password)
+export const EXPORT_PASSWORD = "export2026";
+
 // Default commodity prices per fish type x container type (Pembesaran - Rp/Kg)
 // Pembenihan prices are flat per fish type (Rp/Ekor)
 export const DEFAULT_COMMODITY_PRICES: Record<
