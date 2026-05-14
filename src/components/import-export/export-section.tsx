@@ -30,6 +30,7 @@ function buildFilterString() {
   if (state.years.length > 0) params.set('year', state.years.join(','));
   if (state.kecamatan.length > 0) params.set('kecamatan', state.kecamatan.join(','));
   if (state.desa.length > 0) params.set('desa', state.desa.join(','));
+  if (state.groupName.length > 0) params.set('groupName', state.groupName.join(','));
   if (state.fishType.length > 0) params.set('fishType', state.fishType.join(','));
   if (state.containerType.length > 0) params.set('containerType', state.containerType.join(','));
   if (state.businessType.length > 0) params.set('businessType', state.businessType.join(','));

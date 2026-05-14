@@ -7,6 +7,7 @@ function buildFilterParams(
   years: string[],
   kecamatan: string[],
   desa: string[],
+  groupName: string[],
   fishType: string[],
   containerType: string[],
   businessType: string[],
@@ -17,6 +18,7 @@ function buildFilterParams(
   if (years.length > 0) params.set('year', years.join(','));
   if (kecamatan.length > 0) params.set('kecamatan', kecamatan.join(','));
   if (desa.length > 0) params.set('desa', desa.join(','));
+  if (groupName.length > 0) params.set('groupName', groupName.join(','));
   if (fishType.length > 0) params.set('fishType', fishType.join(','));
   if (containerType.length > 0) params.set('containerType', containerType.join(','));
   if (businessType.length > 0) params.set('businessType', businessType.join(','));
@@ -118,15 +120,16 @@ export function useFishFarms(page: number = 1, pageSize: number = 20) {
   const years = useFilterStore((s) => s.years);
   const kecamatan = useFilterStore((s) => s.kecamatan);
   const desa = useFilterStore((s) => s.desa);
+  const groupName = useFilterStore((s) => s.groupName);
   const fishType = useFilterStore((s) => s.fishType);
   const containerType = useFilterStore((s) => s.containerType);
   const businessType = useFilterStore((s) => s.businessType);
   const search = useFilterStore((s) => s.search);
 
   return useQuery<FishFarmResponse>({
-    queryKey: ['fish-farms', page, pageSize, years, kecamatan, desa, fishType, containerType, businessType, search],
+    queryKey: ['fish-farms', page, pageSize, years, kecamatan, desa, groupName, fishType, containerType, businessType, search],
     queryFn: async () => {
-      const params = buildFilterParams(years, kecamatan, desa, fishType, containerType, businessType, search);
+      const params = buildFilterParams(years, kecamatan, desa, groupName, fishType, containerType, businessType, search);
       params.set('page', page.toString());
       params.set('pageSize', pageSize.toString());
       const res = await fetch(`/api/fish-farms?${params.toString()}`);
@@ -140,15 +143,16 @@ export function useFishFarmStats() {
   const years = useFilterStore((s) => s.years);
   const kecamatan = useFilterStore((s) => s.kecamatan);
   const desa = useFilterStore((s) => s.desa);
+  const groupName = useFilterStore((s) => s.groupName);
   const fishType = useFilterStore((s) => s.fishType);
   const containerType = useFilterStore((s) => s.containerType);
   const businessType = useFilterStore((s) => s.businessType);
   const search = useFilterStore((s) => s.search);
 
   return useQuery<StatsResponse>({
-    queryKey: ['fish-farms-stats', years, kecamatan, desa, fishType, containerType, businessType, search],
+    queryKey: ['fish-farms-stats', years, kecamatan, desa, groupName, fishType, containerType, businessType, search],
     queryFn: async () => {
-      const params = buildFilterParams(years, kecamatan, desa, fishType, containerType, businessType, search);
+      const params = buildFilterParams(years, kecamatan, desa, groupName, fishType, containerType, businessType, search);
       const res = await fetch(`/api/fish-farms/stats?${params.toString()}`);
       if (!res.ok) throw new Error('Failed to fetch stats');
       return res.json();
@@ -168,19 +172,46 @@ export function useAvailableYears() {
   });
 }
 
-export function useAllFishFarms() {
+export function useGroupNames() {
   const years = useFilterStore((s) => s.years);
   const kecamatan = useFilterStore((s) => s.kecamatan);
   const desa = useFilterStore((s) => s.desa);
   const fishType = useFilterStore((s) => s.fishType);
   const containerType = useFilterStore((s) => s.containerType);
   const businessType = useFilterStore((s) => s.businessType);
+
+  return useQuery<{ groupNames: string[] }>({
+    queryKey: ['fish-farms-group-names', years, kecamatan, desa, fishType, containerType, businessType],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (years.length > 0) params.set('year', years.join(','));
+      if (kecamatan.length > 0) params.set('kecamatan', kecamatan.join(','));
+      if (desa.length > 0) params.set('desa', desa.join(','));
+      if (fishType.length > 0) params.set('fishType', fishType.join(','));
+      if (containerType.length > 0) params.set('containerType', containerType.join(','));
+      if (businessType.length > 0) params.set('businessType', businessType.join(','));
+      const res = await fetch(`/api/fish-farms/group-names?${params.toString()}`);
+      if (!res.ok) throw new Error('Failed to fetch group names');
+      return res.json();
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+}
+
+export function useAllFishFarms() {
+  const years = useFilterStore((s) => s.years);
+  const kecamatan = useFilterStore((s) => s.kecamatan);
+  const desa = useFilterStore((s) => s.desa);
+  const groupName = useFilterStore((s) => s.groupName);
+  const fishType = useFilterStore((s) => s.fishType);
+  const containerType = useFilterStore((s) => s.containerType);
+  const businessType = useFilterStore((s) => s.businessType);
   const search = useFilterStore((s) => s.search);
 
   return useQuery<FishFarmResponse>({
-    queryKey: ['fish-farms-all', years, kecamatan, desa, fishType, containerType, businessType, search],
+    queryKey: ['fish-farms-all', years, kecamatan, desa, groupName, fishType, containerType, businessType, search],
     queryFn: async () => {
-      const params = buildFilterParams(years, kecamatan, desa, fishType, containerType, businessType, search);
+      const params = buildFilterParams(years, kecamatan, desa, groupName, fishType, containerType, businessType, search);
       params.set('pageSize', '1000');
       const res = await fetch(`/api/fish-farms?${params.toString()}`);
       if (!res.ok) throw new Error('Failed to fetch fish farms');

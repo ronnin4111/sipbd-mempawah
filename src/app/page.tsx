@@ -44,6 +44,7 @@ function DataProduksiSection() {
   const years = useFilterStore((s) => s.years);
   const kecamatan = useFilterStore((s) => s.kecamatan);
   const desa = useFilterStore((s) => s.desa);
+  const groupName = useFilterStore((s) => s.groupName);
   const fishType = useFilterStore((s) => s.fishType);
   const containerType = useFilterStore((s) => s.containerType);
   const businessType = useFilterStore((s) => s.businessType);
@@ -51,8 +52,8 @@ function DataProduksiSection() {
 
   // Compute a filter key to detect changes — used for derived page reset
   const filterKey = useMemo(() =>
-    `${years.join(',')}|${kecamatan.join(',')}|${desa.join(',')}|${fishType.join(',')}|${containerType.join(',')}|${businessType.join(',')}|${search}`,
-    [years, kecamatan, desa, fishType, containerType, businessType, search]
+    `${years.join(',')}|${kecamatan.join(',')}|${desa.join(',')}|${groupName.join(',')}|${fishType.join(',')}|${containerType.join(',')}|${businessType.join(',')}|${search}`,
+    [years, kecamatan, desa, groupName, fishType, containerType, businessType, search]
   );
 
   // Derive page from filterKey to reset on filter change

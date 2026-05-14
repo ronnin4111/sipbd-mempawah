@@ -27,7 +27,7 @@ import {
   CONTAINER_TYPES,
   BUSINESS_TYPES,
 } from '@/lib/constants';
-import { useAvailableYears, useFishFarms } from '@/hooks/use-fish-farms';
+import { useAvailableYears, useGroupNames, useFishFarms } from '@/hooks/use-fish-farms';
 import { useMemo } from 'react';
 
 interface MultiSelectFilterProps {
@@ -100,8 +100,8 @@ function MultiSelectFilter({
 export function FilterBar() {
   const [isOpen, setIsOpen] = useState(false);
   const {
-    years, kecamatan, desa, fishType, containerType, businessType, search,
-    setYears, setKecamatan, setDesa, setFishType, setContainerType, setBusinessType, setSearch,
+    years, kecamatan, desa, groupName, fishType, containerType, businessType, search,
+    setYears, setKecamatan, setDesa, setGroupName, setFishType, setContainerType, setBusinessType, setSearch,
     resetFilters,
   } = useFilterStore();
 
@@ -112,6 +112,14 @@ export function FilterBar() {
     }
     return ['2020', '2021', '2022', '2023', '2024'];
   }, [yearsData]);
+
+  const { data: groupNamesData } = useGroupNames();
+  const groupOptions = useMemo(() => {
+    if (groupNamesData?.groupNames && groupNamesData.groupNames.length > 0) {
+      return groupNamesData.groupNames;
+    }
+    return [];
+  }, [groupNamesData]);
 
   const filteredDesaOptions = useMemo(() => {
     if (kecamatan.length === 0) {
@@ -131,13 +139,13 @@ export function FilterBar() {
   };
 
   const hasActiveFilters = years.length > 0 || kecamatan.length > 0 || desa.length > 0 ||
-    fishType.length > 0 || containerType.length > 0 || businessType.length > 0 || search.length > 0;
+    groupName.length > 0 || fishType.length > 0 || containerType.length > 0 || businessType.length > 0 || search.length > 0;
 
   // Fetch total count for display
   const { data: countData } = useFishFarms(1, 1);
   const totalResults = countData?.total ?? 0;
 
-  const filterCount = years.length + kecamatan.length + desa.length + fishType.length + containerType.length + businessType.length + (search.length > 0 ? 1 : 0);
+  const filterCount = years.length + kecamatan.length + desa.length + groupName.length + fishType.length + containerType.length + businessType.length + (search.length > 0 ? 1 : 0);
 
   return (
     <div className="glass-card overflow-hidden">
@@ -212,7 +220,7 @@ export function FilterBar() {
           </div>
 
           {/* Filter Dropdowns Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
             <MultiSelectFilter
               label="Tahun"
               options={yearOptions}
@@ -250,6 +258,14 @@ export function FilterBar() {
               onToggle={(v) => toggleValue(desa, setDesa, v)}
               searchPlaceholder="Cari desa..."
               emptyText="Desa tidak ditemukan"
+            />
+            <MultiSelectFilter
+              label="Kelompok"
+              options={groupOptions}
+              selected={groupName}
+              onToggle={(v) => toggleValue(groupName, setGroupName, v)}
+              searchPlaceholder="Cari kelompok..."
+              emptyText="Kelompok tidak ditemukan"
             />
             <MultiSelectFilter
               label="Jenis Ikan"
@@ -300,6 +316,14 @@ export function FilterBar() {
                 <Badge key={d} variant="secondary" className="text-[10px] h-5 gap-1 pr-1">
                   Desa: {d}
                   <button onClick={() => setDesa(desa.filter((v) => v !== d))}>
+                    <X className="h-2.5 w-2.5" />
+                  </button>
+                </Badge>
+              ))}
+              {groupName.map((g) => (
+                <Badge key={g} variant="secondary" className="text-[10px] h-5 gap-1 pr-1">
+                  Kelompok: {g}
+                  <button onClick={() => setGroupName(groupName.filter((v) => v !== g))}>
                     <X className="h-2.5 w-2.5" />
                   </button>
                 </Badge>

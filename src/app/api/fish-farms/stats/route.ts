@@ -60,6 +60,12 @@ function buildWhere(searchParams: URLSearchParams) {
     if (list.length > 0) where.businessType = { in: list };
   }
 
+  const groupNameParam = searchParams.get('groupName');
+  if (groupNameParam) {
+    const list = groupNameParam.split(',').filter(Boolean);
+    if (list.length > 0) where.groupName = { in: list };
+  }
+
   const searchParam = searchParams.get('search');
   if (searchParam) {
     where.OR = [

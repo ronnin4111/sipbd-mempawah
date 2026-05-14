@@ -22,6 +22,7 @@ export async function GET(request: NextRequest) {
     const fishTypeParam = searchParams.get('fishType');
     const containerTypeParam = searchParams.get('containerType');
     const businessTypeParam = searchParams.get('businessType');
+    const groupNameParam = searchParams.get('groupName');
     const searchParam = searchParams.get('search');
     const pageParam = searchParams.get('page');
     const pageSizeParam = searchParams.get('pageSize');
@@ -68,6 +69,13 @@ export async function GET(request: NextRequest) {
       const businessTypeList = businessTypeParam.split(',').filter(Boolean);
       if (businessTypeList.length > 0) {
         where.businessType = { in: businessTypeList };
+      }
+    }
+
+    if (groupNameParam) {
+      const groupNameList = groupNameParam.split(',').filter(Boolean);
+      if (groupNameList.length > 0) {
+        where.groupName = { in: groupNameList };
       }
     }
 
