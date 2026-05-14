@@ -1,10 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Menu, Moon, Sun, Lock } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Menu, Moon, Sun, Lock, Shield, LogOut, ChevronDown } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useFilterStore } from '@/store/filter-store';
 import { useMounted } from '@/hooks/use-mounted';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -28,6 +30,15 @@ export function Header({ onMenuClick }: HeaderProps) {
   const activeSection = useFilterStore((s) => s.activeSection);
   const setActiveSection = useFilterStore((s) => s.setActiveSection);
   const isAdmin = useFilterStore((s) => s.isAdmin);
+  const setIsAdmin = useFilterStore((s) => s.setIsAdmin);
+
+  // Admin login state
+  const [showAdminMenu, setShowAdminMenu] = useState(false);
+  const [showLoginForm, setShowLoginForm] = useState(false);
+  const [adminPassword, setAdminPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [loginLoading, setLoginLoading] = useState(false);
+  const loginRef = useRef<HTMLDivElement>(null);
 
   const isDark = mounted ? theme === 'dark' : true;
 
@@ -37,13 +48,62 @@ export function Header({ onMenuClick }: HeaderProps) {
     return () => window.removeEventListener('scroll', handler);
   }, []);
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (loginRef.current && !loginRef.current.contains(e.target as Node)) {
+        setShowAdminMenu(false);
+        setShowLoginForm(false);
+        setLoginError('');
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
   const handleTabClick = (tab: typeof NAV_TABS[number]) => {
     if (tab.adminOnly && !isAdmin) {
-      // Open sidebar for login
-      onMenuClick();
+      // Show login form in header instead of opening sidebar
+      setShowLoginForm(true);
+      setShowAdminMenu(true);
       return;
     }
     setActiveSection(tab.id);
+  };
+
+  const handleAdminLogin = async () => {
+    if (!adminPassword.trim()) return;
+    setLoginLoading(true);
+    setLoginError('');
+    try {
+      const res = await fetch('/api/auth/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: adminPassword, type: 'admin' }),
+      });
+      const data = await res.json();
+      if (data.valid) {
+        setIsAdmin(true);
+        setAdminPassword('');
+        setShowLoginForm(false);
+        setShowAdminMenu(false);
+        setLoginError('');
+      } else {
+        setLoginError('Password salah!');
+      }
+    } catch {
+      setLoginError('Gagal memverifikasi password');
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const handleAdminLogout = () => {
+    setIsAdmin(false);
+    setShowAdminMenu(false);
+    if (activeSection === 'disagregasi') {
+      setActiveSection('dashboard');
+    }
   };
 
   return (
@@ -113,21 +173,159 @@ export function Header({ onMenuClick }: HeaderProps) {
             </h1>
           </div>
 
-          {/* Dark/Light toggle */}
-          <button
-            onClick={() => setTheme(isDark ? 'light' : 'dark')}
-            className="w-10 h-10 flex items-center justify-center rounded-xl transition-all"
-            title={isDark ? 'Mode Terang' : 'Mode Gelap'}
-            style={{
-              background: isDark ? 'rgba(234,179,8,0.12)' : 'rgba(6,182,212,0.12)',
-              border: `1px solid ${isDark ? 'rgba(234,179,8,0.25)' : 'rgba(6,182,212,0.25)'}`,
-            }}
-          >
-            {isDark
-              ? <Sun size={16} style={{ color: '#EAB308' }} />
-              : <Moon size={16} style={{ color: '#0891B2' }} />
-            }
-          </button>
+          {/* Right controls: Admin + Theme toggle */}
+          <div className="flex items-center gap-2">
+            {/* Admin Login/Status Button */}
+            <div className="relative" ref={loginRef}>
+              <button
+                onClick={() => {
+                  if (isAdmin) {
+                    setShowAdminMenu(!showAdminMenu);
+                  } else {
+                    setShowLoginForm(!showLoginForm);
+                    setShowAdminMenu(!showAdminMenu);
+                  }
+                }}
+                className="flex items-center gap-1.5 h-9 px-3 rounded-xl transition-all text-xs font-medium"
+                style={
+                  isAdmin
+                    ? {
+                        background: 'linear-gradient(135deg, #06B6D4, #0891B2)',
+                        color: 'white',
+                        boxShadow: '0 2px 12px rgba(6,182,212,0.35)',
+                      }
+                    : {
+                        background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(6,182,212,0.08)',
+                        border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(6,182,212,0.2)'}`,
+                        color: 'var(--muted-foreground)',
+                      }
+                }
+              >
+                {isAdmin ? (
+                  <>
+                    <Shield className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Admin</span>
+                    <ChevronDown className="h-3 w-3 opacity-60" />
+                  </>
+                ) : (
+                  <>
+                    <Lock className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Login Admin</span>
+                  </>
+                )}
+              </button>
+
+              {/* Dropdown */}
+              {showAdminMenu && (
+                <div
+                  className="absolute right-0 top-full mt-2 w-64 rounded-xl overflow-hidden z-50"
+                  style={{
+                    background: isDark ? '#0D1B2E' : '#FFFFFF',
+                    border: `1px solid ${isDark ? 'rgba(6,182,212,0.2)' : 'rgba(6,182,212,0.15)'}`,
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+                  }}
+                >
+                  {isAdmin ? (
+                    /* Admin logged in - show status & logout */
+                    <div className="p-3 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="w-8 h-8 rounded-lg flex items-center justify-center"
+                          style={{
+                            background: 'linear-gradient(135deg, #06B6D4, #0891B2)',
+                            boxShadow: '0 2px 8px rgba(6,182,212,0.3)',
+                          }}
+                        >
+                          <Shield className="h-4 w-4 text-white" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold" style={{ color: '#06B6D4' }}>Admin Aktif</p>
+                          <p className="text-[10px] text-muted-foreground">Akses penuh ke semua fitur</p>
+                        </div>
+                      </div>
+                      <div
+                        className="h-px"
+                        style={{ background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }}
+                      />
+                      <button
+                        onClick={handleAdminLogout}
+                        className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg text-xs text-red-400 hover:bg-red-500/10 transition-colors"
+                      >
+                        <LogOut className="h-3.5 w-3.5" />
+                        Logout Admin
+                      </button>
+                    </div>
+                  ) : (
+                    /* Login form */
+                    <div className="p-3 space-y-2">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Lock className="h-3.5 w-3.5" style={{ color: '#06B6D4' }} />
+                        <span className="text-xs font-semibold">Login Admin</span>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">
+                        Masukkan password untuk mengakses fitur admin
+                      </p>
+                      <div className="flex gap-1.5">
+                        <Input
+                          type="password"
+                          placeholder="Password admin..."
+                          value={adminPassword}
+                          onChange={(e) => {
+                            setAdminPassword(e.target.value);
+                            setLoginError('');
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleAdminLogin();
+                          }}
+                          className="h-8 text-xs flex-1"
+                          autoFocus
+                        />
+                        <Button
+                          onClick={handleAdminLogin}
+                          size="sm"
+                          disabled={loginLoading || !adminPassword.trim()}
+                          className="h-8 text-xs px-3"
+                          style={{ background: 'linear-gradient(135deg, #06B6D4, #0891B2)' }}
+                        >
+                          {loginLoading ? '...' : 'Masuk'}
+                        </Button>
+                      </div>
+                      {loginError && (
+                        <p className="text-[10px] text-red-400">{loginError}</p>
+                      )}
+                      <button
+                        onClick={() => {
+                          setShowAdminMenu(false);
+                          setShowLoginForm(false);
+                          setAdminPassword('');
+                          setLoginError('');
+                        }}
+                        className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        Batal
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Dark/Light toggle */}
+            <button
+              onClick={() => setTheme(isDark ? 'light' : 'dark')}
+              className="w-10 h-10 flex items-center justify-center rounded-xl transition-all"
+              title={isDark ? 'Mode Terang' : 'Mode Gelap'}
+              style={{
+                background: isDark ? 'rgba(234,179,8,0.12)' : 'rgba(6,182,212,0.12)',
+                border: `1px solid ${isDark ? 'rgba(234,179,8,0.25)' : 'rgba(6,182,212,0.25)'}`,
+              }}
+            >
+              {isDark
+                ? <Sun size={16} style={{ color: '#EAB308' }} />
+                : <Moon size={16} style={{ color: '#0891B2' }} />
+              }
+            </button>
+          </div>
         </div>
       </div>
 
