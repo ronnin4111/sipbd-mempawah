@@ -1825,26 +1825,47 @@ export async function POST(request: NextRequest) {
 - Data dari Basis Pengetahuan adalah sumber UTAMA untuk pertanyaan tentang pegawai, dokumen internal, atau data yang diupload.
 - JANGAN mengarang informasi jika data ada di BASIS PENGETAHUAN — baca dengan teliti.
 - Jika menemukan nama orang di BASIS PENGETAHUAN, sebutkan detailnya (jabatan, unit, dll) sesuai data yang ada.
-- PRIORITAS: BASIS PENGETAHUAN > DATA CONTEXT > DATA KUSUKA untuk pertanyaan tentang pegawai/dokumen internal.
+- PRIORITAS SUMBER DATA:
+  * Untuk pertanyaan tentang PEGAWAI/DOKUMEN INTERNAL: BASIS PENGETAHUAN > DATA CONTEXT > DATA KUSUKA
+  * Untuk pertanyaan tentang DATA KUSUKA perorangan (detail nama, alamat, no kartu): BASIS PENGETAHUAN > DATA KUSUKA > DATA CONTEXT
+  * Untuk pertanyaan tentang ANGKA/JUMLAH KUSUKA (berapa, total, per desa/kecamatan): DATA KUSUKA > BASIS PENGETAHUAN > DATA CONTEXT
+  * Jika BASIS PENGETAHUAN dan DATA KUSUKA memberikan angka yang BERBEDA untuk jumlah/penghitungan, GUNAKAN angka dari DATA KUSUKA (karena itu diambil langsung dari database terbaru)
+  * Jika BASIS PENGETAHUAN memiliki detail yang TIDAK ada di DATA KUSUKA (nama spesifik, detail alamat), gunakan data dari BASIS PENGETAHUAN
 \n`;
     }
 
     // Search Knowledge Base for relevant content
-    // Use MORE results (8) and also search with extracted entity names
+    // Use MORE results for KUSUKA questions (KB may have raw KUSUKA data)
+    const isKusukaQuestion = /kusuka|kartu\s+usaha|registrasi/i.test(message);
+    const kbMaxResults = isKusukaQuestion ? 12 : 8;
+    const kbMaxPerDoc = isKusukaQuestion ? 5 : 3;
     let kbSearchResults: string[] = [];
     try {
       // Primary search with the full message
-      kbSearchResults = await searchKnowledgeBase(message, 8);
+      kbSearchResults = await searchKnowledgeBase(message, kbMaxResults, kbMaxPerDoc);
 
       // If we have search terms (like person names), also do a targeted search
       if (searchTerms.length > 0) {
         const entitySearchQuery = searchTerms.join(' ');
-        const entityResults = await searchKnowledgeBase(entitySearchQuery, 5);
+        const entityResults = await searchKnowledgeBase(entitySearchQuery, isKusukaQuestion ? 8 : 5, kbMaxPerDoc);
         // Merge results (avoid duplicates)
         const existingContents = new Set(kbSearchResults.map(r => r.substring(0, 100)));
         for (const result of entityResults) {
           if (!existingContents.has(result.substring(0, 100))) {
             kbSearchResults.push(result);
+          }
+        }
+      }
+
+      // For KUSUKA questions, also search specifically with extracted desa/nama terms
+      if (isKusukaQuestion && searchTerms.length > 0) {
+        for (const term of searchTerms) {
+          const termResults = await searchKnowledgeBase(`kusuka ${term}`, 5, 5);
+          const existingContents = new Set(kbSearchResults.map(r => r.substring(0, 100)));
+          for (const result of termResults) {
+            if (!existingContents.has(result.substring(0, 100))) {
+              kbSearchResults.push(result);
+            }
           }
         }
       }
