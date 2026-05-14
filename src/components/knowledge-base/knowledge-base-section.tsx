@@ -172,6 +172,19 @@ export function KnowledgeBaseSection() {
         body: formData,
       });
 
+      // Handle non-JSON responses (e.g., Vercel HTML error pages)
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        if (res.status === 413) {
+          setUploadError('File terlalu besar (maks 4.5MB). Kompres file Anda lalu coba lagi.');
+        } else if (res.status === 504) {
+          setUploadError('Server timeout. Coba lagi dengan file yang lebih kecil.');
+        } else {
+          setUploadError(`Server error (${res.status}). Coba lagi beberapa saat.`);
+        }
+        return;
+      }
+
       const data = await res.json();
       if (data.success) {
         setUploadOpen(false);
@@ -183,7 +196,11 @@ export function KnowledgeBaseSection() {
         setUploadError(data.error || 'Gagal mengupload');
       }
     } catch (err: any) {
-      setUploadError(err.message || 'Gagal mengupload');
+      if (err.message?.includes('is not valid JSON')) {
+        setUploadError('Server error. Kemungkinan database belum siap. Tunggu beberapa saat lalu coba lagi.');
+      } else {
+        setUploadError(err.message || 'Gagal mengupload');
+      }
     } finally {
       setUploading(false);
     }
