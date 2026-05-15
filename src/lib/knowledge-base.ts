@@ -340,6 +340,66 @@ export async function getKnowledgeBaseStats() {
 }
 
 /**
+ * Count total matching chunks for a query (without document diversity limit).
+ * Used to provide accurate total counts to the AI, even when search results
+ * are truncated. This prevents the AI from undercounting (e.g., saying 20
+ * when the real total is 28).
+ *
+ * Returns the count of chunks that have a non-zero relevance score.
+ */
+export async function countMatchingChunks(query: string): Promise<number> {
+  const queryKeywords = extractQueryKeywords(query);
+
+  if (queryKeywords.length === 0) return 0;
+
+  const chunks = await db.knowledgeChunk.findMany({
+    where: {
+      document: { isActive: true },
+    },
+    select: {
+      content: true,
+      keywords: true,
+    },
+  });
+
+  if (chunks.length === 0) return 0;
+
+  let matchCount = 0;
+  const multiWordEntities = extractMultiWordEntities(query);
+
+  for (const chunk of chunks) {
+    const chunkKeywords = chunk.keywords
+      ? chunk.keywords.toLowerCase().split(",").filter(Boolean)
+      : [];
+    const contentLower = chunk.content.toLowerCase();
+
+    let score = 0;
+
+    for (const kw of queryKeywords) {
+      if (chunkKeywords.some((ck) => ck.trim() === kw || ck.trim().includes(kw))) {
+        score += 15;
+      }
+      if (contentLower.includes(kw)) {
+        score += 5;
+      }
+    }
+
+    for (const entity of multiWordEntities) {
+      if (contentLower.includes(entity)) {
+        score += 20;
+      }
+      if (chunkKeywords.some((ck) => ck.includes(entity))) {
+        score += 25;
+      }
+    }
+
+    if (score > 0) matchCount++;
+  }
+
+  return matchCount;
+}
+
+/**
  * Invalidate the KB context cache
  */
 export function invalidateKbCache() {

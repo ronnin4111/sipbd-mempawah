@@ -139,6 +139,7 @@ export async function groqChatCompletion(
   // Track the first error from each model for better diagnostics
   const firstErrorsByModel = new Map<string, string>();
   let isNetworkError = false; // If true, skip remaining models (same endpoint)
+  let sawTooLargeError = false; // If true, include context-size hint in final error
 
   for (const modelId of modelsToTry) {
     // If we detected a network error, skip remaining models — they use the same endpoint
@@ -209,6 +210,16 @@ export async function groqChatCompletion(
           break;
         }
 
+        // Request too large for this model — try next model with larger context
+        const isTooLarge = message.includes('413') || message.includes('Request too large') || message.includes('too many tokens') || message.includes('request_too_large');
+        if (isTooLarge) {
+          sawTooLargeError = true;
+          const estimatedChars = options.messages.reduce((sum, m) => sum + m.content.length, 0);
+          const estimatedTokens = Math.round(estimatedChars / 4); // rough estimate: ~4 chars per token
+          console.warn(`[Groq] Model ${modelId}: Request too large (estimated ~${estimatedTokens} tokens / ${estimatedChars} chars), trying next model with larger context...`);
+          break; // Skip to next model (don't retry same model with same prompt)
+        }
+
         // If auth error, no point retrying
         if (isAuthError) {
           return {
@@ -277,10 +288,11 @@ export async function groqChatCompletion(
   }
 
   const errSummary = [...firstErrorsByModel.entries()].map(([m, e]) => `${m}: ${e.substring(0, 80)}`).join('; ');
+  const tooLargeHint = sawTooLargeError ? ' Prompt terlalu panjang untuk semua model — coba persingkat percakapan Anda.' : '';
   return {
     success: false,
     content: '',
-    error: `Gagal setelah mencoba semua model Groq (${modelsToTry.join(', ')}). Detail: ${errSummary}`,
+    error: `Gagal setelah mencoba semua model Groq (${modelsToTry.join(', ')}).${tooLargeHint} Detail: ${errSummary}`,
   };
 }
 

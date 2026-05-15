@@ -107,10 +107,43 @@ async function callZAI(options: UnifiedAIOptions): Promise<UnifiedAIResult> {
     try {
       zai = await ZAI.create();
     } catch (createError) {
-      // If create() fails (e.g., stale config), try once more after a brief delay
-      console.warn('[AI SDK] z-ai create() failed, retrying...', createError);
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      zai = await ZAI.create();
+      // If create() fails (config not found), try reading config manually
+      const errMsg = createError instanceof Error ? createError.message : 'Unknown';
+      console.warn('[AI SDK] z-ai create() failed:', errMsg.substring(0, 200));
+
+      if (errMsg.includes('Configuration file not found') || errMsg.includes('config')) {
+        try {
+          const fs = await import('fs/promises');
+          const path = await import('path');
+          const os = await import('os');
+
+          const configPaths = [
+            path.join(process.cwd(), '.z-ai-config'),
+            path.join(os.homedir(), '.z-ai-config'),
+            '/etc/.z-ai-config',
+          ];
+
+          for (const configPath of configPaths) {
+            try {
+              const configStr = await fs.readFile(configPath, 'utf-8');
+              const config = JSON.parse(configStr);
+              if (config.baseUrl && config.apiKey) {
+                console.log('[AI SDK] z-ai config loaded manually from:', configPath);
+                zai = new ZAI(config);
+                break;
+              }
+            } catch {
+              // Continue to next path
+            }
+          }
+        } catch (fsError) {
+          console.warn('[AI SDK] z-ai manual config read failed:', fsError);
+        }
+      }
+
+      if (!zai) {
+        throw createError;
+      }
     }
 
     // z-ai uses 'assistant' role for system prompts

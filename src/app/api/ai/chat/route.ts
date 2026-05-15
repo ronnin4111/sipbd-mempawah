@@ -3,7 +3,7 @@ import { callAI } from '@/lib/ai-sdk';
 import { retrieveMemories, storeMemories, extractMemoriesFromConversation, formatMemoriesForPrompt, clearMemories } from '@/lib/ai-memory';
 import { db } from '@/lib/db';
 import { generateFarmerId } from '@/lib/farmer-id';
-import { searchKnowledgeBase, getKnowledgeBaseContext } from "@/lib/knowledge-base";
+import { searchKnowledgeBase, getKnowledgeBaseContext, countMatchingChunks } from "@/lib/knowledge-base";
 
 /**
  * Compact system prompt for SIPBD AI assistant.
@@ -116,12 +116,20 @@ function classifyQuestion(message: string): 'specific' | 'personnel' | 'stats' |
     /eselon/i, /nip/i,
     // Person-name patterns: "siapa hasto", "apa jabatan X", "nama Arifin"
     /siapa\s+[A-Z]/i, /jabatan\s+[A-Z]/i,
+    // Personnel listing patterns: "siapa saja pegawai", "daftar pegawai"
+    /siapa\s+saja\s+(pegawai|karyawan|staf|dinas)/i,
+    /daftar\s+(pegawai|karyawan|staf|dinas)/i,
+    /sebutkan\s+(pegawai|karyawan|staf|dinas)/i,
+    /tampilkan\s+(pegawai|karyawan|staf|dinas)/i,
   ];
   // Also check for person names (capitalized multi-word entities)
   const hasPersonName = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b/.test(message);
   // Check if question is about org structure even without person name
   const isOrgQuestion = /kepala\s+(dinas|bidang|seksi|sub|dpa)|struktur\s+organisasi/i.test(lower);
-  if (personnelPatterns.some(p => p.test(lower)) || isOrgQuestion ||
+  // Check if question mentions personnel-related words with listing intent
+  const isPersonnelListing = /pegawai|karyawan|staf|dinas|jabatan|golongan|pangkat/i.test(lower) &&
+    /siapa\s+saja|daftar|sebutkan|tampilkan|semua|seluruh|nama.*nama/i.test(lower);
+  if (personnelPatterns.some(p => p.test(lower)) || isOrgQuestion || isPersonnelListing ||
       (hasPersonName && /jabatan|pegawai|staf|golongan|pangkat|dinas|bidang/i.test(lower))) {
     return 'personnel';
   }
@@ -132,6 +140,8 @@ function classifyQuestion(message: string): 'specific' | 'personnel' | 'stats' |
     /siapa\s+saja/i, /daftar\s+anggota/i, /nama\s+kelompok/i,
     /semua\s+kelompok/i, /seluruh\s+kelompok/i,
     /tampilkan\s+semua/i, /tampilkan\s+seluruh/i, /daftar\s+kelompok/i,
+    // NOTE: /siapa\s+saja/ is here as a fallback — it's checked AFTER
+    // the personnel patterns, so "siapa saja pegawai" will match personnel first
     /kelompok\s+(pembenih|pembenihan|pembesaran)/i,
     // NOTE: Removed standalone /pembenih|pembenihan|pembesaran/i — too broad.
     // It matched ANY mention of pembesaran, even in counting questions like
@@ -1741,8 +1751,37 @@ export async function POST(request: NextRequest) {
     }
 
     // Classify question type for smart context
-    const questionType = classifyQuestion(message);
+    // Also consider conversation context for follow-up questions
+    let questionType = classifyQuestion(message);
     const searchTerms = extractSearchTerms(message);
+
+    // ============================================================
+    // FOLLOW-UP QUESTION DETECTION
+    // If the current question is short/ambiguous (like "siapa saja"),
+    // check conversation history to determine if it's a follow-up
+    // to a personnel question.
+    // ============================================================
+    if (questionType === 'specific' || questionType === 'general') {
+      const recentUserMessages = (messages as Array<{ role: string; content: string }>)
+        ?.filter(m => m.role === 'user')
+        ?.slice(-3) || [];
+      const recentAssistantMessages = (messages as Array<{ role: string; content: string }>)
+        ?.filter(m => m.role === 'assistant')
+        ?.slice(-3) || [];
+      const allRecent = [...recentUserMessages, ...recentAssistantMessages]
+        .map(m => m.content?.toLowerCase() || '')
+        .join(' ');
+
+      // If recent conversation mentions pegawai/organisasi and current question is
+      // a listing/follow-up, upgrade to personnel type
+      const isFollowUpToListing = /siapa\s+saja|sebutkan|daftar|tampilkan|nama.*nama/i.test(message);
+      const recentMentionsPersonnel = /pegawai|karyawan|staf|jabatan|dinas|golongan|pangkat|eselon|bidang|kepala/i.test(allRecent);
+
+      if (isFollowUpToListing && recentMentionsPersonnel && questionType !== 'personnel') {
+        console.log(`[AI Chat] Upgrading question type from '${questionType}' to 'personnel' (follow-up detected)`);
+        questionType = 'personnel';
+      }
+    }
 
     // ============================================================
     // QUESTION CONTEXT AWARENESS: Parse the user's question to
@@ -1774,7 +1813,10 @@ export async function POST(request: NextRequest) {
     // ============================================================
     // Build system prompt — SMART context loading based on question type
     // ============================================================
-    const MAX_PROMPT_CHARS = 25000; // ~6,000 tokens — safe for Groq API limits
+    // Dynamic prompt size limit based on question type
+    // Personnel questions should be smaller to ensure reliable AI responses
+    // (Groq small models like llama-3.1-8b-instant have ~8K context limit)
+    const MAX_PROMPT_CHARS = effectiveQuestionType === 'personnel' ? 18000 : 25000; // ~4.5K / ~6K tokens
     const TRUNCATION_NOTE = '\n\n[Data dipangkas karena terlalu panjang. Untuk detail lengkap, tanya secara spesifik.]';
 
     // Base prompt + memory (always included)
@@ -1879,17 +1921,29 @@ export async function POST(request: NextRequest) {
     // Use MORE results for personnel/KUSUKA questions (KB may have raw data)
     const isKusukaQuestion = /kusuka|kartu\s+usaha|registrasi/i.test(message);
     const isPersonnelQuestion = effectiveQuestionType === 'personnel';
-    const kbMaxResults = isPersonnelQuestion ? 15 : isKusukaQuestion ? 12 : 8;
-    const kbMaxPerDoc = isPersonnelQuestion ? 8 : isKusukaQuestion ? 5 : 3;
+    // For personnel questions, use higher limits to capture all employee data
+    const kbMaxResults = isPersonnelQuestion ? 20 : isKusukaQuestion ? 12 : 8;
+    const kbMaxPerDoc = isPersonnelQuestion ? 15 : isKusukaQuestion ? 5 : 3;
     let kbSearchResults: string[] = [];
+    let totalKbMatchingChunks = 0; // Track total matching chunks (before document diversity limit)
     try {
       // Primary search with the full message
       kbSearchResults = await searchKnowledgeBase(message, kbMaxResults, kbMaxPerDoc);
 
+      // For personnel questions, also count total matching chunks for accurate count
+      // This prevents the AI from undercounting when results are truncated
+      if (isPersonnelQuestion) {
+        try {
+          totalKbMatchingChunks = await countMatchingChunks(message);
+        } catch {
+          // Ignore count errors — not critical
+        }
+      }
+
       // If we have search terms (like person names), also do a targeted search
       if (searchTerms.length > 0) {
         const entitySearchQuery = searchTerms.join(' ');
-        const entityResults = await searchKnowledgeBase(entitySearchQuery, isPersonnelQuestion ? 10 : isKusukaQuestion ? 8 : 5, kbMaxPerDoc);
+        const entityResults = await searchKnowledgeBase(entitySearchQuery, isPersonnelQuestion ? 15 : isKusukaQuestion ? 8 : 5, kbMaxPerDoc);
         // Merge results (avoid duplicates)
         const existingContents = new Set(kbSearchResults.map(r => r.substring(0, 100)));
         for (const result of entityResults) {
@@ -1930,8 +1984,33 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // For personnel questions, also do a broad search for ALL pegawai-related data
+      // This ensures we get complete employee listings even if the user's specific
+      // query terms don't match all chunks
+      if (isPersonnelQuestion) {
+        const broadSearchTerms = ['pegawai dinas', 'data pegawai', 'struktur organisasi', 'daftar pegawai'];
+        for (const term of broadSearchTerms) {
+          const broadResults = await searchKnowledgeBase(term, 10, 15);
+          const existingContents = new Set(kbSearchResults.map(r => r.substring(0, 100)));
+          for (const result of broadResults) {
+            if (!existingContents.has(result.substring(0, 100))) {
+              kbSearchResults.push(result);
+            }
+          }
+        }
+      }
+
       if (kbSearchResults.length > 0) {
-        const kbContent = `\n\n=== DATA RELEVAN DARI BASIS PENGETAHUAN (${kbSearchResults.length} hasil) ===\n⚠️ INSTRUKSI: Gunakan data di bawah ini sebagai sumber UTAMA jika relevan dengan pertanyaan. Baca dengan teliti, jangan lewatkan detail.\n\n${kbSearchResults.join("\n\n---\n\n")}\n=== AKHIR DATA BASIS PENGETAHUAN ===\n`;
+        // Build the KB content with total count metadata for personnel questions
+        // This is CRITICAL for accurate counting — if we have 28 employees but
+        // only 20 fit in the prompt, the AI needs to know the total is 28
+        let kbHeader: string;
+        if (isPersonnelQuestion && totalKbMatchingChunks > kbSearchResults.length) {
+          kbHeader = `\n\n=== DATA RELEVAN DARI BASIS PENGETAHUAN (${kbSearchResults.length} hasil ditampilkan dari total ${totalKbMatchingChunks} data yang cocok) ===\n⚠️ INSTRUKSI PENTING:\n- Gunakan data di bawah ini sebagai sumber UTAMA.\n- TOTAL data yang cocok: ${totalKbMatchingChunks}. Jika ditanya jumlah total, gunakan angka ${totalKbMatchingChunks} BUKAN jumlah entri di bawah.\n- Baca dengan teliti, jangan lewatkan detail.\n\n`;
+        } else {
+          kbHeader = `\n\n=== DATA RELEVAN DARI BASIS PENGETAHUAN (${kbSearchResults.length} hasil) ===\n⚠️ INSTRUKSI: Gunakan data di bawah ini sebagai sumber UTAMA jika relevan dengan pertanyaan. Baca dengan teliti, jangan lewatkan detail.\n\n`;
+        }
+        const kbContent = `${kbHeader}${kbSearchResults.join("\n\n---\n\n")}\n=== AKHIR DATA BASIS PENGETAHUAN ===\n`;
         systemPrompt += kbContent;
       }
     } catch (e) {
@@ -2015,16 +2094,53 @@ export async function POST(request: NextRequest) {
       if (isPersonnelQuestion) {
         // For personnel questions, KB content is MORE important than fishery data
         // Find and trim the DATA CONTEXT section (fishery data), keep KB content
-        const dataCtxMatch = systemPrompt.match(/=== DATA CONTEXT \(WAJIB[\s\S]*?=== DATA RELEVAN DARI BASIS PENGETAHUAN/);
-        if (dataCtxMatch) {
+        const dataCtxIdx = systemPrompt.indexOf('=== DATA CONTEXT (WAJIB');
+        const kbIdx = systemPrompt.indexOf('=== DATA RELEVAN DARI BASIS PENGETAHUAN');
+        if (dataCtxIdx > 0 && kbIdx > dataCtxIdx) {
           // Replace the fishery data context with a compact note
-          const beforeDataContext = systemPrompt.substring(0, systemPrompt.indexOf('=== DATA CONTEXT (WAJIB'));
-          const afterDataContext = systemPrompt.substring(systemPrompt.indexOf('=== DATA RELEVAN DARI BASIS PENGETAHUAN'));
+          const beforeDataContext = systemPrompt.substring(0, dataCtxIdx);
+          const afterDataContext = systemPrompt.substring(kbIdx);
           systemPrompt = beforeDataContext + '\n=== DATA CONTEXT (Ringkasan) ===\nData perikanan dipangkas untuk fokus pada data pegawai.\n\n' + afterDataContext;
+        } else if (dataCtxIdx > 0 && kbIdx < 0) {
+          // No KB data section found, just try compact DATA CONTEXT
+          const compactIdx = systemPrompt.indexOf('=== DATA CONTEXT (Ringkasan');
+          if (compactIdx > 0) {
+            // Already compact, just trim from end
+          }
         }
       }
 
-      // If still too long, truncate from the end (KB content is at the end for non-personnel)
+      // For personnel questions with too many KB results, smart truncation:
+      // Keep the total count header and first N results, add truncation note
+      if (isPersonnelQuestion && systemPrompt.length > MAX_PROMPT_CHARS) {
+        const kbStartIdx = systemPrompt.indexOf('=== DATA RELEVAN DARI BASIS PENGETAHUAN');
+        const kbEndIdx = systemPrompt.indexOf('=== AKHIR DATA BASIS PENGETAHUAN ===');
+        if (kbStartIdx > 0 && kbEndIdx > kbStartIdx) {
+          const beforeKb = systemPrompt.substring(0, kbStartIdx);
+          const kbContent = systemPrompt.substring(kbStartIdx, kbEndIdx);
+          const afterKb = systemPrompt.substring(kbEndIdx + '=== AKHIR DATA BASIS PENGETAHUAN ==='.length);
+
+          // Calculate how much space we have for KB content
+          const kbBudget = MAX_PROMPT_CHARS - beforeKb.length - afterKb.length - 200; // 200 for notes
+          if (kbBudget > 500 && kbContent.length > kbBudget) {
+            // Find the last "---" separator before the budget limit
+            const truncatedKb = kbContent.substring(0, kbBudget);
+            const lastSeparator = truncatedKb.lastIndexOf('\n---\n');
+            const safeKbContent = lastSeparator > 300
+              ? truncatedKb.substring(0, lastSeparator)
+              : truncatedKb;
+
+            // Count how many result entries we kept
+            const entryCount = (safeKbContent.match(/\[Sumber:/g) || []).length;
+            const truncationNote = `\n\n⚠️ Data dipangkas: menampilkan ${entryCount} dari total data. Tanya secara spesifik untuk detail tertentu.`;
+
+            systemPrompt = beforeKb + safeKbContent + truncationNote + afterKb;
+            wasTruncated = true;
+          }
+        }
+      }
+
+      // Final fallback: truncate from the end
       if (systemPrompt.length > MAX_PROMPT_CHARS) {
         systemPrompt = systemPrompt.substring(0, MAX_PROMPT_CHARS - TRUNCATION_NOTE.length) + TRUNCATION_NOTE;
         wasTruncated = true;
@@ -2041,7 +2157,7 @@ export async function POST(request: NextRequest) {
     const memoryCount = memories.length;
     const targetedChars = targetedResults.length;
     const kusukaTargetedChars = kusukaTargetedResults.length;
-    console.log(`AI Chat: questionType=${effectiveQuestionType}, promptChars=${promptChars}, estTokens=${estimatedTokens}, searchTerms=${searchTerms.join(',')}, totalGroups=${totalGroups}, memories=${memoryCount}, targetedChars=${targetedChars}, kusukaTargetedChars=${kusukaTargetedChars}, truncated=${wasTruncated}, resolvedYears=${resolvedFilters.years.join(',')}, resolvedKec=${resolvedFilters.kecamatan.join(',')}, questionCtxYears=${questionCtx.years.join(',')}`);
+    console.log(`AI Chat: questionType=${effectiveQuestionType}, promptChars=${promptChars}, estTokens=${estimatedTokens}, searchTerms=${searchTerms.join(',')}, totalGroups=${totalGroups}, memories=${memoryCount}, targetedChars=${targetedChars}, kusukaTargetedChars=${kusukaTargetedChars}, truncated=${wasTruncated}, resolvedYears=${resolvedFilters.years.join(',')}, resolvedKec=${resolvedFilters.kecamatan.join(',')}, questionCtxYears=${questionCtx.years.join(',')}, kbResults=${kbSearchResults.length}, totalKbMatches=${totalKbMatchingChunks}`);
 
     // Build conversation messages
     const chatMessages = [
