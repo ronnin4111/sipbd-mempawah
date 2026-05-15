@@ -223,10 +223,14 @@ async function callZAI(options: UnifiedAIOptions): Promise<UnifiedAIResult> {
         console.log('[AI SDK] Z.AI initialized via SDK auto-discovery');
       } catch (sdkError) {
         const errMsg = sdkError instanceof Error ? sdkError.message : 'Unknown';
+        let hint = '';
+        if (errMsg.includes('Configuration file not found') || errMsg.includes('config')) {
+          hint = ' Set ZAI_BASE_URL=https://api.z.ai/api/v1 and ZAI_API_KEY in env vars. (NOT chat.z.ai/api/v1 — that is the web frontend!)';
+        }
         return {
           success: false,
           content: '',
-          error: `Z.AI config not found: ${errMsg.substring(0, 200)}. Set ZAI_BASE_URL and ZAI_API_KEY env vars for Vercel deployment.`,
+          error: `Z.AI config not found: ${errMsg.substring(0, 200)}.${hint}`,
           provider: 'z-ai',
         };
       }
@@ -253,10 +257,19 @@ async function callZAI(options: UnifiedAIOptions): Promise<UnifiedAIResult> {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.warn('[AI SDK] z-ai error:', message);
+    // Provide helpful error for common issues
+    let helpfulError = message;
+    if (message.includes('status 404')) {
+      helpfulError = `Z.AI API URL tidak valid (404 Not Found). Pastikan ZAI_BASE_URL menggunakan https://api.z.ai/api/v1 BUKAN https://chat.z.ai/api/v1. Detail: ${message}`;
+    } else if (message.includes('Authentication Failed') || message.includes('1000')) {
+      helpfulError = `Z.AI API key tidak valid. Dapatkan API key dari https://chat.z.ai → Settings. Detail: ${message}`;
+    } else if (message.includes('token expired')) {
+      helpfulError = `Z.AI token sudah expired. Perbarui ZAI_TOKEN di environment variables. Detail: ${message}`;
+    }
     return {
       success: false,
       content: '',
-      error: message,
+      error: helpfulError,
       provider: 'z-ai',
     };
   }

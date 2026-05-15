@@ -9,15 +9,16 @@ export async function GET() {
   return NextResponse.json({
     status: anyReady ? 'configured' : 'no-provider',
     service: 'SIPBD AI Chat',
-    version: '4.0',
+    version: '4.1',
     providers: {
       primary: {
-        name: 'Z.AI (chat.z.ai)',
+        name: 'Z.AI (api.z.ai)',
         available: status.zai.available,
         model: status.zai.available ? status.zai.model : 'not available',
         priority: 1,
-        note: 'Always available in sandbox/dev — no API key needed!',
+        note: status.zai.available ? 'Available' : 'Set ZAI_BASE_URL=https://api.z.ai/api/v1 + ZAI_API_KEY in env vars (NOT chat.z.ai/api/v1!)',
         getUrl: 'https://chat.z.ai',
+        apiBaseUrl: 'https://api.z.ai/api/v1',
       },
       fallback1: {
         name: 'Google Gemini',
@@ -37,21 +38,19 @@ export async function GET() {
       },
     },
     fallbackChain: [
-      status.zai.available ? `1. Z.AI (${status.zai.model}) ✅` : '1. Z.AI (not available)',
+      status.zai.available ? `1. Z.AI (${status.zai.model}) ✅` : '1. Z.AI (not configured — needs env vars)',
       status.gemini.configured ? `2. Google Gemini (${status.gemini.model})` : '2. Google Gemini (not configured)',
       status.groq.configured ? `3. Groq (${status.groq.model})` : '3. Groq (not configured)',
     ],
-    optimizations: [
-      'Smart context: only sends relevant data based on question type',
-      'Compact format: group/farmer data in one-line summaries',
-      'Token budget: ~4000-6000 tokens max per request',
-      'Retry logic: retries with exponential backoff on rate limits',
-      'Multi-model fallback: tries alternative models within each provider',
-      'Multi-provider fallback: auto-switches Z.AI → Gemini → Groq',
-      'Z.AI as primary: no API key needed, works out of the box',
-    ],
+    vercelSetup: {
+      step1: 'Go to Vercel Dashboard → Project → Settings → Environment Variables',
+      step2: 'Add ZAI_BASE_URL = https://api.z.ai/api/v1 (NOT chat.z.ai/api/v1!)',
+      step3: 'Add ZAI_API_KEY = (get from https://chat.z.ai → Settings → API Keys)',
+      step4: 'Redeploy the project',
+      alternative: 'Or configure Gemini/Groq API key for free tier fallback',
+    },
     help: !anyReady
-      ? 'Untuk Vercel: set ZAI_BASE_URL dan ZAI_API_KEY di Environment Variables. Untuk sandbox: Z.AI otomatis tersedia. Atau konfigurasi API key Gemini/Groq via Settings di chat AI.'
+      ? 'Untuk Vercel: set ZAI_BASE_URL=https://api.z.ai/api/v1 dan ZAI_API_KEY di Environment Variables. JANGAN gunakan chat.z.ai/api/v1! Atau gunakan Gemini/Groq free tier sebagai fallback.'
       : undefined,
   });
 }
