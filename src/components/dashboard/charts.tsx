@@ -700,7 +700,7 @@ function ProduksiKecamatanChart() {
         </div>
 
         {/* Data Summary Table — readable in PDF export */}
-        {(viewBy === 'jenis-ikan' || viewBy === 'wadah') && series.length > 0 && (
+        {(viewBy !== 'produksi' && viewBy !== 'jenis-usaha') && series.length > 0 && (
           <div className="mt-4 overflow-x-auto">
             <table className="w-full text-[10px] sm:text-[11px] border-collapse">
               <thead>
