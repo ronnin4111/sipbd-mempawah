@@ -128,13 +128,21 @@ function ChartCard({ title, children, index }: { title: string; children: React.
 
 // === BAR LABEL RENDERERS ===
 
+// Format value for chart labels — shows readable numbers like "132K" or "1.2M"
+const formatChartValue = (value: number): string => {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 100_000) return `${(value / 1_000).toFixed(0)}K`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
+  return value.toFixed(0);
+};
+
 const renderBarLabel = (props: Record<string, unknown>) => {
   const x = props.x as number;
   const y = props.y as number;
   const width = props.width as number;
   const value = props.value as number;
   if (!value || value === 0) return <g />;
-  const formatted = value >= 1000 ? `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}k` : value.toFixed(0);
+  const formatted = formatChartValue(value);
   return (
     <text x={x + width / 2} y={y - 4} fill="#E2EDF5" textAnchor="middle" fontSize={9} fontWeight={600} opacity={0.9}>
       {formatted}
@@ -148,7 +156,7 @@ const renderBarLabelPdf = (props: Record<string, unknown>) => {
   const width = props.width as number;
   const value = props.value as number;
   if (!value || value === 0) return <g />;
-  const formatted = value >= 1000 ? `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}k` : value.toFixed(0);
+  const formatted = formatChartValue(value);
   return (
     <text x={x + width / 2} y={y - 4} fill="#1A2332" textAnchor="middle" fontSize={9} fontWeight={600} opacity={0.9}>
       {formatted}
@@ -156,34 +164,60 @@ const renderBarLabelPdf = (props: Record<string, unknown>) => {
   );
 };
 
-// Label renderer for horizontal stacked bar segments (dark theme)
+// Label renderer for horizontal stacked bar segments — shows "Name: Value" when wide enough
 const renderHorizontalBarLabel = (props: Record<string, unknown>) => {
   const x = props.x as number;
   const y = props.y as number;
   const width = props.width as number;
   const height = props.height as number;
   const value = props.value as number;
-  if (!value || value === 0 || width < 25) return <g />;
-  const formatted = value >= 1000 ? `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}k` : value.toFixed(0);
+  const name = (props.name as string) || '';
+  // Remove unit suffix like " (Kg)" from name for cleaner label
+  const cleanName = name.replace(/ \(Kg\)$/, '').replace(/ \(Ekor\)$/, '');
+  if (!value || value === 0 || width < 20) return <g />;
+  const formatted = formatChartValue(value);
+  // Show name + value when segment is wide enough, just value when narrow
+  const showName = width >= 60;
+  const label = showName ? `${cleanName}: ${formatted}` : formatted;
   return (
-    <text x={x + width / 2} y={y + height / 2 + 4} fill="#fff" textAnchor="middle" fontSize={9} fontWeight={600} opacity={0.9}>
-      {formatted}
+    <text
+      x={x + width / 2}
+      y={y + height / 2 + 4}
+      fill="#fff"
+      textAnchor="middle"
+      fontSize={showName ? 8.5 : 8}
+      fontWeight={600}
+      opacity={0.95}
+    >
+      {label}
     </text>
   );
 };
 
-// Label renderer for horizontal stacked bar segments (PDF/light theme)
+// Label renderer for horizontal stacked bar segments (PDF/light theme) — same logic
 const renderHorizontalBarLabelPdf = (props: Record<string, unknown>) => {
   const x = props.x as number;
   const y = props.y as number;
   const width = props.width as number;
   const height = props.height as number;
   const value = props.value as number;
-  if (!value || value === 0 || width < 25) return <g />;
-  const formatted = value >= 1000 ? `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}k` : value.toFixed(0);
+  const name = (props.name as string) || '';
+  const cleanName = name.replace(/ \(Kg\)$/, '').replace(/ \(Ekor\)$/, '');
+  if (!value || value === 0 || width < 20) return <g />;
+  const formatted = formatChartValue(value);
+  const showName = width >= 60;
+  const label = showName ? `${cleanName}: ${formatted}` : formatted;
   return (
-    <text x={x + width / 2} y={y + height / 2 + 4} fill="#fff" textAnchor="middle" fontSize={9} fontWeight={600} opacity={0.9}>
-      {formatted}
+    <text
+      x={x + width / 2}
+      y={y + height / 2 + 4}
+      fill="#fff"
+      textAnchor="middle"
+      fontSize={showName ? 8.5 : 8}
+      fontWeight={600}
+      opacity={0.95}
+    >
+      {label}
     </text>
   );
 };
@@ -664,6 +698,46 @@ function ProduksiKecamatanChart() {
             </BarChart>
           </ResponsiveContainer>
         </div>
+
+        {/* Data Summary Table — readable in PDF export */}
+        {(viewBy === 'jenis-ikan' || viewBy === 'wadah') && series.length > 0 && (
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-[10px] sm:text-[11px] border-collapse">
+              <thead>
+                <tr style={{ borderBottom: '2px solid var(--border)' }}>
+                  <th className="text-left py-1.5 px-2 font-semibold" style={{ color: 'var(--foreground)' }}>Kecamatan</th>
+                  {series.map(s => (
+                    <th key={s.key} className="text-right py-1.5 px-2 font-semibold whitespace-nowrap" style={{ color: s.color }}>
+                      {s.name}
+                    </th>
+                  ))}
+                  <th className="text-right py-1.5 px-2 font-bold" style={{ color: 'var(--foreground)' }}>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.map((row, idx) => {
+                  const total = series.reduce((sum, s) => sum + ((row[s.key] as number) || 0), 0);
+                  return (
+                    <tr key={row.name as string} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 0 ? 'transparent' : 'rgba(6,182,212,0.03)' }}>
+                      <td className="py-1 px-2 font-medium" style={{ color: 'var(--foreground)' }}>{row.name as string}</td>
+                      {series.map(s => {
+                        const val = (row[s.key] as number) || 0;
+                        return (
+                          <td key={s.key} className="text-right py-1 px-2 tabular-nums" style={{ color: val > 0 ? 'var(--foreground)' : 'var(--muted-foreground)', opacity: val > 0 ? 1 : 0.4 }}>
+                            {val > 0 ? formatNumber(val) : '-'}
+                          </td>
+                        );
+                      })}
+                      <td className="text-right py-1 px-2 font-bold tabular-nums" style={{ color: '#06B6D4' }}>
+                        {formatNumber(total)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </ChartCard>
   );
