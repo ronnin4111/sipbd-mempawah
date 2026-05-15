@@ -116,3 +116,31 @@ Stage Summary:
 - Gemini/Groq are optional fallbacks (users can configure API keys)
 - All endpoints tested and working: /api/ai, /api/ai/config, /api/ai/chat
 - Provider priority: 1. Z.AI ✅ → 2. Gemini (if key) → 3. Groq (if key)
+
+---
+Task ID: 4
+Agent: Main Agent
+Task: Fix Vercel deployment - Z.AI env var support, employee count accuracy, follow-up fixes
+
+Work Log:
+- Diagnosed root cause: Z.AI fails on Vercel because .z-ai-config file doesn't exist (internal IP 172.25.136.193 is inaccessible)
+- Added getZaiConfigFromEnv() function: reads ZAI_BASE_URL, ZAI_API_KEY, ZAI_CHAT_ID, ZAI_USER_ID, ZAI_TOKEN from env vars
+- Added getZaiConfigFromFile() function: reads from .z-ai-config file paths
+- Rewrote callZAI(): config resolution priority is now env vars → file → SDK auto-discovery
+- Rewrote checkZaiAvailable(): checks env vars and file config, not just SDK create()
+- Increased KB search limits for personnel: kbMaxResults=50, kbMaxPerDoc=50 (was 20/15)
+- Added countUniquePegawai() in knowledge-base.ts: counts unique employee names by pattern matching
+- Updated personnel count logic: uses max(countMatchingChunks, countUniquePegawai) for accuracy
+- Increased MAX_PROMPT_CHARS for personnel: 30000 (was 18000) to fit more KB data
+- Made count header more prominent: explicit instruction to use total number, not count entries
+- Updated .env.example with Z.AI configuration instructions for Vercel
+- Updated AI status help message for Vercel deployment guidance
+- All changes tested locally: Z.AI works, follow-up detection works
+- Pushed commit 2726d7d to GitHub for Vercel auto-deployment
+
+Stage Summary:
+- Z.AI now supports environment variables for Vercel/production deployment
+- Employee count accuracy improved with unique name counting and higher KB limits
+- Follow-up "siapa saja" works correctly with Z.AI as provider
+- Vercel deployment requires: ZAI_BASE_URL and ZAI_API_KEY env vars in Vercel dashboard
+- Modified files: src/lib/ai-sdk.ts, src/lib/knowledge-base.ts, src/app/api/ai/chat/route.ts, src/app/api/ai/route.ts, .env.example
