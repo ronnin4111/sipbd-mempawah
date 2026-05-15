@@ -89,7 +89,9 @@ export function extractKeywordsFromContent(text: string): string[] {
     "jenis", "tipe", "kode", "id", "no", "nrp", "nip", "jabatan", "golongan",
     "unit", "bidang", "seksi", "sub", "bagian", "lapangan", "kantor",
     "kabupaten", "kecamatan", "desa", "kelurahan", "provinsi", "kota",
-    "dinas", "badan", "inspektorat", "sekretariat", "kepala", "pegawai",
+    "dinas", "badan", "inspektorat", "sekretariat", "kepala",
+    // NOTE: "pegawai" removed from stop words — it's an important search keyword
+    // for personnel documents. Without it, keyword search can't find pegawai data.
     "tahun", "bulan", "hari", "kerja", "pensiun", "mutasi", "pangkat",
   ]);
 
@@ -540,31 +542,91 @@ function cleanPegawaiName(name: string): string {
  * 
  * Returns all chunks from documents whose title or category suggests
  * they contain employee/pegawai data.
+ * 
+ * IMPORTANT: Does NOT use Prisma's `mode: 'insensitive'` because it's not
+ * supported by SQLite/Turso. SQLite LIKE is case-insensitive for ASCII by default.
  */
 export async function getAllPegawaiChunks(): Promise<string[]> {
-  // Find documents that are likely to contain employee data
-  const pegawaiDocs = await db.knowledgeDocument.findMany({
-    where: {
-      isActive: true,
-      OR: [
-        { title: { contains: 'pegawai', mode: 'insensitive' } },
-        { title: { contains: 'struktur', mode: 'insensitive' } },
-        { title: { contains: 'organisasi', mode: 'insensitive' } },
-        { title: { contains: 'karyawan', mode: 'insensitive' } },
-        { title: { contains: 'kepegawaian', mode: 'insensitive' } },
-        { category: { contains: 'umum', mode: 'insensitive' } },
-        { category: { contains: 'pegawai', mode: 'insensitive' } },
-        { category: { contains: 'organisasi', mode: 'insensitive' } },
-      ],
-    },
-    select: { id: true, title: true, category: true },
-  });
+  try {
+    // Find documents that are likely to contain employee data
+    // NOTE: No `mode: 'insensitive'` — SQLite LIKE is case-insensitive for ASCII
+    const pegawaiDocs = await db.knowledgeDocument.findMany({
+      where: {
+        isActive: true,
+        OR: [
+          { title: { contains: 'pegawai' } },
+          { title: { contains: 'Pegawai' } },
+          { title: { contains: 'struktur' } },
+          { title: { contains: 'Struktur' } },
+          { title: { contains: 'organisasi' } },
+          { title: { contains: 'karyawan' } },
+          { title: { contains: 'kepegawaian' } },
+          { category: { contains: 'umum' } },
+          { category: { contains: 'Umum' } },
+          { category: { contains: 'pegawai' } },
+          { category: { contains: 'organisasi' } },
+        ],
+      },
+      select: { id: true, title: true, category: true },
+    });
 
-  if (pegawaiDocs.length === 0) return [];
+    console.log(`[KB] getAllPegawaiChunks: found ${pegawaiDocs.length} candidate docs`);
+    for (const doc of pegawaiDocs) {
+      console.log(`[KB]   - Doc: "${doc.title}" (category: "${doc.category}")`);
+    }
 
-  const docIds = pegawaiDocs.map(d => d.id);
+    if (pegawaiDocs.length === 0) {
+      // Fallback: get ALL active documents and filter in JavaScript
+      // This handles cases where Prisma contains doesn't match (encoding issues, etc.)
+      console.log('[KB] getAllPegawaiChunks: no docs found via Prisma, trying JS fallback...');
+      const allDocs = await db.knowledgeDocument.findMany({
+        where: { isActive: true },
+        select: { id: true, title: true, category: true },
+      });
+      const pegawaiKeywords = ['pegawai', 'struktur', 'organisasi', 'karyawan', 'kepegawaian', 'umum'];
+      const fallbackDocs = allDocs.filter(doc => {
+        const searchStr = (doc.title + ' ' + doc.category).toLowerCase();
+        return pegawaiKeywords.some(kw => searchStr.includes(kw));
+      });
+      console.log(`[KB] getAllPegawaiChunks: JS fallback found ${fallbackDocs.length} docs`);
+      if (fallbackDocs.length > 0) {
+        return getChunksFromDocs(fallbackDocs);
+      }
+      return [];
+    }
+
+    return getChunksFromDocs(pegawaiDocs);
+  } catch (error) {
+    console.error('[KB] getAllPegawaiChunks error:', error);
+    // Ultimate fallback: get all chunks and let the AI sort it out
+    try {
+      const allChunks = await db.knowledgeChunk.findMany({
+        where: { document: { isActive: true } },
+        include: { document: { select: { title: true, category: true } } },
+        take: 100,
+      });
+      const pegawaiKeywords = ['pegawai', 'struktur', 'organisasi', 'karyawan', 'kepegawaian'];
+      const filteredChunks = allChunks.filter(chunk => {
+        const searchStr = (chunk.document.title + ' ' + chunk.document.category + ' ' + chunk.content).toLowerCase();
+        return pegawaiKeywords.some(kw => searchStr.includes(kw));
+      });
+      console.log(`[KB] getAllPegawaiChunks: error fallback found ${filteredChunks.length} chunks`);
+      return filteredChunks.map(
+        (chunk) =>
+          `[Sumber: ${chunk.document.title} (${chunk.document.category})${chunk.source ? ` - ${chunk.source}` : ""}]\n${chunk.content}`
+      );
+    } catch {
+      return [];
+    }
+  }
+}
+
+/**
+ * Helper: Get all chunks from a list of documents
+ */
+async function getChunksFromDocs(docs: Array<{ id: string; title: string; category: string }>): Promise<string[]> {
+  const docIds = docs.map(d => d.id);
   
-  // Get ALL chunks from these documents
   const chunks = await db.knowledgeChunk.findMany({
     where: {
       documentId: { in: docIds },
@@ -579,7 +641,7 @@ export async function getAllPegawaiChunks(): Promise<string[]> {
     ],
   });
 
-  console.log(`[KB] getAllPegawaiChunks: found ${pegawaiDocs.length} pegawai docs, ${chunks.length} total chunks`);
+  console.log(`[KB] getChunksFromDocs: ${docs.length} docs, ${chunks.length} total chunks`);
 
   return chunks.map(
     (chunk) =>

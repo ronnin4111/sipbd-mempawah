@@ -1941,14 +1941,30 @@ export async function POST(request: NextRequest) {
         if (allPegawaiChunks.length > 0) {
           kbSearchResults = allPegawaiChunks;
           console.log(`[AI Chat] Personnel: using getAllPegawaiChunks() → ${allPegawaiChunks.length} chunks`);
+        } else {
+          // Fallback: do keyword-based search if getAllPegawaiChunks returns empty
+          console.log('[AI Chat] Personnel: getAllPegawaiChunks() returned empty, falling back to keyword search');
+          kbSearchResults = await searchKnowledgeBase(message, 50, 50);
+          // Also try broad searches
+          const broadSearchTerms = ['pegawai dinas', 'data pegawai', 'struktur organisasi', 'daftar pegawai'];
+          for (const term of broadSearchTerms) {
+            const broadResults = await searchKnowledgeBase(term, 10, 15);
+            const existingContents = new Set(kbSearchResults.map(r => r.substring(0, 100)));
+            for (const result of broadResults) {
+              if (!existingContents.has(result.substring(0, 100))) {
+                kbSearchResults.push(result);
+              }
+            }
+          }
+          console.log(`[AI Chat] Personnel: keyword fallback → ${kbSearchResults.length} results`);
         }
 
         // Step 2: Get accurate pegawai count
         try {
           totalPegawaiCount = await countUniquePegawai();
           console.log(`[AI Chat] Personnel: countUniquePegawai() → ${totalPegawaiCount}`);
-        } catch {
-          // Ignore count errors
+        } catch (countErr) {
+          console.error('[AI Chat] Personnel: countUniquePegawai() error:', countErr);
         }
 
         // Step 3: Also do keyword search for specific names mentioned in the question
@@ -2001,6 +2017,9 @@ export async function POST(request: NextRequest) {
         let kbHeader: string;
         if (isPersonnelQuestion && totalPegawaiCount > 0) {
           kbHeader = `\n\n=== DATA PEGAWAI DARI BASIS PENGETAHUAN (${kbSearchResults.length} data) ===\n🔴 INSTRUKSI WAJIB UNTUK PENGHITUNGAN PEGAWAI:\n- JUMLAH PEGAWAI TOTAL: ${totalPegawaiCount} orang.\n- Jika ditanya "berapa jumlah pegawai", jawab TEPAT: ${totalPegawaiCount} orang.\n- JANGAN menghitung manual dari daftar di bawah — angka total sudah dihitung otomatis oleh sistem.\n- Data di bawah adalah detail lengkap pegawai (nama, jabatan, golongan, dll).\n- Gunakan data di bawah untuk menjawab pertanyaan detail (siapa saja, jabatan siapa, dll).\n\n`;
+        } else if (isPersonnelQuestion && totalPegawaiCount === 0) {
+          // Count function failed — instruct AI to count from data
+          kbHeader = `\n\n=== DATA PEGAWAI DARI BASIS PENGETAHUAN (${kbSearchResults.length} data) ===\n⚠️ INSTRUKSI PENTING:\n- Data di bawah berisi daftar pegawai.\n- Hitung jumlah baris/nama pegawai dengan teliti untuk menjawab "berapa jumlah pegawai".\n- Setiap baris yang dimulai dengan nama (bukan kelanjutan jabatan) = 1 pegawai.\n- Gunakan data di bawah sebagai sumber UTAMA.\n\n`;
         } else {
           kbHeader = `\n\n=== DATA RELEVAN DARI BASIS PENGETAHUAN (${kbSearchResults.length} hasil) ===\n⚠️ INSTRUKSI: Gunakan data di bawah ini sebagai sumber UTAMA jika relevan dengan pertanyaan. Baca dengan teliti, jangan lewatkan detail.\n\n`;
         }
