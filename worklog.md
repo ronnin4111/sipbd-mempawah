@@ -95,3 +95,24 @@ Stage Summary:
 - Follow-up question "siapa saja" now correctly classified as personnel type
 - Prompt size optimization prevents Groq 413 errors
 - Modified files: src/lib/ai-sdk.ts, src/lib/groq-ai.ts, src/lib/knowledge-base.ts, src/app/api/ai/chat/route.ts
+
+---
+Task ID: 3
+Agent: Main Agent
+Task: Make Z.AI (chat.z.ai) the primary AI provider instead of last fallback
+
+Work Log:
+- Restructured ai-sdk.ts provider priority: Z.AI → Gemini → Groq (was Gemini → Groq → Z.AI)
+- Added checkZaiAvailable() export function for checking Z.AI config availability
+- Updated callAI() to try Z.AI first with 60s timeout (longer for reliability)
+- Updated AI status endpoint (/api/ai) to show Z.AI as primary with priority numbering
+- Updated AI config endpoint (/api/ai/config) to include Z.AI availability check
+- Updated ai-chat-widget.tsx: Z.AI status indicator, updated labels, improved error messages
+- Updated Gemini/Groq labels from "primary/fallback" to "fallback opsional"
+- Z.AI now uses no API key — works out of the box in sandbox/dev environments
+
+Stage Summary:
+- Z.AI (GLM-4-Plus) is now the PRIMARY AI provider — no API key needed
+- Gemini/Groq are optional fallbacks (users can configure API keys)
+- All endpoints tested and working: /api/ai, /api/ai/config, /api/ai/chat
+- Provider priority: 1. Z.AI ✅ → 2. Gemini (if key) → 3. Groq (if key)

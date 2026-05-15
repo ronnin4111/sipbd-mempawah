@@ -252,13 +252,13 @@ export function AIChatWidget() {
       } else {
         const errorDetail = data.detail || data.error || '';
         // Check if it's a missing API key error
-        const isKeyMissing = errorDetail.includes('API Key belum dikonfigurasi');
+        const isKeyMissing = errorDetail.includes('API Key belum dikonfigurasi') || errorDetail.includes('Z.AI tidak tersedia');
         const isRateLimited = errorDetail.includes('Batas permintaan') || errorDetail.includes('rate');
         const isInvalidKey = errorDetail.includes('API Key tidak valid') || errorDetail.includes('INVALID_API_KEY');
         const errorMessage: Message = {
           role: 'assistant',
           content: isKeyMissing
-            ? '🔑 **API Key AI belum dikonfigurasi.**\n\nKlik ikon ⚙️ di header chat ini untuk mengatur API key.\n\n**Gratis & mudah:**\n- Gemini: https://aistudio.google.com/apikey\n- Groq: https://console.groq.com\n\nSetelah dapat key, paste di pengaturan AI.'
+            ? '⚠️ **Provider AI tidak tersedia.**\n\nZ.AI sedang tidak dapat diakses, dan API key Gemini/Groq belum dikonfigurasi.\n\nKlik ikon ⚙️ di header chat untuk:\n- Cek status Z.AI\n- Atur API key Gemini/Groq sebagai fallback\n\n**Gratis & mudah:**\n- Gemini: https://aistudio.google.com/apikey\n- Groq: https://console.groq.com'
             : isRateLimited
               ? `⏳ **Batas permintaan tercapai.**\n\n${errorDetail}\n\nTunggu 1-2 menit lalu coba lagi. Gunakan ⚙️ → Test Koneksi untuk diagnose.`
               : isInvalidKey
@@ -299,8 +299,8 @@ export function AIChatWidget() {
     setMessages([]);
   };
 
-  // Check if any AI provider is configured
-  const isAIConfigured = aiConfig?.gemini?.configured || aiConfig?.groq?.configured;
+  // Check if any AI provider is available (Z.AI is always available in sandbox)
+  const isAIConfigured = aiConfig?.zai?.available || aiConfig?.gemini?.configured || aiConfig?.groq?.configured;
 
   // Format message content with simple markdown-like rendering
   const formatContent = (content: string) => {
@@ -442,20 +442,24 @@ export function AIChatWidget() {
                 >
                   <div className="p-4 space-y-3 max-h-[50vh] overflow-y-auto" style={{ background: 'var(--card)' }}>
                     <div className="text-xs font-semibold flex items-center gap-2" style={{ color: 'var(--foreground)' }}>
-                      <Key className="h-3.5 w-3.5" /> Konfigurasi API Key AI
+                      <Key className="h-3.5 w-3.5" /> Konfigurasi AI Provider
                     </div>
                     <p className="text-[10px]" style={{ color: 'var(--muted-foreground)' }}>
-                      Atur API key agar AI bisa menjawab pertanyaan. Keduanya gratis!
+                      Z.AI (chat.z.ai) adalah provider utama — otomatis tersedia, tanpa API key! Gemini/Groq sebagai fallback opsional.
                     </p>
 
                     {/* Status indicators */}
-                    <div className="flex gap-2">
-                      <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] ${aiConfig?.gemini?.configured ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                    <div className="flex gap-2 flex-wrap">
+                      <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] ${aiConfig?.zai?.available ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
+                        {aiConfig?.zai?.available ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
+                        Z.AI {aiConfig?.zai?.available ? '✓' : '✗'} <span className="opacity-60">(primary)</span>
+                      </div>
+                      <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] ${aiConfig?.gemini?.configured ? 'bg-green-50 text-green-700' : 'bg-gray-50 text-gray-500'}`}>
                         {aiConfig?.gemini?.configured ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
                         Gemini {aiConfig?.gemini?.configured ? '✓' : '✗'}
                         {aiConfig?.gemini?.keyHint && <span className="opacity-60">({aiConfig.gemini.keyHint})</span>}
                       </div>
-                      <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] ${aiConfig?.groq?.configured ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                      <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] ${aiConfig?.groq?.configured ? 'bg-green-50 text-green-700' : 'bg-gray-50 text-gray-500'}`}>
                         {aiConfig?.groq?.configured ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
                         Groq {aiConfig?.groq?.configured ? '✓' : '✗'}
                         {aiConfig?.groq?.keyHint && <span className="opacity-60">({aiConfig.groq.keyHint})</span>}
@@ -465,7 +469,7 @@ export function AIChatWidget() {
                     {/* Gemini Key Input */}
                     <div>
                       <label className="text-[10px] font-medium block mb-1" style={{ color: 'var(--foreground)' }}>
-                        Gemini API Key <span className="opacity-50">(primary — https://aistudio.google.com/apikey)</span>
+                        Gemini API Key <span className="opacity-50">(fallback opsional — https://aistudio.google.com/apikey)</span>
                       </label>
                       <div className="relative">
                         <input
@@ -489,7 +493,7 @@ export function AIChatWidget() {
                     {/* Groq Key Input */}
                     <div>
                       <label className="text-[10px] font-medium block mb-1" style={{ color: 'var(--foreground)' }}>
-                        Groq API Key <span className="opacity-50">(fallback — https://console.groq.com)</span>
+                        Groq API Key <span className="opacity-50">(fallback opsional — https://console.groq.com)</span>
                       </label>
                       <div className="relative">
                         <input
@@ -631,7 +635,7 @@ export function AIChatWidget() {
 
                   {!isAIConfigured && (
                     <div className="mt-3 p-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-[10px]">
-                      ⚠️ API Key belum diatur. Klik ⚙️ di atas untuk mengatur API key agar AI bisa menjawab.
+                      ⚠️ Tidak ada provider AI tersedia. Klik ⚙️ di atas untuk mengatur API key (Gemini/Groq) sebagai fallback.
                     </div>
                   )}
 
