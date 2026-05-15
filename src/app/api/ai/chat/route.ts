@@ -2151,7 +2151,7 @@ export async function POST(request: NextRequest) {
     const memoryCount = memories.length;
     const targetedChars = targetedResults.length;
     const kusukaTargetedChars = kusukaTargetedResults.length;
-    console.log(`AI Chat: questionType=${effectiveQuestionType}, promptChars=${promptChars}, estTokens=${estimatedTokens}, searchTerms=${searchTerms.join(',')}, totalGroups=${totalGroups}, memories=${memoryCount}, targetedChars=${targetedChars}, kusukaTargetedChars=${kusukaTargetedChars}, truncated=${wasTruncated}, resolvedYears=${resolvedFilters.years.join(',')}, resolvedKec=${resolvedFilters.kecamatan.join(',')}, questionCtxYears=${questionCtx.years.join(',')}, kbResults=${kbSearchResults.length}, totalKbMatches=${totalKbMatchingChunks}`);
+    console.log(`AI Chat: questionType=${effectiveQuestionType}, promptChars=${promptChars}, estTokens=${estimatedTokens}, searchTerms=${searchTerms.join(',')}, totalGroups=${totalGroups}, memories=${memoryCount}, targetedChars=${targetedChars}, kusukaTargetedChars=${kusukaTargetedChars}, truncated=${wasTruncated}, resolvedYears=${resolvedFilters.years.join(',')}, resolvedKec=${resolvedFilters.kecamatan.join(',')}, questionCtxYears=${questionCtx.years.join(',')}, kbResults=${kbSearchResults.length}, totalPegawaiCount=${totalPegawaiCount}`);
 
     // Build conversation messages
     const chatMessages = [
