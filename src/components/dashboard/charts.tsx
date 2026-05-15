@@ -170,8 +170,12 @@ const renderHorizontalBarLabel = (props: Record<string, unknown>) => {
   const y = props.y as number;
   const width = props.width as number;
   const height = props.height as number;
-  const value = props.value as number;
   const name = (props.name as string) || '';
+  const payload = props.payload as Record<string, unknown> | undefined;
+  const dataKey = props.dataKey as string | undefined;
+  // IMPORTANT: In stacked bars, props.value is the CUMULATIVE position, not the segment value.
+  // We must read the actual segment value from the original data (payload) using dataKey.
+  const value = (dataKey && payload) ? (payload[dataKey] as number) : (props.value as number);
   // Remove unit suffix like " (Kg)" from name for cleaner label
   const cleanName = name.replace(/ \(Kg\)$/, '').replace(/ \(Ekor\)$/, '');
   if (!value || value === 0 || width < 20) return <g />;
@@ -200,8 +204,12 @@ const renderHorizontalBarLabelPdf = (props: Record<string, unknown>) => {
   const y = props.y as number;
   const width = props.width as number;
   const height = props.height as number;
-  const value = props.value as number;
   const name = (props.name as string) || '';
+  const payload = props.payload as Record<string, unknown> | undefined;
+  const dataKey = props.dataKey as string | undefined;
+  // IMPORTANT: In stacked bars, props.value is the CUMULATIVE position, not the segment value.
+  // We must read the actual segment value from the original data (payload) using dataKey.
+  const value = (dataKey && payload) ? (payload[dataKey] as number) : (props.value as number);
   const cleanName = name.replace(/ \(Kg\)$/, '').replace(/ \(Ekor\)$/, '');
   if (!value || value === 0 || width < 20) return <g />;
   const formatted = formatChartValue(value);
