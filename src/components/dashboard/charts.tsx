@@ -213,8 +213,9 @@ function createStackedBarLabel(
     // Final fallback
     if (value === undefined) value = cumulativeValue;
 
-    // DEBUG: Show debug info to understand what Recharts passes
-    const debugInfo = `v=${cumulativeValue} dk=${dataKey} rn=${rowName ?? 'null'} lu=${valueLookup.get(`${rowName}::${dataKey}`) ?? 'nf'} pk=${payload ? Object.keys(payload).join(',') : 'no'}`;
+    // DEBUG: Show ALL prop keys to understand what Recharts actually passes
+    const allPropKeys = Object.keys(props).join(',');
+    const debugInfo = `v=${cumulativeValue} dk=${dataKey} keys=${allPropKeys}`;
     const cleanName = displayName.replace(/ \(Kg\)$/, '').replace(/ \(Ekor\)$/, '');
     if (!value || value === 0 || width < 20) return <g />;
     const formatted = formatChartValue(value);
