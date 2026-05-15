@@ -166,87 +166,54 @@ const renderBarLabelPdf = (props: Record<string, unknown>) => {
 
 // Factory: creates a label renderer for horizontal stacked bar segments that shows the
 // CORRECT segment value instead of the cumulative props.value that Recharts provides.
-// We pass the entire chart data array + all series keys via closure, then look up the
-// correct value using the row's "name" field + dataKey — completely bypassing Recharts' props.
+// Recharts label props include: x, y, width, height, value (cumulative), name (dataKey), index (row index)
+// We use props.index + our chartData closure to look up the real segment value.
 function createStackedBarLabel(
   dataKey: string,
   displayName: string,
-  allSeriesKeys: string[],
+  _allSeriesKeys: string[],
   chartData: Record<string, unknown>[],
   fill = '#fff'
 ) {
-  // Pre-build a lookup: rowName -> dataKey -> actual value
-  const valueLookup = new Map<string, number>();
-  for (const row of chartData) {
-    const rowName = row.name as string;
-    valueLookup.set(`${rowName}::${dataKey}`, (row[dataKey] as number) || 0);
-  }
-
   return (props: Record<string, unknown>) => {
     const x = props.x as number;
     const y = props.y as number;
     const width = props.width as number;
     const height = props.height as number;
-    const payload = props.payload as Record<string, unknown> | undefined;
     const cumulativeValue = props.value as number;
+    const dataIndex = props.index as number;
 
-    // METHOD 1: Read from our pre-built lookup (data we built ourselves — always correct)
-    const rowName = payload?.name as string;
-    let value: number | undefined;
-    if (rowName) {
-      const lookedUp = valueLookup.get(`${rowName}::${dataKey}`);
-      if (lookedUp !== undefined) value = lookedUp;
-    }
-
-    // METHOD 2 (fallback): Subtract all previous segments' payload values from cumulative
-    if (value === undefined && payload) {
-      let segmentValue = cumulativeValue;
-      for (const key of allSeriesKeys) {
-        if (key === dataKey) break;
-        segmentValue -= ((payload[key] as number) || 0);
-      }
-      if (segmentValue >= 0 && segmentValue <= cumulativeValue) {
+    // Use props.index to look up the actual segment value from our chartData array.
+    // Recharts gives us the cumulative value in props.value, but chartData[index][dataKey]
+    // contains the real individual segment value that we built ourselves.
+    let value = cumulativeValue;
+    if (dataIndex !== undefined && dataIndex >= 0 && dataIndex < chartData.length) {
+      const row = chartData[dataIndex];
+      const segmentValue = row[dataKey] as number;
+      if (segmentValue !== undefined && segmentValue !== null) {
         value = segmentValue;
       }
     }
 
-    // Final fallback
-    if (value === undefined) value = cumulativeValue;
-
-    // DEBUG: Show ALL prop keys to understand what Recharts actually passes
-    const allPropKeys = Object.keys(props).join(',');
-    const debugInfo = `v=${cumulativeValue} dk=${dataKey} keys=${allPropKeys}`;
+    // Clean up display name — remove unit suffixes
     const cleanName = displayName.replace(/ \(Kg\)$/, '').replace(/ \(Ekor\)$/, '');
     if (!value || value === 0 || width < 20) return <g />;
     const formatted = formatChartValue(value);
+    // Show name + value when segment is wide enough, just value when narrow
     const showName = width >= 60;
     const label = showName ? `${cleanName}: ${formatted}` : formatted;
     return (
-      <g>
-        <text
-          x={x + width / 2}
-          y={y + height / 2 + 4}
-          fill={fill}
-          textAnchor="middle"
-          fontSize={showName ? 8.5 : 8}
-          fontWeight={600}
-          opacity={0.95}
-        >
-          {label}
-        </text>
-        {/* DEBUG - temporary, remove after fixing */}
-        <text
-          x={x + 2}
-          y={y + height - 2}
-          fill="#FF0"
-          textAnchor="start"
-          fontSize={6}
-          fontWeight={400}
-          opacity={0.9}
-        >
-          {debugInfo}
-        </text>
-      </g>
+      <text
+        x={x + width / 2}
+        y={y + height / 2 + 4}
+        fill={fill}
+        textAnchor="middle"
+        fontSize={showName ? 8.5 : 8}
+        fontWeight={600}
+        opacity={0.95}
+      >
+        {label}
+      </text>
     );
   };
 }
