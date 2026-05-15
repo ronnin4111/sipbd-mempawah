@@ -401,17 +401,16 @@ export async function countMatchingChunks(query: string): Promise<number> {
 
 /**
  * Count unique employee/pegawai names in the knowledge base.
- * This is more accurate than counting chunks because one chunk may contain
- * multiple employees, or one employee may span multiple chunks.
  * 
- * Searches all active chunks for patterns matching pegawai data
- * (numbered lists, NIP patterns, name+position patterns).
- * Returns count of unique person names found.
+ * The data format in the KB is typically tab-separated:
+ *   NAME<TAB>JABATAN<TAB>Gol/Ruang<TAB>NIP BARU
  * 
- * IMPORTANT: Previous version only matched multi-word names (2+ capitalized words),
- * missing single-word names like "Sulastri", "Widodo", "Arifin".
- * This version uses "NUMBER. NAME - POSITION" format (with dash separator)
- * to reliably extract names including single-word ones.
+ * Each pegawai line has a NIP pattern (8+6+1+3 digit format like "19841022 200502 1 003")
+ * or a Gol/Ruang pattern (like "Penata Tk. I / III d" or "Pembina / IV a").
+ * 
+ * This function counts lines that contain NIP or Gol/Ruang patterns,
+ * which is the most reliable way to count employees regardless of
+ * whether names are single-word or multi-word.
  */
 export async function countUniquePegawai(): Promise<number> {
   const chunks = await db.knowledgeChunk.findMany({
@@ -424,86 +423,114 @@ export async function countUniquePegawai(): Promise<number> {
   });
 
   const names = new Set<string>();
-  let maxNumberedEntry = 0;
+  let nipLineCount = 0;
 
   for (const chunk of chunks) {
     const content = chunk.content;
-    
-    // Method 1: Extract names from "NUMBER. NAME - POSITION" format
-    // This is the most reliable pattern for structured pegawai listings.
-    // Captures everything between the number and the first " - " separator.
-    // Examples:
-    //   "1. Sulastri - Pengadministrasi Persuratan" → "Sulastri"
-    //   "2. Arifin, S.Pd.SD,.M.Pd - Kepala Dinas" → "Arifin"
-    //   "18. Ir. M. Iqbal Suparta. MT - Sekretaris" → "Ir. M. Iqbal Suparta. MT"
-    const numberedNameDashPattern = /^\s*(\d+)[\.\)]\s+(.+?)\s+-/gm;
-    let match;
-    while ((match = numberedNameDashPattern.exec(content)) !== null) {
-      const entryNum = parseInt(match[1], 10);
-      if (entryNum > maxNumberedEntry) maxNumberedEntry = entryNum;
-      
-      let namePart = match[2].trim();
-      // Remove common title prefixes: Ir., Drs., Dra., Dr., H., Hj.
-      namePart = namePart.replace(/^(Ir\.\s*|Drs\.\s*|Dra\.\s*|Dr\.\s*|H\.\s*|Hj\.\s*)/i, '');
-      // Remove suffixes with degrees after comma: "Arifin, S.Pd.SD,.M.Pd" → "Arifin"
-      namePart = namePart.replace(/[,，].*$/, '');
-      // Remove abbreviation suffixes after period+space: "M. Iqbal Suparta. MT" → "M. Iqbal Suparta"
-      namePart = namePart.replace(/\.\s+[A-Z]{2,}.*$/, '');
-      namePart = namePart.trim();
-      
-      // Filter out common non-name words
-      if (namePart.length > 1 && 
-          !/^(Dinas|Kepala|Bidang|Seksi|Sub|Bagian|Daerah|Kabupaten|Kecamatan|Desa|Provinsi)/.test(namePart)) {
-        names.add(namePart.toLowerCase());
+    const lines = content.split('\n');
+
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+      if (!trimmedLine) continue;
+
+      // Method 1: Count lines with NIP pattern (most reliable for pegawai data)
+      // NIP format: YYYYMMDD YYYYMMDD X XXX (e.g., "19841022 200502 1 003")
+      const hasNIP = /\d{8}\s+\d{6}\s+\d\s+\d{3}/.test(trimmedLine);
+      if (hasNIP) {
+        nipLineCount++;
+        // Also try to extract the name from this line
+        // Name is at the start of the line, before the first tab or double-space
+        const nameMatch = trimmedLine.match(/^([A-Z][^\t]{2,}?)(?:\t|\s{2,}|")/);
+        if (nameMatch) {
+          let name = nameMatch[1].trim();
+          // Clean up: remove title prefixes and degree suffixes
+          name = cleanPegawaiName(name);
+          if (name.length > 1) names.add(name.toLowerCase());
+        }
+        continue; // Don't count this line twice
       }
-    }
 
-    // Method 2: Numbered entries WITHOUT dash separator
-    // Fallback for formats like "1. Sulastri, Pengadministrasi" (comma instead of dash)
-    const numberedNameCommaPattern = /^\s*(\d+)[\.\)]\s+([A-Z][a-z]+(?:\s+[A-Z]?[a-z]+)*)/gm;
-    while ((match = numberedNameCommaPattern.exec(content)) !== null) {
-      const entryNum = parseInt(match[1], 10);
-      if (entryNum > maxNumberedEntry) maxNumberedEntry = entryNum;
-      
-      let namePart = match[2].trim();
-      // Remove title prefixes
-      namePart = namePart.replace(/^(Ir\.\s*|Drs\.\s*|Dra\.\s*|Dr\.\s*|H\.\s*|Hj\.\s*)/i, '');
-      namePart = namePart.trim();
-      
-      if (namePart.length > 1 && 
-          !/^(Dinas|Kepala|Bidang|Seksi|Sub|Bagian|Daerah|Kabupaten|Kecamatan|Desa|Provinsi)/.test(namePart)) {
-        names.add(namePart.toLowerCase());
+      // Method 2: Lines with Gol/Ruang pattern without NIP
+      // (some lines might have Gol but no NIP if NIP is on a wrapped line)
+      const hasGolongan = /\b(?:Pembina(?:\s+Tk\.\s*I)?|Penata(?:\s+Tk\.\s*I)?|Pengatur(?:\s+Tk\.\s*I)?|Juru(?:\s+Muda(?:\s+Tk\.\s*I)?)?)\s*\/?\s*(?:I{1,3}V?|IV)\s*[a-d]\b/i.test(trimmedLine);
+      if (hasGolongan && !hasNIP) {
+        nipLineCount++;
+        const nameMatch = trimmedLine.match(/^([A-Z][^\t]{2,}?)(?:\t|\s{2,}|")/);
+        if (nameMatch) {
+          let name = nameMatch[1].trim();
+          name = cleanPegawaiName(name);
+          if (name.length > 1) names.add(name.toLowerCase());
+        }
       }
-    }
 
-    // Method 3: Name after "Nama" label
-    const namaPattern = /Nama\s*[:\-]\s*([A-Z][a-z]+(?:\s+[A-Z]?[a-z]+)*)/g;
-    while ((match = namaPattern.exec(content)) !== null) {
-      let name = match[1].trim();
-      name = name.replace(/^(Ir\.\s*|Drs\.\s*|Dra\.\s*|Dr\.\s*|H\.\s*|Hj\.\s*)/i, '');
-      name = name.replace(/[,，].*$/, '');
-      if (name.length > 1) names.add(name.toLowerCase());
-    }
+      // Method 3: Numbered entries like "1. Name - Position"
+      const numberedMatch = trimmedLine.match(/^\s*(\d+)[\.\)]\s+(.+?)\s+-/);
+      if (numberedMatch) {
+        let name = numberedMatch[2].trim();
+        name = cleanPegawaiName(name);
+        if (name.length > 1 &&
+            !/^(Dinas|Kepala|Bidang|Seksi|Sub|Bagian|Daerah|Kabupaten|Kecamatan|Desa|Provinsi)/.test(name)) {
+          names.add(name.toLowerCase());
+        }
+      }
 
-    // Method 4: Names with NIP nearby (pegawai identifier)
-    const nipPattern = /([A-Z][a-z]+(?:\s+[A-Z]?[a-z]+)*)\s*[\|\,\;]?\s*(?:NIP|nip)/g;
-    while ((match = nipPattern.exec(content)) !== null) {
-      let name = match[1].trim();
-      name = name.replace(/^(Ir\.\s*|Drs\.\s*|Dra\.\s*|Dr\.\s*|H\.\s*|Hj\.\s*)/i, '');
-      if (name.length > 1 && 
-          !/^(Dinas|Kepala|Bidang|Seksi|Sub|Bagian|Daerah|Kabupaten|Kecamatan|Desa|Provinsi)/.test(name)) {
-        names.add(name.toLowerCase());
+      // Method 4: Name after "Nama" label
+      const namaMatch = trimmedLine.match(/Nama\s*[:\-]\s*(.+)/i);
+      if (namaMatch) {
+        let name = namaMatch[1].trim();
+        name = cleanPegawaiName(name);
+        if (name.length > 1) names.add(name.toLowerCase());
       }
     }
   }
 
-  // Return the MAX of unique names count and highest numbered entry.
-  // The highest numbered entry is very reliable for structured pegawai listings
-  // (e.g., if the list goes 1-28, maxNumberedEntry=28 is the correct count).
-  // Unique names may undercount if name extraction misses some entries.
-  const count = Math.max(names.size, maxNumberedEntry > 0 ? maxNumberedEntry : 0);
-  console.log(`[KB] countUniquePegawai: uniqueNames=${names.size}, maxNumberedEntry=${maxNumberedEntry}, result=${count}`);
+  // The NIP line count is the most reliable — one NIP = one pegawai.
+  // Use the MAX of NIP count and unique names found.
+  const count = Math.max(names.size, nipLineCount);
+  console.log(`[KB] countUniquePegawai: uniqueNames=${names.size}, nipLines=${nipLineCount}, result=${count}`);
   return count;
+}
+
+/**
+ * Clean a pegawai name by removing title prefixes and degree suffixes.
+ * Examples:
+ *   "Ir. M. Iqbal Suparta. MT" → "M. Iqbal Suparta"
+ *   "Arifin, S.Pd.SD,.M.Pd" → "Arifin"
+ *   "Hasto Priyarso, S.Pi" → "Hasto Priyarso"
+ * 
+ * Also filters out lines that are clearly NOT names (e.g., continuation of
+ * jabatan descriptions like "Staf Bag. Perencanaan dan Keuangan").
+ */
+function cleanPegawaiName(name: string): string {
+  // Remove common title prefixes: Ir., Drs., Dra., Dr., H., Hj.
+  name = name.replace(/^(Ir\.\s*|Drs\.\s*|Dra\.\s*|Dr\.\s*|H\.\s*|Hj\.\s*)/i, '');
+  // Remove suffixes with degrees after comma: "Arifin, S.Pd.SD,.M.Pd" → "Arifin"
+  name = name.replace(/[,，].*$/, '');
+  // Remove abbreviation suffixes after period+space: "M. Iqbal Suparta. MT" → "M. Iqbal Suparta"
+  name = name.replace(/\.\s+[A-Z]{2,}.*$/, '');
+  name = name.trim();
+
+  // Filter out common non-name patterns (jabatan descriptions that wrap to next line)
+  const nonNamePatterns = [
+    /^(Staf|Staff)\s+(Bag|Seksi|Bidang|Sub)/i,
+    /^(Fungsional|Pelaksana|Penyelenggara)\s+Umum/i,
+    /^Bag\.\s*(Perencanaan|Umum|Keuangan)/i,
+    /^Seksi\s+/i,
+    /^Bidang\s+/i,
+    /^Kabid\s+/i,
+    /^Kasi\s+/i,
+    /^Kasub\s+/i,
+    /^Sub\s*Bag/i,
+    /^dan\s+/i,
+    /^Keuangan$/i,
+    /^Perencanaan$/i,
+    /^Perikanan$/i,
+  ];
+  for (const pattern of nonNamePatterns) {
+    if (pattern.test(name)) return '';
+  }
+
+  return name;
 }
 
 /**
