@@ -213,25 +213,39 @@ function createStackedBarLabel(
     // Final fallback
     if (value === undefined) value = cumulativeValue;
 
-    // Clean up display name — remove unit suffixes
+    // DEBUG: Show debug info to understand what Recharts passes
+    const debugInfo = `v=${cumulativeValue} dk=${dataKey} rn=${rowName ?? 'null'} lu=${valueLookup.get(`${rowName}::${dataKey}`) ?? 'nf'} pk=${payload ? Object.keys(payload).join(',') : 'no'}`;
     const cleanName = displayName.replace(/ \(Kg\)$/, '').replace(/ \(Ekor\)$/, '');
     if (!value || value === 0 || width < 20) return <g />;
     const formatted = formatChartValue(value);
-    // Show name + value when segment is wide enough, just value when narrow
     const showName = width >= 60;
     const label = showName ? `${cleanName}: ${formatted}` : formatted;
     return (
-      <text
-        x={x + width / 2}
-        y={y + height / 2 + 4}
-        fill={fill}
-        textAnchor="middle"
-        fontSize={showName ? 8.5 : 8}
-        fontWeight={600}
-        opacity={0.95}
-      >
-        {label}
-      </text>
+      <g>
+        <text
+          x={x + width / 2}
+          y={y + height / 2 + 4}
+          fill={fill}
+          textAnchor="middle"
+          fontSize={showName ? 8.5 : 8}
+          fontWeight={600}
+          opacity={0.95}
+        >
+          {label}
+        </text>
+        {/* DEBUG - temporary, remove after fixing */}
+        <text
+          x={x + 2}
+          y={y + height - 2}
+          fill="#FF0"
+          textAnchor="start"
+          fontSize={6}
+          fontWeight={400}
+          opacity={0.9}
+        >
+          {debugInfo}
+        </text>
+      </g>
     );
   };
 }
