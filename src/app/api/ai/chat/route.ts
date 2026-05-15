@@ -3,7 +3,7 @@ import { callAI } from '@/lib/ai-sdk';
 import { retrieveMemories, storeMemories, extractMemoriesFromConversation, formatMemoriesForPrompt, clearMemories } from '@/lib/ai-memory';
 import { db } from '@/lib/db';
 import { generateFarmerId } from '@/lib/farmer-id';
-import { searchKnowledgeBase, getKnowledgeBaseContext, countMatchingChunks } from "@/lib/knowledge-base";
+import { searchKnowledgeBase, getKnowledgeBaseContext, countMatchingChunks, countUniquePegawai } from "@/lib/knowledge-base";
 
 /**
  * Compact system prompt for SIPBD AI assistant.
@@ -1814,9 +1814,9 @@ export async function POST(request: NextRequest) {
     // Build system prompt — SMART context loading based on question type
     // ============================================================
     // Dynamic prompt size limit based on question type
-    // Personnel questions should be smaller to ensure reliable AI responses
-    // (Groq small models like llama-3.1-8b-instant have ~8K context limit)
-    const MAX_PROMPT_CHARS = effectiveQuestionType === 'personnel' ? 18000 : 25000; // ~4.5K / ~6K tokens
+    // Personnel questions need MORE space to fit all KB data (employee listings)
+    // Z.AI / Gemini can handle larger prompts; Groq will be skipped if too large
+    const MAX_PROMPT_CHARS = effectiveQuestionType === 'personnel' ? 30000 : 25000; // Personnel needs more space for all KB data
     const TRUNCATION_NOTE = '\n\n[Data dipangkas karena terlalu panjang. Untuk detail lengkap, tanya secara spesifik.]';
 
     // Base prompt + memory (always included)
@@ -1921,9 +1921,11 @@ export async function POST(request: NextRequest) {
     // Use MORE results for personnel/KUSUKA questions (KB may have raw data)
     const isKusukaQuestion = /kusuka|kartu\s+usaha|registrasi/i.test(message);
     const isPersonnelQuestion = effectiveQuestionType === 'personnel';
-    // For personnel questions, use higher limits to capture all employee data
-    const kbMaxResults = isPersonnelQuestion ? 20 : isKusukaQuestion ? 12 : 8;
-    const kbMaxPerDoc = isPersonnelQuestion ? 15 : isKusukaQuestion ? 5 : 3;
+    // For personnel questions, use MUCH higher limits to capture ALL employee data.
+    // Previous limits (20/15) caused AI to undercount (e.g., 20 instead of 28)
+    // because document diversity limit cut off chunks from the same document.
+    const kbMaxResults = isPersonnelQuestion ? 50 : isKusukaQuestion ? 12 : 8;
+    const kbMaxPerDoc = isPersonnelQuestion ? 50 : isKusukaQuestion ? 5 : 3;
     let kbSearchResults: string[] = [];
     let totalKbMatchingChunks = 0; // Track total matching chunks (before document diversity limit)
     try {
@@ -1935,6 +1937,14 @@ export async function POST(request: NextRequest) {
       if (isPersonnelQuestion) {
         try {
           totalKbMatchingChunks = await countMatchingChunks(message);
+          // Also count unique pegawai names for more accuracy
+          const uniquePegawaiCount = await countUniquePegawai();
+          // Use the LARGER of the two counts — unique names is more accurate for
+          // "berapa pegawai" questions, while matching chunks is better for search
+          if (uniquePegawaiCount > totalKbMatchingChunks) {
+            totalKbMatchingChunks = uniquePegawaiCount;
+          }
+          console.log(`[AI Chat] Personnel KB search: ${kbSearchResults.length} results returned, ${totalKbMatchingChunks} total (chunks+unique names)`);
         } catch {
           // Ignore count errors — not critical
         }
@@ -2005,8 +2015,8 @@ export async function POST(request: NextRequest) {
         // This is CRITICAL for accurate counting — if we have 28 employees but
         // only 20 fit in the prompt, the AI needs to know the total is 28
         let kbHeader: string;
-        if (isPersonnelQuestion && totalKbMatchingChunks > kbSearchResults.length) {
-          kbHeader = `\n\n=== DATA RELEVAN DARI BASIS PENGETAHUAN (${kbSearchResults.length} hasil ditampilkan dari total ${totalKbMatchingChunks} data yang cocok) ===\n⚠️ INSTRUKSI PENTING:\n- Gunakan data di bawah ini sebagai sumber UTAMA.\n- TOTAL data yang cocok: ${totalKbMatchingChunks}. Jika ditanya jumlah total, gunakan angka ${totalKbMatchingChunks} BUKAN jumlah entri di bawah.\n- Baca dengan teliti, jangan lewatkan detail.\n\n`;
+        if (isPersonnelQuestion && totalKbMatchingChunks > 0) {
+          kbHeader = `\n\n=== DATA RELEVAN DARI BASIS PENGETAHUAN (${kbSearchResults.length} hasil dari total ${totalKbMatchingChunks} data yang cocok) ===\n⚠️ INSTRUKSI SANGAT PENTING UNTUK PENGHITUNGAN:\n- TOTAL data pegawai yang cocok di Basis Pengetahuan: ${totalKbMatchingChunks} orang.\n- Jika ditanya "berapa jumlah pegawai", jawab: ${totalKbMatchingChunks} orang — BUKAN jumlah baris di bawah.\n- JANGAN menghitung manual dari daftar di bawah — gunakan angka total: ${totalKbMatchingChunks}.\n- Data di bawah adalah detail pegawai, hitung dari ANGKA TOTAL di atas.\n- Gunakan data di bawah sebagai sumber UTAMA untuk detail (nama, jabatan, dll).\n\n`;
         } else {
           kbHeader = `\n\n=== DATA RELEVAN DARI BASIS PENGETAHUAN (${kbSearchResults.length} hasil) ===\n⚠️ INSTRUKSI: Gunakan data di bawah ini sebagai sumber UTAMA jika relevan dengan pertanyaan. Baca dengan teliti, jangan lewatkan detail.\n\n`;
         }

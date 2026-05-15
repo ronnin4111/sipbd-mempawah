@@ -51,7 +51,7 @@ export async function GET() {
       'Z.AI as primary: no API key needed, works out of the box',
     ],
     help: !anyReady
-      ? 'Z.AI seharusnya tersedia otomatis. Jika tidak, konfigurasi API key Gemini/Groq via Settings di chat AI.'
+      ? 'Untuk Vercel: set ZAI_BASE_URL dan ZAI_API_KEY di Environment Variables. Untuk sandbox: Z.AI otomatis tersedia. Atau konfigurasi API key Gemini/Groq via Settings di chat AI.'
       : undefined,
   });
 }

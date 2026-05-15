@@ -95,101 +95,140 @@ async function getModel(envVarName: string, dbSettingKey: string): Promise<strin
 }
 
 /**
+ * Get Z.AI config from environment variables.
+ * Returns config object if env vars are set, null otherwise.
+ *
+ * Environment variables (for Vercel / production deployment):
+ * - ZAI_BASE_URL: API base URL (e.g., https://chat.z.ai/api/v1)
+ * - ZAI_API_KEY: API key for authentication
+ * - ZAI_CHAT_ID: (optional) Chat session ID
+ * - ZAI_USER_ID: (optional) User ID
+ * - ZAI_TOKEN: (optional) JWT token
+ */
+function getZaiConfigFromEnv(): { baseUrl: string; apiKey: string; chatId?: string; userId?: string; token?: string } | null {
+  const baseUrl = process.env.ZAI_BASE_URL;
+  const apiKey = process.env.ZAI_API_KEY;
+  if (baseUrl && apiKey) {
+    console.log('[AI SDK] Z.AI config found in env vars (ZAI_BASE_URL)');
+    return {
+      baseUrl,
+      apiKey,
+      ...(process.env.ZAI_CHAT_ID ? { chatId: process.env.ZAI_CHAT_ID } : {}),
+      ...(process.env.ZAI_USER_ID ? { userId: process.env.ZAI_USER_ID } : {}),
+      ...(process.env.ZAI_TOKEN ? { token: process.env.ZAI_TOKEN } : {}),
+    };
+  }
+  return null;
+}
+
+/**
+ * Try to load Z.AI config from file system.
+ * Returns config object if found, null otherwise.
+ */
+async function getZaiConfigFromFile(): Promise<{ baseUrl: string; apiKey: string; chatId?: string; userId?: string; token?: string } | null> {
+  try {
+    const fs = await import('fs/promises');
+    const path = await import('path');
+    const os = await import('os');
+
+    const configPaths = [
+      path.join(process.cwd(), '.z-ai-config'),
+      path.join(os.homedir(), '.z-ai-config'),
+      '/etc/.z-ai-config',
+    ];
+
+    for (const configPath of configPaths) {
+      try {
+        const configStr = await fs.readFile(configPath, 'utf-8');
+        const config = JSON.parse(configStr);
+        if (config.baseUrl && config.apiKey) {
+          console.log('[AI SDK] Z.AI config loaded from file:', configPath);
+          return config;
+        }
+      } catch {
+        // Continue to next path
+      }
+    }
+  } catch {
+    // fs import failed (Vercel edge runtime)
+  }
+  return null;
+}
+
+/**
+ * Get Z.AI config from any available source.
+ * Priority: 1. Environment variables → 2. File system → 3. SDK auto-discovery
+ * Note: SDK auto-discovery is handled in callZAI() directly (instance-based).
+ */
+async function getZaiConfig(): Promise<{ baseUrl: string; apiKey: string; chatId?: string; userId?: string; token?: string } | null> {
+  // 1. Check environment variables FIRST (works on Vercel)
+  const envConfig = getZaiConfigFromEnv();
+  if (envConfig) return envConfig;
+
+  // 2. Manual file system config reading (works in sandbox with .z-ai-config)
+  const fileConfig = await getZaiConfigFromFile();
+  if (fileConfig) return fileConfig;
+
+  // 3. SDK auto-discovery is handled separately in callZAI() / checkZaiAvailable()
+  return null;
+}
+
+/**
  * Check if Z.AI is available by trying to load config.
  * Returns true if Z.AI can be initialized, false otherwise.
  */
 export async function checkZaiAvailable(): Promise<boolean> {
+  const config = await getZaiConfig();
+  if (config) {
+    console.log('[AI SDK] Z.AI available: baseUrl=' + config.baseUrl.substring(0, 30) + '...');
+    return true;
+  }
+  // Also check if SDK auto-discovery works (no env vars or file needed)
   try {
     const ZAI = (await import('z-ai-web-dev-sdk')).default;
-
-    // Try creating an instance to verify config is available
-    try {
-      await ZAI.create();
-      return true;
-    } catch {
-      // Try manual config loading
-      try {
-        const fs = await import('fs/promises');
-        const path = await import('path');
-        const os = await import('os');
-
-        const configPaths = [
-          path.join(process.cwd(), '.z-ai-config'),
-          path.join(os.homedir(), '.z-ai-config'),
-          '/etc/.z-ai-config',
-        ];
-
-        for (const configPath of configPaths) {
-          try {
-            const configStr = await fs.readFile(configPath, 'utf-8');
-            const config = JSON.parse(configStr);
-            if (config.baseUrl && config.apiKey) {
-              return true;
-            }
-          } catch {
-            // Continue to next path
-          }
-        }
-      } catch {
-        // Manual config check failed
-      }
-    }
+    await ZAI.create();
+    console.log('[AI SDK] Z.AI available via SDK auto-discovery');
+    return true;
   } catch {
-    // z-ai-web-dev-sdk not available
+    // SDK can't find config
   }
+  console.log('[AI SDK] Z.AI NOT available — no config found (env vars or file)');
   return false;
 }
 
 /**
  * Try calling z-ai-web-dev-sdk as a provider.
- * Uses auto-discovered config or manual config fallback.
+ * Config resolution priority:
+ * 1. Environment variables (ZAI_BASE_URL, ZAI_API_KEY) — works on Vercel
+ * 2. SDK auto-discovery (ZAI.create()) — works in sandbox with .z-ai-config
+ * 3. Manual file reading — fallback when SDK fails but config file exists
  */
 async function callZAI(options: UnifiedAIOptions): Promise<UnifiedAIResult> {
   try {
-    // Dynamic import with cache busting to avoid stale module state
+    // Dynamic import
     const ZAI = (await import('z-ai-web-dev-sdk')).default;
 
-    // Create a fresh instance each time
+    // Resolve config: env vars → file → SDK auto
+    const config = getZaiConfigFromEnv() || await getZaiConfigFromFile();
+
     let zai;
-    try {
-      zai = await ZAI.create();
-    } catch (createError) {
-      // If create() fails (config not found), try reading config manually
-      const errMsg = createError instanceof Error ? createError.message : 'Unknown';
-      console.warn('[AI SDK] z-ai create() failed:', errMsg.substring(0, 200));
-
-      if (errMsg.includes('Configuration file not found') || errMsg.includes('config')) {
-        try {
-          const fs = await import('fs/promises');
-          const path = await import('path');
-          const os = await import('os');
-
-          const configPaths = [
-            path.join(process.cwd(), '.z-ai-config'),
-            path.join(os.homedir(), '.z-ai-config'),
-            '/etc/.z-ai-config',
-          ];
-
-          for (const configPath of configPaths) {
-            try {
-              const configStr = await fs.readFile(configPath, 'utf-8');
-              const config = JSON.parse(configStr);
-              if (config.baseUrl && config.apiKey) {
-                console.log('[AI SDK] z-ai config loaded manually from:', configPath);
-                zai = new ZAI(config);
-                break;
-              }
-            } catch {
-              // Continue to next path
-            }
-          }
-        } catch (fsError) {
-          console.warn('[AI SDK] z-ai manual config read failed:', fsError);
-        }
-      }
-
-      if (!zai) {
-        throw createError;
+    if (config) {
+      // Use resolved config (from env vars or file)
+      zai = new ZAI(config);
+      console.log(`[AI SDK] Z.AI initialized with config: baseUrl=${config.baseUrl.substring(0, 30)}...`);
+    } else {
+      // Try SDK auto-discovery as last resort
+      try {
+        zai = await ZAI.create();
+        console.log('[AI SDK] Z.AI initialized via SDK auto-discovery');
+      } catch (sdkError) {
+        const errMsg = sdkError instanceof Error ? sdkError.message : 'Unknown';
+        return {
+          success: false,
+          content: '',
+          error: `Z.AI config not found: ${errMsg.substring(0, 200)}. Set ZAI_BASE_URL and ZAI_API_KEY env vars for Vercel deployment.`,
+          provider: 'z-ai',
+        };
       }
     }
 
@@ -213,7 +252,7 @@ async function callZAI(options: UnifiedAIOptions): Promise<UnifiedAIResult> {
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    console.warn('[AI SDK] z-ai not available:', message);
+    console.warn('[AI SDK] z-ai error:', message);
     return {
       success: false,
       content: '',

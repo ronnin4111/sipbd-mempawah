@@ -400,6 +400,60 @@ export async function countMatchingChunks(query: string): Promise<number> {
 }
 
 /**
+ * Count unique employee/pegawai names in the knowledge base.
+ * This is more accurate than counting chunks because one chunk may contain
+ * multiple employees, or one employee may span multiple chunks.
+ * 
+ * Searches all active chunks for patterns matching pegawai data
+ * (numbered lists, NIP patterns, name+position patterns).
+ * Returns count of unique person names found.
+ */
+export async function countUniquePegawai(): Promise<number> {
+  const chunks = await db.knowledgeChunk.findMany({
+    where: {
+      document: { isActive: true },
+    },
+    select: {
+      content: true,
+    },
+  });
+
+  const names = new Set<string>();
+
+  for (const chunk of chunks) {
+    const content = chunk.content;
+    
+    // Pattern 1: Numbered entries like "1. Nama" or "1. NIP"
+    // Common in pegawai listings
+    const numberedPattern = /^\s*\d+[\.\)]\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/gm;
+    let match;
+    while ((match = numberedPattern.exec(content)) !== null) {
+      const name = match[1].trim();
+      // Filter out common non-name words
+      if (!/^(Dinas|Kepala|Bidang|Seksi|Sub|Bagian|Daerah|Kabupaten|Kecamatan|Desa)/.test(name)) {
+        names.add(name);
+      }
+    }
+
+    // Pattern 2: Name after "Nama" label
+    const namaPattern = /Nama\s*[:\-]\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/g;
+    while ((match = namaPattern.exec(content)) !== null) {
+      const name = match[1].trim();
+      names.add(name);
+    }
+
+    // Pattern 3: Names with NIP nearby (pegawai identifier)
+    const nipPattern = /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\s*[\|\,\;]?\s*(?:NIP|nip)/g;
+    while ((match = nipPattern.exec(content)) !== null) {
+      const name = match[1].trim();
+      names.add(name);
+    }
+  }
+
+  return names.size;
+}
+
+/**
  * Invalidate the KB context cache
  */
 export function invalidateKbCache() {
