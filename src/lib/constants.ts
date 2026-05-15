@@ -364,9 +364,7 @@ import {
   DollarSign,
   FileSpreadsheet,
   ExternalLink,
-  Split,
   CreditCard,
-  Brain,
   Lock,
   type LucideIcon,
 } from 'lucide-react';
@@ -389,8 +387,6 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'tren-laporan',      label: 'Tren & Laporan',    labelLong: 'Tren & Laporan',       icon: TrendingUp,      description: 'Analisis tren produksi',            adminOnly: false },
   { id: 'tren-v2',           label: 'Tren V2',           labelLong: 'Tren V2 (Triwulan)',   icon: ExternalLink,    description: 'Data tren versi triwulan',          adminOnly: false },
   { id: 'harga-komoditas',   label: 'Harga Komoditas',   labelLong: 'Harga Komoditas',      icon: DollarSign,      description: 'Daftar harga ikan',                 adminOnly: false },
-  { id: 'knowledge-base',    label: 'Basis Pengetahuan',  labelLong: 'Basis Pengetahuan',    icon: Brain,           description: 'Upload dokumen untuk AI',           adminOnly: false },
-  { id: 'disagregasi',       label: 'Disagregasi',       labelLong: 'Disagregasi Data',     icon: Split,           description: 'Distribusi data agregat',           adminOnly: true  },
   { id: 'import-export',     label: 'Import / Export',   labelLong: 'Import / Export',      icon: FileSpreadsheet, description: 'Kelola data Excel/PDF',             adminOnly: false },
   { id: 'admin-login',       label: 'Login Admin',       labelLong: 'Login Admin',          icon: Lock,            description: 'Akses fitur khusus admin',          adminOnly: false, headerHidden: true },
 ];
