@@ -166,9 +166,22 @@ const renderBarLabelPdf = (props: Record<string, unknown>) => {
 
 // Factory: creates a label renderer for horizontal stacked bar segments that shows the
 // CORRECT segment value instead of the cumulative props.value that Recharts provides.
-// Strategy: Read the segment's own value from payload[dataKey]. If that fails,
-// compute it by subtracting all previous series' values from the cumulative total.
-function createStackedBarLabel(dataKey: string, displayName: string, allSeriesKeys: string[], fill = '#fff') {
+// We pass the entire chart data array + all series keys via closure, then look up the
+// correct value using the row's "name" field + dataKey — completely bypassing Recharts' props.
+function createStackedBarLabel(
+  dataKey: string,
+  displayName: string,
+  allSeriesKeys: string[],
+  chartData: Record<string, unknown>[],
+  fill = '#fff'
+) {
+  // Pre-build a lookup: rowName -> dataKey -> actual value
+  const valueLookup = new Map<string, number>();
+  for (const row of chartData) {
+    const rowName = row.name as string;
+    valueLookup.set(`${rowName}::${dataKey}`, (row[dataKey] as number) || 0);
+  }
+
   return (props: Record<string, unknown>) => {
     const x = props.x as number;
     const y = props.y as number;
@@ -177,20 +190,21 @@ function createStackedBarLabel(dataKey: string, displayName: string, allSeriesKe
     const payload = props.payload as Record<string, unknown> | undefined;
     const cumulativeValue = props.value as number;
 
-    // METHOD 1: Read segment value directly from the original data row (payload)
+    // METHOD 1: Read from our pre-built lookup (data we built ourselves — always correct)
+    const rowName = payload?.name as string;
     let value: number | undefined;
-    if (payload && payload[dataKey] !== undefined && payload[dataKey] !== null) {
-      value = payload[dataKey] as number;
+    if (rowName) {
+      const lookedUp = valueLookup.get(`${rowName}::${dataKey}`);
+      if (lookedUp !== undefined) value = lookedUp;
     }
 
-    // METHOD 2 (fallback): Subtract all previous segments' values from cumulative
-    if ((value === undefined || value === cumulativeValue) && payload) {
+    // METHOD 2 (fallback): Subtract all previous segments' payload values from cumulative
+    if (value === undefined && payload) {
       let segmentValue = cumulativeValue;
       for (const key of allSeriesKeys) {
-        if (key === dataKey) break; // stop before current segment
+        if (key === dataKey) break;
         segmentValue -= ((payload[key] as number) || 0);
       }
-      // Sanity check: segment value should not be negative or exceed cumulative
       if (segmentValue >= 0 && segmentValue <= cumulativeValue) {
         value = segmentValue;
       }
@@ -693,7 +707,7 @@ function ProduksiKecamatanChart() {
               />
               <Legend wrapperStyle={{ fontSize: 10 }} />
               {series.map(s => (
-                <Bar key={s.key} dataKey={s.key} fill={s.color} stackId="a" name={s.name} label={createStackedBarLabel(s.key, s.name, series.map(ss => ss.key))} />
+                <Bar key={s.key} dataKey={s.key} fill={s.color} stackId="a" name={s.name} label={createStackedBarLabel(s.key, s.name, series.map(ss => ss.key), data)} />
               ))}
             </BarChart>
           </ResponsiveContainer>
@@ -974,7 +988,7 @@ export function PdfDashboardCharts() {
               formatter={(value: number) => new Intl.NumberFormat('id-ID').format(value)} />
             <Legend wrapperStyle={{ fontSize: 10, color: '#333' }} />
             {kecSeries.map(s => (
-              <Bar key={s.key} dataKey={s.key} fill={s.color} stackId="a" name={s.name} label={createStackedBarLabel(s.key, s.name, kecSeries.map(ss => ss.key))} />
+              <Bar key={s.key} dataKey={s.key} fill={s.color} stackId="a" name={s.name} label={createStackedBarLabel(s.key, s.name, kecSeries.map(ss => ss.key), kecData)} />
             ))}
           </BarChart>
         </ResponsiveContainer>
