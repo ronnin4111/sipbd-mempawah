@@ -86,7 +86,7 @@ VERIFIKASI WAJIB sebelum menjawab pertanyaan data:
  * kelompok" should be 'stats' or 'general' so the AI answers from compact summaries
  * in the data context, not from the full member listings.
  */
-function classifyQuestion(message: string): 'specific' | 'stats' | 'general' | 'comparison' {
+function classifyQuestion(message: string): 'specific' | 'personnel' | 'stats' | 'general' | 'comparison' {
   const lower = message.toLowerCase();
 
   // ============================================================
@@ -104,6 +104,28 @@ function classifyQuestion(message: string): 'specific' | 'stats' | 'general' | '
   ];
   if (countSummaryPatterns.some(p => p.test(lower))) return 'stats';
 
+  // ============================================================
+  // Personnel/pegawai questions → 'personnel' (NOT 'specific'!)
+  // These are about org structure, not fishery data.
+  // Using compact context + KB focus keeps prompt small and avoids Groq 413.
+  // ============================================================
+  const personnelPatterns = [
+    /jabatan/i, /pegawai/i, /karyawan/i, /staff/i, /staf/i,
+    /pangkat/i, /golongan/i, /unit\s+kerja/i,
+    /kepala\s+(dinas|bidang|seksi|sub)/i, /kabid/i, /kasubid/i, /kasi/i,
+    /eselon/i, /nip/i,
+    // Person-name patterns: "siapa hasto", "apa jabatan X", "nama Arifin"
+    /siapa\s+[A-Z]/i, /jabatan\s+[A-Z]/i,
+  ];
+  // Also check for person names (capitalized multi-word entities)
+  const hasPersonName = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b/.test(message);
+  // Check if question is about org structure even without person name
+  const isOrgQuestion = /kepala\s+(dinas|bidang|seksi|sub|dpa)|struktur\s+organisasi/i.test(lower);
+  if (personnelPatterns.some(p => p.test(lower)) || isOrgQuestion ||
+      (hasPersonName && /jabatan|pegawai|staf|golongan|pangkat|dinas|bidang/i.test(lower))) {
+    return 'personnel';
+  }
+
   // Specific group/farmer questions — these need individual member details
   const specificPatterns = [
     /anggota\s+kelompok/i, /pembudidaya\s+\w+/i,
@@ -120,10 +142,9 @@ function classifyQuestion(message: string): 'specific' | 'stats' | 'general' | '
     /perorangan/i, /pembenih\s+perorangan/i, /nama\s+pembudidaya/i,
     /alamat\s+pembudidaya/i,
     /status\s+kusuka/i, /draf\s+kusuka/i, /valid\s+kusuka/i,
-    // Pegawai/person-specific patterns — these need KB search
-    /jabatan/i, /pegawai/i, /karyawan/i, /staff/i, /staf/i,
-    /pangkat/i, /golongan/i, /unit\s+kerja/i, /bidang/i,
-    /nama\s+\w+/i,  // "nama Roni" pattern
+    // "bidang" alone (without personnel context) is a sector question
+    /bidang/i,
+    /nama\s+\w+/i,  // "nama Roni" pattern — still specific for fishery names
   ];
   if (specificPatterns.some(p => p.test(lower))) return 'specific';
 
@@ -1738,8 +1759,8 @@ export async function POST(request: NextRequest) {
 
     // If question context detected a comparison but classifyQuestion didn't catch it,
     // upgrade the question type to 'comparison'
-    const effectiveQuestionType: 'specific' | 'stats' | 'general' | 'comparison' =
-      (questionCtx.isComparison && questionType !== 'specific') ? 'comparison' : questionType;
+    const effectiveQuestionType: 'specific' | 'personnel' | 'stats' | 'general' | 'comparison' =
+      (questionCtx.isComparison && questionType !== 'specific' && questionType !== 'personnel') ? 'comparison' : questionType;
 
     // Build context header to let the AI know what scope was auto-detected
     const contextHeader = buildContextHeader(questionCtx);
@@ -1776,6 +1797,7 @@ export async function POST(request: NextRequest) {
     // - 'stats': Summary + business type breakdown + kecamatan list (~2K chars)
     // - 'specific': Full data context + targeted results — largest, but still limited
     // - 'comparison': Multi-year comparison context
+    // - 'personnel': Compact context + KB focus (pegawai/jabatan questions)
     let totalGroups = 0;
     if (effectiveQuestionType === 'comparison') {
       // For comparison questions, load multi-year comparison context
@@ -1785,6 +1807,17 @@ export async function POST(request: NextRequest) {
       const kusukaContext = await fetchKusukaDataContext();
       systemPrompt += kusukaContext;
       totalGroups = 0; // comparison spans multiple years
+    } else if (effectiveQuestionType === 'personnel') {
+      // For personnel/pegawai questions, use COMPACT context — no fishery data needed
+      // The relevant data is in the Knowledge Base, not in fishery production stats
+      const resolvedYear = resolvedFilters.years.length > 0
+        ? parseInt(resolvedFilters.years[0], 10)
+        : undefined;
+      const compactContext = await fetchCompactDataContext(resolvedYear);
+      systemPrompt += compactContext.dataContext;
+      totalGroups = compactContext.totalGroups;
+      // Add hint for AI to focus on KB data
+      systemPrompt += '\n\n⚠️ Pertanyaan ini tentang pegawai/organisasi. Data utama ada di BASIS PENGETAHUAN — gunakan sebagai sumber UTAMA.';
     } else if (effectiveQuestionType === 'general') {
       // For general/greeting questions, only include compact summary stats
       // Use resolved year from question context if available
@@ -1811,7 +1844,8 @@ export async function POST(request: NextRequest) {
 
     // Add KUSUKA data context for stats and specific questions only
     // (general/greeting questions don't need KUSUKA details, comparison already includes it)
-    if (effectiveQuestionType !== 'general' && effectiveQuestionType !== 'comparison') {
+    // Personnel questions also don't need KUSUKA details
+    if (effectiveQuestionType !== 'general' && effectiveQuestionType !== 'comparison' && effectiveQuestionType !== 'personnel') {
       const kusukaContext = await fetchKusukaDataContext();
       systemPrompt += kusukaContext;
     }
@@ -1842,10 +1876,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Search Knowledge Base for relevant content
-    // Use MORE results for KUSUKA questions (KB may have raw KUSUKA data)
+    // Use MORE results for personnel/KUSUKA questions (KB may have raw data)
     const isKusukaQuestion = /kusuka|kartu\s+usaha|registrasi/i.test(message);
-    const kbMaxResults = isKusukaQuestion ? 12 : 8;
-    const kbMaxPerDoc = isKusukaQuestion ? 5 : 3;
+    const isPersonnelQuestion = effectiveQuestionType === 'personnel';
+    const kbMaxResults = isPersonnelQuestion ? 15 : isKusukaQuestion ? 12 : 8;
+    const kbMaxPerDoc = isPersonnelQuestion ? 8 : isKusukaQuestion ? 5 : 3;
     let kbSearchResults: string[] = [];
     try {
       // Primary search with the full message
@@ -1854,7 +1889,7 @@ export async function POST(request: NextRequest) {
       // If we have search terms (like person names), also do a targeted search
       if (searchTerms.length > 0) {
         const entitySearchQuery = searchTerms.join(' ');
-        const entityResults = await searchKnowledgeBase(entitySearchQuery, isKusukaQuestion ? 8 : 5, kbMaxPerDoc);
+        const entityResults = await searchKnowledgeBase(entitySearchQuery, isPersonnelQuestion ? 10 : isKusukaQuestion ? 8 : 5, kbMaxPerDoc);
         // Merge results (avoid duplicates)
         const existingContents = new Set(kbSearchResults.map(r => r.substring(0, 100)));
         for (const result of entityResults) {
@@ -1877,6 +1912,24 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // For personnel questions, also try searching each name component individually
+      if (isPersonnelQuestion && searchTerms.length > 0) {
+        for (const term of searchTerms) {
+          const nameParts = term.split(/\s+/);
+          for (const part of nameParts) {
+            if (part.length > 2) {
+              const partResults = await searchKnowledgeBase(part, 5, 3);
+              const existingContents = new Set(kbSearchResults.map(r => r.substring(0, 100)));
+              for (const result of partResults) {
+                if (!existingContents.has(result.substring(0, 100))) {
+                  kbSearchResults.push(result);
+                }
+              }
+            }
+          }
+        }
+      }
+
       if (kbSearchResults.length > 0) {
         const kbContent = `\n\n=== DATA RELEVAN DARI BASIS PENGETAHUAN (${kbSearchResults.length} hasil) ===\n⚠️ INSTRUKSI: Gunakan data di bawah ini sebagai sumber UTAMA jika relevan dengan pertanyaan. Baca dengan teliti, jangan lewatkan detail.\n\n${kbSearchResults.join("\n\n---\n\n")}\n=== AKHIR DATA BASIS PENGETAHUAN ===\n`;
         systemPrompt += kbContent;
@@ -1887,9 +1940,10 @@ export async function POST(request: NextRequest) {
 
     // Add targeted results for specific questions (group/farmer details with member names)
     // These are the VERBOSE parts that can blow past token limits
+    // NOTE: Personnel questions DON'T need fishery targeted results — only KB data
     let targetedResults = '';
     let kusukaTargetedResults = '';
-    if (effectiveQuestionType === 'specific' || searchTerms.length > 0) {
+    if (effectiveQuestionType === 'specific' || (searchTerms.length > 0 && effectiveQuestionType !== 'personnel')) {
       // Pass resolved filters so targeted results also use question-aware year/kecamatan
       targetedResults = await fetchTargetedResults(searchTerms, effectiveQuestionType, resolvedFilters);
       kusukaTargetedResults = await fetchKusukaTargetedResults(searchTerms, effectiveQuestionType);
@@ -1897,9 +1951,9 @@ export async function POST(request: NextRequest) {
 
     // ============================================================
     // PROMPT SIZE LIMIT ENFORCEMENT
-    // If the prompt exceeds MAX_PROMPT_CHARS, strategically remove
-    // the most verbose parts to stay within limits.
-    // Priority: keep summaries, remove individual details.
+    // Strategy: Add targeted results, then apply GLOBAL size limit.
+    // Priority for personnel: keep KB content, truncate fishery data.
+    // Priority for others: keep summaries, truncate individual details.
     // ============================================================
     let wasTruncated = false;
     const promptBeforeTargeted = systemPrompt.length;
@@ -1945,6 +1999,34 @@ export async function POST(request: NextRequest) {
         if (remainingBudget > 200) {
           systemPrompt += targetedResults.substring(0, remainingBudget);
         }
+        wasTruncated = true;
+      }
+    }
+
+    // ============================================================
+    // GLOBAL PROMPT SIZE ENFORCEMENT
+    // After adding everything (including KB results), ensure total
+    // prompt stays within MAX_PROMPT_CHARS. This catches cases where
+    // KB search results push the prompt past the limit.
+    // For personnel questions: prioritize KB content, trim fishery data.
+    // For other questions: prioritize fishery data, trim KB content.
+    // ============================================================
+    if (systemPrompt.length > MAX_PROMPT_CHARS) {
+      if (isPersonnelQuestion) {
+        // For personnel questions, KB content is MORE important than fishery data
+        // Find and trim the DATA CONTEXT section (fishery data), keep KB content
+        const dataCtxMatch = systemPrompt.match(/=== DATA CONTEXT \(WAJIB[\s\S]*?=== DATA RELEVAN DARI BASIS PENGETAHUAN/);
+        if (dataCtxMatch) {
+          // Replace the fishery data context with a compact note
+          const beforeDataContext = systemPrompt.substring(0, systemPrompt.indexOf('=== DATA CONTEXT (WAJIB'));
+          const afterDataContext = systemPrompt.substring(systemPrompt.indexOf('=== DATA RELEVAN DARI BASIS PENGETAHUAN'));
+          systemPrompt = beforeDataContext + '\n=== DATA CONTEXT (Ringkasan) ===\nData perikanan dipangkas untuk fokus pada data pegawai.\n\n' + afterDataContext;
+        }
+      }
+
+      // If still too long, truncate from the end (KB content is at the end for non-personnel)
+      if (systemPrompt.length > MAX_PROMPT_CHARS) {
+        systemPrompt = systemPrompt.substring(0, MAX_PROMPT_CHARS - TRUNCATION_NOTE.length) + TRUNCATION_NOTE;
         wasTruncated = true;
       }
     }
