@@ -99,7 +99,7 @@ async function getModel(envVarName: string, dbSettingKey: string): Promise<strin
  * Returns config object if env vars are set, null otherwise.
  *
  * Environment variables (for Vercel / production deployment):
- * - ZAI_BASE_URL: API base URL (e.g., https://chat.z.ai/api/v1)
+ * - ZAI_BASE_URL: API base URL (e.g., https://api.z.ai/api/v1)
  * - ZAI_API_KEY: API key for authentication
  * - ZAI_CHAT_ID: (optional) Chat session ID
  * - ZAI_USER_ID: (optional) User ID

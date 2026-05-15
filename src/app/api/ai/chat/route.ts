@@ -3,7 +3,7 @@ import { callAI } from '@/lib/ai-sdk';
 import { retrieveMemories, storeMemories, extractMemoriesFromConversation, formatMemoriesForPrompt, clearMemories } from '@/lib/ai-memory';
 import { db } from '@/lib/db';
 import { generateFarmerId } from '@/lib/farmer-id';
-import { searchKnowledgeBase, getKnowledgeBaseContext, countMatchingChunks, countUniquePegawai } from "@/lib/knowledge-base";
+import { searchKnowledgeBase, getKnowledgeBaseContext, countMatchingChunks, countUniquePegawai, getAllPegawaiChunks } from "@/lib/knowledge-base";
 
 /**
  * Compact system prompt for SIPBD AI assistant.
@@ -1927,33 +1927,51 @@ export async function POST(request: NextRequest) {
     const kbMaxResults = isPersonnelQuestion ? 50 : isKusukaQuestion ? 12 : 8;
     const kbMaxPerDoc = isPersonnelQuestion ? 50 : isKusukaQuestion ? 5 : 3;
     let kbSearchResults: string[] = [];
-    let totalKbMatchingChunks = 0; // Track total matching chunks (before document diversity limit)
+    let totalPegawaiCount = 0; // Definitive pegawai count from countUniquePegawai()
     try {
-      // Primary search with the full message
-      kbSearchResults = await searchKnowledgeBase(message, kbMaxResults, kbMaxPerDoc);
-
-      // For personnel questions, also count total matching chunks for accurate count
-      // This prevents the AI from undercounting when results are truncated
+      // ============================================================
+      // PERSONNEL QUESTIONS: Use getAllPegawaiChunks() as PRIMARY source
+      // This ensures we get ALL chunks from pegawai documents, not just
+      // keyword-matched ones. Keyword search often misses chunks that
+      // don't contain "pegawai" but have employee data (numbered lists).
+      // ============================================================
       if (isPersonnelQuestion) {
-        try {
-          totalKbMatchingChunks = await countMatchingChunks(message);
-          // Also count unique pegawai names for more accuracy
-          const uniquePegawaiCount = await countUniquePegawai();
-          // Use the LARGER of the two counts — unique names is more accurate for
-          // "berapa pegawai" questions, while matching chunks is better for search
-          if (uniquePegawaiCount > totalKbMatchingChunks) {
-            totalKbMatchingChunks = uniquePegawaiCount;
-          }
-          console.log(`[AI Chat] Personnel KB search: ${kbSearchResults.length} results returned, ${totalKbMatchingChunks} total (chunks+unique names)`);
-        } catch {
-          // Ignore count errors — not critical
+        // Step 1: Get ALL chunks from pegawai-related documents (most reliable)
+        const allPegawaiChunks = await getAllPegawaiChunks();
+        if (allPegawaiChunks.length > 0) {
+          kbSearchResults = allPegawaiChunks;
+          console.log(`[AI Chat] Personnel: using getAllPegawaiChunks() → ${allPegawaiChunks.length} chunks`);
         }
+
+        // Step 2: Get accurate pegawai count
+        try {
+          totalPegawaiCount = await countUniquePegawai();
+          console.log(`[AI Chat] Personnel: countUniquePegawai() → ${totalPegawaiCount}`);
+        } catch {
+          // Ignore count errors
+        }
+
+        // Step 3: Also do keyword search for specific names mentioned in the question
+        // (e.g., "jabatan Hasto Priyarso" → search for "Hasto Priyarso")
+        if (searchTerms.length > 0) {
+          const entitySearchQuery = searchTerms.join(' ');
+          const entityResults = await searchKnowledgeBase(entitySearchQuery, 15, 50);
+          const existingContents = new Set(kbSearchResults.map(r => r.substring(0, 100)));
+          for (const result of entityResults) {
+            if (!existingContents.has(result.substring(0, 100))) {
+              kbSearchResults.push(result);
+            }
+          }
+        }
+      } else {
+        // Non-personnel: regular keyword search
+        kbSearchResults = await searchKnowledgeBase(message, kbMaxResults, kbMaxPerDoc);
       }
 
-      // If we have search terms (like person names), also do a targeted search
-      if (searchTerms.length > 0) {
+      // If we have search terms (like person names), also do a targeted search (non-personnel)
+      if (!isPersonnelQuestion && searchTerms.length > 0) {
         const entitySearchQuery = searchTerms.join(' ');
-        const entityResults = await searchKnowledgeBase(entitySearchQuery, isPersonnelQuestion ? 15 : isKusukaQuestion ? 8 : 5, kbMaxPerDoc);
+        const entityResults = await searchKnowledgeBase(entitySearchQuery, isKusukaQuestion ? 8 : 5, kbMaxPerDoc);
         // Merge results (avoid duplicates)
         const existingContents = new Set(kbSearchResults.map(r => r.substring(0, 100)));
         for (const result of entityResults) {
@@ -1976,47 +1994,13 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // For personnel questions, also try searching each name component individually
-      if (isPersonnelQuestion && searchTerms.length > 0) {
-        for (const term of searchTerms) {
-          const nameParts = term.split(/\s+/);
-          for (const part of nameParts) {
-            if (part.length > 2) {
-              const partResults = await searchKnowledgeBase(part, 5, 3);
-              const existingContents = new Set(kbSearchResults.map(r => r.substring(0, 100)));
-              for (const result of partResults) {
-                if (!existingContents.has(result.substring(0, 100))) {
-                  kbSearchResults.push(result);
-                }
-              }
-            }
-          }
-        }
-      }
-
-      // For personnel questions, also do a broad search for ALL pegawai-related data
-      // This ensures we get complete employee listings even if the user's specific
-      // query terms don't match all chunks
-      if (isPersonnelQuestion) {
-        const broadSearchTerms = ['pegawai dinas', 'data pegawai', 'struktur organisasi', 'daftar pegawai'];
-        for (const term of broadSearchTerms) {
-          const broadResults = await searchKnowledgeBase(term, 10, 15);
-          const existingContents = new Set(kbSearchResults.map(r => r.substring(0, 100)));
-          for (const result of broadResults) {
-            if (!existingContents.has(result.substring(0, 100))) {
-              kbSearchResults.push(result);
-            }
-          }
-        }
-      }
-
       if (kbSearchResults.length > 0) {
         // Build the KB content with total count metadata for personnel questions
         // This is CRITICAL for accurate counting — if we have 28 employees but
         // only 20 fit in the prompt, the AI needs to know the total is 28
         let kbHeader: string;
-        if (isPersonnelQuestion && totalKbMatchingChunks > 0) {
-          kbHeader = `\n\n=== DATA RELEVAN DARI BASIS PENGETAHUAN (${kbSearchResults.length} hasil dari total ${totalKbMatchingChunks} data yang cocok) ===\n⚠️ INSTRUKSI SANGAT PENTING UNTUK PENGHITUNGAN:\n- TOTAL data pegawai yang cocok di Basis Pengetahuan: ${totalKbMatchingChunks} orang.\n- Jika ditanya "berapa jumlah pegawai", jawab: ${totalKbMatchingChunks} orang — BUKAN jumlah baris di bawah.\n- JANGAN menghitung manual dari daftar di bawah — gunakan angka total: ${totalKbMatchingChunks}.\n- Data di bawah adalah detail pegawai, hitung dari ANGKA TOTAL di atas.\n- Gunakan data di bawah sebagai sumber UTAMA untuk detail (nama, jabatan, dll).\n\n`;
+        if (isPersonnelQuestion && totalPegawaiCount > 0) {
+          kbHeader = `\n\n=== DATA PEGAWAI DARI BASIS PENGETAHUAN (${kbSearchResults.length} data) ===\n🔴 INSTRUKSI WAJIB UNTUK PENGHITUNGAN PEGAWAI:\n- JUMLAH PEGAWAI TOTAL: ${totalPegawaiCount} orang.\n- Jika ditanya "berapa jumlah pegawai", jawab TEPAT: ${totalPegawaiCount} orang.\n- JANGAN menghitung manual dari daftar di bawah — angka total sudah dihitung otomatis oleh sistem.\n- Data di bawah adalah detail lengkap pegawai (nama, jabatan, golongan, dll).\n- Gunakan data di bawah untuk menjawab pertanyaan detail (siapa saja, jabatan siapa, dll).\n\n`;
         } else {
           kbHeader = `\n\n=== DATA RELEVAN DARI BASIS PENGETAHUAN (${kbSearchResults.length} hasil) ===\n⚠️ INSTRUKSI: Gunakan data di bawah ini sebagai sumber UTAMA jika relevan dengan pertanyaan. Baca dengan teliti, jangan lewatkan detail.\n\n`;
         }

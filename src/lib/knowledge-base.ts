@@ -407,6 +407,11 @@ export async function countMatchingChunks(query: string): Promise<number> {
  * Searches all active chunks for patterns matching pegawai data
  * (numbered lists, NIP patterns, name+position patterns).
  * Returns count of unique person names found.
+ * 
+ * IMPORTANT: Previous version only matched multi-word names (2+ capitalized words),
+ * missing single-word names like "Sulastri", "Widodo", "Arifin".
+ * This version uses "NUMBER. NAME - POSITION" format (with dash separator)
+ * to reliably extract names including single-word ones.
  */
 export async function countUniquePegawai(): Promise<number> {
   const chunks = await db.knowledgeChunk.findMany({
@@ -419,38 +424,140 @@ export async function countUniquePegawai(): Promise<number> {
   });
 
   const names = new Set<string>();
+  let maxNumberedEntry = 0;
 
   for (const chunk of chunks) {
     const content = chunk.content;
     
-    // Pattern 1: Numbered entries like "1. Nama" or "1. NIP"
-    // Common in pegawai listings
-    const numberedPattern = /^\s*\d+[\.\)]\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/gm;
+    // Method 1: Extract names from "NUMBER. NAME - POSITION" format
+    // This is the most reliable pattern for structured pegawai listings.
+    // Captures everything between the number and the first " - " separator.
+    // Examples:
+    //   "1. Sulastri - Pengadministrasi Persuratan" → "Sulastri"
+    //   "2. Arifin, S.Pd.SD,.M.Pd - Kepala Dinas" → "Arifin"
+    //   "18. Ir. M. Iqbal Suparta. MT - Sekretaris" → "Ir. M. Iqbal Suparta. MT"
+    const numberedNameDashPattern = /^\s*(\d+)[\.\)]\s+(.+?)\s+-/gm;
     let match;
-    while ((match = numberedPattern.exec(content)) !== null) {
-      const name = match[1].trim();
+    while ((match = numberedNameDashPattern.exec(content)) !== null) {
+      const entryNum = parseInt(match[1], 10);
+      if (entryNum > maxNumberedEntry) maxNumberedEntry = entryNum;
+      
+      let namePart = match[2].trim();
+      // Remove common title prefixes: Ir., Drs., Dra., Dr., H., Hj.
+      namePart = namePart.replace(/^(Ir\.\s*|Drs\.\s*|Dra\.\s*|Dr\.\s*|H\.\s*|Hj\.\s*)/i, '');
+      // Remove suffixes with degrees after comma: "Arifin, S.Pd.SD,.M.Pd" → "Arifin"
+      namePart = namePart.replace(/[,，].*$/, '');
+      // Remove abbreviation suffixes after period+space: "M. Iqbal Suparta. MT" → "M. Iqbal Suparta"
+      namePart = namePart.replace(/\.\s+[A-Z]{2,}.*$/, '');
+      namePart = namePart.trim();
+      
       // Filter out common non-name words
-      if (!/^(Dinas|Kepala|Bidang|Seksi|Sub|Bagian|Daerah|Kabupaten|Kecamatan|Desa)/.test(name)) {
-        names.add(name);
+      if (namePart.length > 1 && 
+          !/^(Dinas|Kepala|Bidang|Seksi|Sub|Bagian|Daerah|Kabupaten|Kecamatan|Desa|Provinsi)/.test(namePart)) {
+        names.add(namePart.toLowerCase());
       }
     }
 
-    // Pattern 2: Name after "Nama" label
-    const namaPattern = /Nama\s*[:\-]\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/g;
-    while ((match = namaPattern.exec(content)) !== null) {
-      const name = match[1].trim();
-      names.add(name);
+    // Method 2: Numbered entries WITHOUT dash separator
+    // Fallback for formats like "1. Sulastri, Pengadministrasi" (comma instead of dash)
+    const numberedNameCommaPattern = /^\s*(\d+)[\.\)]\s+([A-Z][a-z]+(?:\s+[A-Z]?[a-z]+)*)/gm;
+    while ((match = numberedNameCommaPattern.exec(content)) !== null) {
+      const entryNum = parseInt(match[1], 10);
+      if (entryNum > maxNumberedEntry) maxNumberedEntry = entryNum;
+      
+      let namePart = match[2].trim();
+      // Remove title prefixes
+      namePart = namePart.replace(/^(Ir\.\s*|Drs\.\s*|Dra\.\s*|Dr\.\s*|H\.\s*|Hj\.\s*)/i, '');
+      namePart = namePart.trim();
+      
+      if (namePart.length > 1 && 
+          !/^(Dinas|Kepala|Bidang|Seksi|Sub|Bagian|Daerah|Kabupaten|Kecamatan|Desa|Provinsi)/.test(namePart)) {
+        names.add(namePart.toLowerCase());
+      }
     }
 
-    // Pattern 3: Names with NIP nearby (pegawai identifier)
-    const nipPattern = /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\s*[\|\,\;]?\s*(?:NIP|nip)/g;
+    // Method 3: Name after "Nama" label
+    const namaPattern = /Nama\s*[:\-]\s*([A-Z][a-z]+(?:\s+[A-Z]?[a-z]+)*)/g;
+    while ((match = namaPattern.exec(content)) !== null) {
+      let name = match[1].trim();
+      name = name.replace(/^(Ir\.\s*|Drs\.\s*|Dra\.\s*|Dr\.\s*|H\.\s*|Hj\.\s*)/i, '');
+      name = name.replace(/[,，].*$/, '');
+      if (name.length > 1) names.add(name.toLowerCase());
+    }
+
+    // Method 4: Names with NIP nearby (pegawai identifier)
+    const nipPattern = /([A-Z][a-z]+(?:\s+[A-Z]?[a-z]+)*)\s*[\|\,\;]?\s*(?:NIP|nip)/g;
     while ((match = nipPattern.exec(content)) !== null) {
-      const name = match[1].trim();
-      names.add(name);
+      let name = match[1].trim();
+      name = name.replace(/^(Ir\.\s*|Drs\.\s*|Dra\.\s*|Dr\.\s*|H\.\s*|Hj\.\s*)/i, '');
+      if (name.length > 1 && 
+          !/^(Dinas|Kepala|Bidang|Seksi|Sub|Bagian|Daerah|Kabupaten|Kecamatan|Desa|Provinsi)/.test(name)) {
+        names.add(name.toLowerCase());
+      }
     }
   }
 
-  return names.size;
+  // Return the MAX of unique names count and highest numbered entry.
+  // The highest numbered entry is very reliable for structured pegawai listings
+  // (e.g., if the list goes 1-28, maxNumberedEntry=28 is the correct count).
+  // Unique names may undercount if name extraction misses some entries.
+  const count = Math.max(names.size, maxNumberedEntry > 0 ? maxNumberedEntry : 0);
+  console.log(`[KB] countUniquePegawai: uniqueNames=${names.size}, maxNumberedEntry=${maxNumberedEntry}, result=${count}`);
+  return count;
+}
+
+/**
+ * Get ALL chunks from employee/pegawai-related documents.
+ * This is used for personnel questions where keyword-based search may miss
+ * chunks that don't contain the exact search terms.
+ * 
+ * Returns all chunks from documents whose title or category suggests
+ * they contain employee/pegawai data.
+ */
+export async function getAllPegawaiChunks(): Promise<string[]> {
+  // Find documents that are likely to contain employee data
+  const pegawaiDocs = await db.knowledgeDocument.findMany({
+    where: {
+      isActive: true,
+      OR: [
+        { title: { contains: 'pegawai', mode: 'insensitive' } },
+        { title: { contains: 'struktur', mode: 'insensitive' } },
+        { title: { contains: 'organisasi', mode: 'insensitive' } },
+        { title: { contains: 'karyawan', mode: 'insensitive' } },
+        { title: { contains: 'kepegawaian', mode: 'insensitive' } },
+        { category: { contains: 'umum', mode: 'insensitive' } },
+        { category: { contains: 'pegawai', mode: 'insensitive' } },
+        { category: { contains: 'organisasi', mode: 'insensitive' } },
+      ],
+    },
+    select: { id: true, title: true, category: true },
+  });
+
+  if (pegawaiDocs.length === 0) return [];
+
+  const docIds = pegawaiDocs.map(d => d.id);
+  
+  // Get ALL chunks from these documents
+  const chunks = await db.knowledgeChunk.findMany({
+    where: {
+      documentId: { in: docIds },
+      document: { isActive: true },
+    },
+    include: {
+      document: { select: { title: true, category: true } },
+    },
+    orderBy: [
+      { documentId: 'asc' },
+      { chunkIndex: 'asc' },
+    ],
+  });
+
+  console.log(`[KB] getAllPegawaiChunks: found ${pegawaiDocs.length} pegawai docs, ${chunks.length} total chunks`);
+
+  return chunks.map(
+    (chunk) =>
+      `[Sumber: ${chunk.document.title} (${chunk.document.category})${chunk.source ? ` - ${chunk.source}` : ""}]\n${chunk.content}`
+  );
 }
 
 /**
