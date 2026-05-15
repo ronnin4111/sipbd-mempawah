@@ -8,6 +8,7 @@ import {
   BarChart, Bar,
 } from 'recharts';
 import { useFishFarmStats } from '@/hooks/use-fish-farms';
+import { useFilterStore } from '@/store/filter-store';
 import { BarChart3, TrendingUp, PieChart as PieChartIcon } from 'lucide-react';
 
 const CHART_COLORS = [
@@ -518,7 +519,9 @@ function ProduksiChart() {
 
 function ProduksiKecamatanChart() {
   const { data: stats } = useFishFarmStats();
-  const [viewBy, setViewBy] = useState<KecamatanViewBy>('produksi');
+  const kecamatanChartSegment = useFilterStore((s) => s.kecamatanChartSegment);
+  const setKecamatanChartSegment = useFilterStore((s) => s.setKecamatanChartSegment);
+  const viewBy = (kecamatanChartSegment || 'produksi') as KecamatanViewBy;
 
   if (!stats) return null;
 
@@ -668,7 +671,7 @@ function ProduksiKecamatanChart() {
           <SelectorButton
             options={KECAMATAN_VIEWS}
             value={viewBy}
-            onChange={(v) => setViewBy(v as KecamatanViewBy)}
+            onChange={(v) => setKecamatanChartSegment(v)}
           />
           {unitLabel && (
             <p className="text-[10px] mt-1.5 italic" style={{ color: 'var(--muted-foreground)' }}>
@@ -760,7 +763,8 @@ export function PdfDashboardCharts() {
   const [trendViewBy, setTrendViewBy] = useState<TrendViewBy>('jenis-usaha');
   const [produksiViewBy, setProduksiViewBy] = useState<ProduksiViewBy>('jenis-ikan');
   const [produksiChartType, setProduksiChartType] = useState<ChartType>('bar');
-  const [kecamatanViewBy, setKecamatanViewBy] = useState<KecamatanViewBy>('produksi');
+  const kecamatanChartSegment = useFilterStore((s) => s.kecamatanChartSegment);
+  const kecamatanViewBy = (kecamatanChartSegment || 'produksi') as KecamatanViewBy;
 
   if (!stats) return null;
 
@@ -871,6 +875,13 @@ export function PdfDashboardCharts() {
   }
 
   const kecTitle = 'Produksi per Kecamatan';
+
+  // Sort kecData by total descending (same as visible chart)
+  kecData.sort((a, b) => {
+    const totalA = kecSeries.reduce((s, ser) => s + ((a[ser.key] as number) || 0), 0);
+    const totalB = kecSeries.reduce((s, ser) => s + ((b[ser.key] as number) || 0), 0);
+    return totalB - totalA;
+  });
 
   const pdfTextStyle = { fill: '#1A2332', fontSize: 11 };
   const pdfGridStyle = { stroke: '#E0E0E0', strokeDasharray: '3 3' };
@@ -1007,8 +1018,45 @@ export function PdfDashboardCharts() {
 
       {/* Produksi Kecamatan Chart for PDF */}
       <div id="pdf-chart-produksi-kecamatan" style={{ background: '#FFFFFF', padding: 20, width: 900, marginBottom: 16 }}>
-        <h3 style={{ color: '#1A2332', fontSize: 14, fontWeight: 'bold', marginBottom: 8, fontFamily: 'sans-serif' }}>{kecTitle}</h3>
+        <h3 style={{ color: '#1A2332', fontSize: 14, fontWeight: 'bold', marginBottom: 8, fontFamily: 'sans-serif' }}>
+          {kecTitle} — {KECAMATAN_VIEWS.find(v => v.id === kecamatanViewBy)?.label ?? kecamatanViewBy}
+        </h3>
         {renderPdfKecamatanChart()}
+        {/* Data Summary Table for PDF */}
+        {(kecamatanViewBy !== 'produksi' && kecamatanViewBy !== 'jenis-usaha') && kecSeries.length > 0 && (
+          <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 12, fontSize: 10, fontFamily: 'sans-serif' }}>
+            <thead>
+              <tr style={{ borderBottom: '2px solid #ccc' }}>
+                <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 600, color: '#333' }}>Kecamatan</th>
+                {kecSeries.map(s => (
+                  <th key={s.key} style={{ textAlign: 'right', padding: '4px 8px', fontWeight: 600, color: s.color, whiteSpace: 'nowrap' }}>{s.name}</th>
+                ))}
+                <th style={{ textAlign: 'right', padding: '4px 8px', fontWeight: 700, color: '#333' }}>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {kecData.map((row, idx) => {
+                const total = kecSeries.reduce((sum, s) => sum + ((row[s.key] as number) || 0), 0);
+                return (
+                  <tr key={row.name as string} style={{ borderBottom: '1px solid #e0e0e0', background: idx % 2 === 0 ? '#fff' : '#f8f8f8' }}>
+                    <td style={{ padding: '3px 8px', fontWeight: 500, color: '#333' }}>{row.name as string}</td>
+                    {kecSeries.map(s => {
+                      const val = (row[s.key] as number) || 0;
+                      return (
+                        <td key={s.key} style={{ textAlign: 'right', padding: '3px 8px', fontVariantNumeric: 'tabular-nums', color: val > 0 ? '#333' : '#aaa' }}>
+                          {val > 0 ? new Intl.NumberFormat('id-ID').format(val) : '-'}
+                        </td>
+                      );
+                    })}
+                    <td style={{ textAlign: 'right', padding: '3px 8px', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: '#06B6D4' }}>
+                      {new Intl.NumberFormat('id-ID').format(total)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {/* Legacy IDs for backward compatibility with PDF export dialog */}
