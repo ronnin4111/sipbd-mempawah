@@ -119,7 +119,7 @@ export default function MapInner() {
       zoom: 10,
       scrollWheelZoom: true,
       minZoom: 8,
-      maxZoom: 18,
+      maxZoom: 20,
     });
 
     const streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -127,12 +127,32 @@ export default function MapInner() {
       maxZoom: 19,
     });
 
-    const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    // Google Maps satellite tiles — generally more recent imagery (2024-2026)
+    const googleSatelliteLayer = L.tileLayer('https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+      subdomains: ['0', '1', '2', '3'],
+      attribution: '&copy; Google Maps',
+      maxZoom: 20,
+    });
+
+    // Google Maps hybrid (satellite + labels)
+    const googleHybridLayer = L.layerGroup([
+      L.tileLayer('https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+        subdomains: ['0', '1', '2', '3'],
+        maxZoom: 20,
+      }),
+      L.tileLayer('https://mt{s}.google.com/vt/lyrs=h&x={x}&y={y}&z={z}', {
+        subdomains: ['0', '1', '2', '3'],
+        maxZoom: 20,
+      }),
+    ]);
+
+    // Esri World Imagery — alternative satellite source
+    const esriSatelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
       attribution: '&copy; Esri, Maxar, Earthstar Geographics',
       maxZoom: 19,
     });
 
-    const hybridLayer = L.layerGroup([
+    const esriHybridLayer = L.layerGroup([
       L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 }),
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, opacity: 0.4 }),
     ]);
@@ -144,8 +164,10 @@ export default function MapInner() {
 
     const baseLayers: Record<string, L.TileLayer | L.LayerGroup> = {
       'Peta Jalan': streetLayer,
-      'Satelit': satelliteLayer,
-      'Hybrid': hybridLayer,
+      'Satelit Google': googleSatelliteLayer,
+      'Hybrid Google': googleHybridLayer,
+      'Satelit Esri': esriSatelliteLayer,
+      'Hybrid Esri': esriHybridLayer,
       'Terrain': terrainLayer,
     };
 
