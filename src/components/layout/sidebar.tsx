@@ -1,39 +1,16 @@
 'use client';
 
 import {
-  LayoutDashboard,
-  Database,
-  Map,
-  TrendingUp,
-  DollarSign,
-  FileSpreadsheet,
-  ExternalLink,
   ChevronRight,
   X,
-  Split,
   Lock,
   LogOut,
   Shield,
-  CreditCard,
-  Brain,
 } from 'lucide-react';
 import { useFilterStore } from '@/store/filter-store';
 import { useTheme } from 'next-themes';
 import { useMounted } from '@/hooks/use-mounted';
-
-const menuItems = [
-  { id: 'dashboard', label: 'Ringkasan Produksi', icon: LayoutDashboard, description: 'Ringkasan & statistik', adminOnly: false },
-  { id: 'data-produksi', label: 'Data Pembudidaya', icon: Database, description: 'Tabel data lengkap', adminOnly: false },
-  { id: 'peta-lokasi', label: 'Peta Lokasi', icon: Map, description: 'Sebaran lokasi budidaya', adminOnly: false },
-  { id: 'tren-laporan', label: 'Tren & Laporan', icon: TrendingUp, description: 'Analisis tren produksi', adminOnly: false },
-  { id: 'tren-v2', label: 'Tren V2 (Triwulan)', icon: ExternalLink, description: 'Data tren versi triwulan', adminOnly: false },
-  { id: 'harga-komoditas', label: 'Harga Komoditas', icon: DollarSign, description: 'Daftar harga ikan', adminOnly: false },
-  { id: 'data-kusuka', label: 'Data KUSUKA', icon: CreditCard, description: 'Registrasi KUSUKA publik', adminOnly: false },
-  { id: 'knowledge-base', label: 'Basis Pengetahuan', icon: Brain, description: 'Upload dokumen untuk AI', adminOnly: false },
-  { id: 'disagregasi', label: 'Disagregasi Data', icon: Split, description: 'Distribusi data agregat', adminOnly: true },
-  { id: 'import-export', label: 'Import / Export', icon: FileSpreadsheet, description: 'Kelola data Excel/PDF', adminOnly: false },
-  { id: 'admin-login', label: 'Login Admin', icon: Lock, description: 'Akses fitur khusus admin', adminOnly: false },
-];
+import { NAV_ITEMS } from '@/lib/constants';
 
 interface SidebarProps {
   open: boolean;
@@ -50,9 +27,8 @@ export function Sidebar({ open, onClose }: SidebarProps) {
   const isDark = mounted ? theme === 'dark' : true;
 
   const handleMenuClick = (section: string) => {
-    const item = menuItems.find((m) => m.id === section);
+    const item = NAV_ITEMS.find((m) => m.id === section);
     if (item?.adminOnly && !isAdmin) {
-      // Redirect to admin login section instead of showing inline form
       setActiveSection('admin-login');
       onClose();
       return;
@@ -182,7 +158,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           >
             Navigasi
           </div>
-          {menuItems.map((item) => {
+          {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const isActive = activeSection === item.id;
             const isLocked = item.adminOnly && !isAdmin;
@@ -215,7 +191,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                 <Icon size={15} className="shrink-0" />
                 <div className="min-w-0 flex-1">
                   <span className="text-sm font-medium block truncate">
-                    {item.label}
+                    {item.labelLong}
                     {isLocked && <Lock className="h-3 w-3 inline ml-1.5" />}
                   </span>
                   <span className="block text-[10px] truncate" style={{ opacity: 0.6 }}>

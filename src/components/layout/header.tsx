@@ -7,22 +7,14 @@ import { useFilterStore } from '@/store/filter-store';
 import { useMounted } from '@/hooks/use-mounted';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { NAV_ITEMS } from '@/lib/constants';
 
 interface HeaderProps {
   onMenuClick: () => void;
 }
 
-const NAV_TABS = [
-  { id: 'dashboard', label: 'Dashboard', adminOnly: false },
-  { id: 'data-produksi', label: 'Data Pembudidaya', adminOnly: false },
-  { id: 'data-kusuka', label: 'Data KUSUKA', adminOnly: false },
-  { id: 'peta-lokasi', label: 'Peta Lokasi', adminOnly: false },
-  { id: 'tren-laporan', label: 'Tren & Laporan', adminOnly: false },
-  { id: 'tren-v2', label: 'Tren V2', adminOnly: false },
-  { id: 'harga-komoditas', label: 'Harga Komoditas', adminOnly: false },
-  { id: 'disagregasi', label: 'Disagregasi', adminOnly: true },
-  { id: 'import-export', label: 'Import / Export', adminOnly: false },
-];
+// Header tabs: all nav items except those marked headerHidden
+const NAV_TABS = NAV_ITEMS.filter((item) => !item.headerHidden);
 
 export function Header({ onMenuClick }: HeaderProps) {
   const { theme, setTheme } = useTheme();
@@ -64,7 +56,6 @@ export function Header({ onMenuClick }: HeaderProps) {
 
   const handleTabClick = (tab: typeof NAV_TABS[number]) => {
     if (tab.adminOnly && !isAdmin) {
-      // Show login form in header instead of opening sidebar
       setShowLoginForm(true);
       setShowAdminMenu(true);
       return;
