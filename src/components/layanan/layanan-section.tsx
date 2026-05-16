@@ -109,8 +109,8 @@ const LAYANAN_DATA: LayananData[] = [
       { question: 'Bagaimana jika kartu hilang atau rusak?', answer: 'Ajukan permohonan penggantian secara tertulis dengan melampirkan kartu yang rusak atau surat keterangan hilang dari kepolisian.' },
       { question: 'Siapa saja yang termasuk pelaku usaha?', answer: 'Nelayan, pembudidaya ikan, petambak garam, pengolah ikan, pemasar perikanan, dan penyedia jasa pengiriman produk KP.' },
     ],
-    externalLink: 'https://satudata.kkp.go.id/kusuka',
-    externalLabel: 'Daftar di Satu Data KKP',
+    externalLink: 'https://portaldata.kkp.go.id/register',
+    externalLabel: 'Daftar di Portal Data KKP',
   },
 
   // ── NIB (Nomor Induk Berusaha) ──────────────────────────────
