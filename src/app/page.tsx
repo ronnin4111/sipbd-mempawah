@@ -5,7 +5,6 @@ import dynamic from 'next/dynamic';
 import { AnimatePresence, motion } from 'framer-motion';
 import { AppShell } from '@/components/layout/app-shell';
 import { DashboardCharts } from '@/components/dashboard/charts';
-import { FilterBar } from '@/components/data-table/filter-bar';
 import { DataTable } from '@/components/data-table/data-table';
 import { MapView } from '@/components/map/map-view';
 import { ReportTables } from '@/components/tables/report-tables';
@@ -37,7 +36,6 @@ function DashboardSection() {
   return (
     <div className="space-y-6">
       <HeroBanner />
-      <FilterBar />
       <DashboardCharts />
       <AdminPanel />
       <SmartNarrator />
@@ -82,7 +80,6 @@ function DataProduksiSection() {
 
   return (
     <div className="space-y-4">
-      <FilterBar />
       <DataTable
         page={page}
         pageSize={pageSize}
@@ -96,7 +93,6 @@ function DataProduksiSection() {
 function PetaLokasiSection() {
   return (
     <div className="space-y-4">
-      <FilterBar />
       <MapView />
     </div>
   );
@@ -105,7 +101,6 @@ function PetaLokasiSection() {
 function TrenLaporanSection() {
   return (
     <div className="space-y-4">
-      <FilterBar />
       <ReportTables />
     </div>
   );

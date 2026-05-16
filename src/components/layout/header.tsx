@@ -7,6 +7,7 @@ import { useFilterStore } from '@/store/filter-store';
 import { useMounted } from '@/hooks/use-mounted';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { FilterBar } from '@/components/data-table/filter-bar';
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -362,6 +363,13 @@ export function Header({ onMenuClick }: HeaderProps) {
           })}
         </nav>
       </div>
+
+      {/* Filter Bar — only shown on sections that use filters */}
+      {['dashboard', 'data-produksi', 'peta-lokasi', 'tren-laporan'].includes(activeSection) && (
+        <div className="px-4 max-w-screen-2xl mx-auto">
+          <FilterBar compact />
+        </div>
+      )}
 
       {/* Bottom divider */}
       <div

@@ -90,7 +90,7 @@ function MultiSelectFilter({
   );
 }
 
-export function FilterBar() {
+export function FilterBar({ compact = false }: { compact?: boolean }) {
   const [isOpen, setIsOpen] = useState(false);
   const {
     years, kecamatan, desa, groupName, fishType, containerType, businessType, search,
@@ -169,14 +169,14 @@ export function FilterBar() {
   const filterCount = years.length + kecamatan.length + desa.length + groupName.length + fishType.length + containerType.length + businessType.length + (search.length > 0 ? 1 : 0);
 
   return (
-    <div className="glass-card overflow-hidden">
+    <div className={compact ? "overflow-hidden rounded-lg" : "glass-card overflow-hidden"}>
       {/* Filter Header - Toggle */}
       <div
         role="button"
         tabIndex={0}
         onClick={() => setIsOpen(!isOpen)}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setIsOpen(!isOpen); } }}
-        className="w-full flex items-center justify-between px-4 py-2.5 transition-colors hover:bg-accent/50 cursor-pointer"
+        className={`w-full flex items-center justify-between px-3 py-2 transition-colors cursor-pointer ${compact ? 'hover:bg-accent/30' : 'hover:bg-accent/50'}`}
       >
         <div className="flex items-center gap-2">
           <Filter className="h-4 w-4" style={{ color: '#06B6D4' }} />
