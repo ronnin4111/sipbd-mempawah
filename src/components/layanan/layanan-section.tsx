@@ -630,7 +630,7 @@ function LayananDetail({ data, isDark }: { data: LayananData; isDark: boolean })
         </CardContent>
       </Card>
 
-      {/* Info KUSUKA card mockup (only for E-KUSUKA) */}
+      {/* Contoh Kartu E-KUSUKA asli (only for E-KUSUKA) */}
       {data.id === 'layanan-ekusuka' && (
         <Card style={{ background: isDark ? 'linear-gradient(160deg, #0D1B2E, #0A1628)' : '#FFFFFF', border: `1px solid ${isDark ? `${data.accentColor}15` : `${data.accentColor}10`}` }}>
           <CardContent className="p-5 sm:p-6">
@@ -640,70 +640,18 @@ function LayananDetail({ data, isDark }: { data: LayananData; isDark: boolean })
             </div>
             <div className="flex justify-center">
               <div
-                className="w-full max-w-sm rounded-xl overflow-hidden"
+                className="w-full max-w-lg rounded-xl overflow-hidden"
                 style={{
-                  background: 'linear-gradient(135deg, #0F766E, #065F46)',
-                  boxShadow: `0 8px 32px rgba(16,185,129,0.3)`,
+                  boxShadow: `0 8px 32px rgba(16,185,129,0.2), 0 0 0 1px ${isDark ? 'rgba(16,185,129,0.15)' : 'rgba(16,185,129,0.1)'}`,
                 }}
               >
-                {/* Card Header */}
-                <div className="px-5 pt-5 pb-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.15)' }}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-[10px] text-white/60 uppercase tracking-widest">Republik Indonesia</p>
-                      <p className="text-xs font-bold text-white mt-0.5">Kementerian Kelautan dan Perikanan</p>
-                    </div>
-                    <QrCode className="h-6 w-6 text-white/40" />
-                  </div>
-                  <p className="text-[9px] text-emerald-300 mt-1 font-semibold tracking-wider">KARTU PELAKU USAHA KELAUTAN DAN PERIKANAN</p>
-                </div>
-                {/* Card Body */}
-                <div className="px-5 py-4 space-y-2.5">
-                  <div>
-                    <p className="text-[9px] text-white/50 uppercase tracking-wider">Nama</p>
-                    <p className="text-sm font-semibold text-white">JOHN PEMBUDIDAYA</p>
-                  </div>
-                  <div className="flex gap-6">
-                    <div>
-                      <p className="text-[9px] text-white/50 uppercase tracking-wider">NIK</p>
-                      <p className="text-xs text-white font-mono">6103************</p>
-                    </div>
-                    <div>
-                      <p className="text-[9px] text-white/50 uppercase tracking-wider">No. KUSUKA</p>
-                      <p className="text-xs text-white font-mono">KP-2024-XXXXX</p>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-[9px] text-white/50 uppercase tracking-wider">Profesi Utama</p>
-                    <p className="text-xs text-white">Pembudidaya Ikan</p>
-                  </div>
-                  <div className="flex gap-6">
-                    <div>
-                      <p className="text-[9px] text-white/50 uppercase tracking-wider">Alamat</p>
-                      <p className="text-xs text-white/80">Kab. Mempawah, Kalimantan Barat</p>
-                    </div>
-                    <div>
-                      <p className="text-[9px] text-white/50 uppercase tracking-wider">Masa Berlaku</p>
-                      <p className="text-xs text-white/80">5 Tahun</p>
-                    </div>
-                  </div>
-                </div>
-                {/* Card Footer */}
-                <div className="px-5 py-3 flex items-center justify-between" style={{ background: 'rgba(0,0,0,0.15)' }}>
-                  <div className="flex items-center gap-1.5">
-                    <Calendar className="h-3 w-3 text-white/50" />
-                    <p className="text-[9px] text-white/50">Diterbitkan: 2024</p>
-                  </div>
-                  <img
-                    src="/logo-mempawah.png"
-                    alt="Logo"
-                    className="h-6 w-auto object-contain rounded"
-                    style={{ background: 'rgba(255,255,255,0.9)', padding: 1 }}
-                  />
-                </div>
+                <img
+                  src="/images/layanan/contoh-kartu-ekusuka.png"
+                  alt="Contoh Kartu E-KUSUKA Asli"
+                  className="w-full h-auto object-contain"
+                />
               </div>
             </div>
-            <p className="text-[10px] text-muted-foreground text-center mt-3 italic">*Ilustrasi kartu, bukan kartu asli</p>
           </CardContent>
         </Card>
       )}
