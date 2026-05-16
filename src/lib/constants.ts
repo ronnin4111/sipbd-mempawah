@@ -367,6 +367,7 @@ import {
   CreditCard,
   Lock,
   Share2,
+  BarChart3,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -378,18 +379,43 @@ export interface NavItem {
   description: string;    // Shown under sidebar items
   adminOnly: boolean;
   headerHidden?: boolean; // true = shown in sidebar only (not in header tabs)
+  group?: string;         // Group ID for dropdown grouping in header (undefined = standalone)
 }
 
+// ─── Navigation Groups (for header dropdown menus) ───────────────────────
+export interface NavGroup {
+  id: string;
+  label: string;         // Label shown on the header tab
+  icon: LucideIcon;      // Icon for the header tab
+  color: string;         // Accent color for the group
+  gradient: string;      // Gradient for active state
+}
+
+export const NAV_GROUPS: NavGroup[] = [
+  { id: 'data',         label: 'Data',         icon: Database,       color: '#06B6D4', gradient: 'linear-gradient(135deg, #06B6D4, #0891B2)' },
+  { id: 'visualisasi',  label: 'Visualisasi',  icon: BarChart3,      color: '#8B5CF6', gradient: 'linear-gradient(135deg, #8B5CF6, #7C3AED)' },
+  { id: 'informasi',    label: 'Informasi',    icon: Share2,         color: '#F59E0B', gradient: 'linear-gradient(135deg, #F59E0B, #D97706)' },
+];
+
 export const NAV_ITEMS: NavItem[] = [
+  // Standalone — Dashboard (no group)
   { id: 'dashboard',         label: 'Dashboard',         labelLong: 'Ringkasan Produksi',  icon: LayoutDashboard, description: 'Ringkasan & statistik',           adminOnly: false },
-  { id: 'data-produksi',     label: 'Data Pembudidaya',  labelLong: 'Data Pembudidaya',    icon: Database,        description: 'Tabel data lengkap',               adminOnly: false },
-  { id: 'data-kusuka',       label: 'Data KUSUKA',       labelLong: 'Data KUSUKA',          icon: CreditCard,      description: 'Registrasi KUSUKA publik',         adminOnly: false },
-  { id: 'peta-lokasi',       label: 'Peta Lokasi',       labelLong: 'Peta Lokasi',          icon: Map,             description: 'Sebaran lokasi budidaya',           adminOnly: false },
-  { id: 'tren-laporan',      label: 'Tren & Laporan',    labelLong: 'Tren & Laporan',       icon: TrendingUp,      description: 'Analisis tren produksi',            adminOnly: false },
-  { id: 'tren-v2',           label: 'Tren V2',           labelLong: 'Tren V2 (Triwulan)',   icon: ExternalLink,    description: 'Data tren versi triwulan',          adminOnly: false },
-  { id: 'harga-komoditas',   label: 'Harga Komoditas',   labelLong: 'Harga Komoditas',      icon: DollarSign,      description: 'Daftar harga ikan',                 adminOnly: false },
-  { id: 'import-export',     label: 'Import / Export',   labelLong: 'Import / Export',      icon: FileSpreadsheet, description: 'Kelola data Excel/PDF',             adminOnly: false },
-  { id: 'media-sosial',      label: 'Media Sosial',      labelLong: 'Media Sosial',         icon: Share2,          description: 'Akun & postingan resmi dinas',      adminOnly: false },
+
+  // Group: Data
+  { id: 'data-produksi',     label: 'Data Pembudidaya',  labelLong: 'Data Pembudidaya',    icon: Database,        description: 'Tabel data lengkap',               adminOnly: false, group: 'data' },
+  { id: 'data-kusuka',       label: 'Data KUSUKA',       labelLong: 'Data KUSUKA',          icon: CreditCard,      description: 'Registrasi KUSUKA publik',         adminOnly: false, group: 'data' },
+  { id: 'import-export',     label: 'Import / Export',   labelLong: 'Import / Export',      icon: FileSpreadsheet, description: 'Kelola data Excel/PDF',             adminOnly: false, group: 'data' },
+
+  // Group: Visualisasi
+  { id: 'peta-lokasi',       label: 'Peta Lokasi',       labelLong: 'Peta Lokasi',          icon: Map,             description: 'Sebaran lokasi budidaya',           adminOnly: false, group: 'visualisasi' },
+  { id: 'tren-laporan',      label: 'Tren & Laporan',    labelLong: 'Tren & Laporan',       icon: TrendingUp,      description: 'Analisis tren produksi',            adminOnly: false, group: 'visualisasi' },
+  { id: 'tren-v2',           label: 'Tren V2',           labelLong: 'Tren V2 (Triwulan)',   icon: ExternalLink,    description: 'Data tren versi triwulan',          adminOnly: false, group: 'visualisasi' },
+
+  // Group: Informasi
+  { id: 'harga-komoditas',   label: 'Harga Komoditas',   labelLong: 'Harga Komoditas',      icon: DollarSign,      description: 'Daftar harga ikan',                 adminOnly: false, group: 'informasi' },
+  { id: 'media-sosial',      label: 'Media Sosial',      labelLong: 'Media Sosial',         icon: Share2,          description: 'Akun & postingan resmi dinas',      adminOnly: false, group: 'informasi' },
+
+  // Hidden — Admin Login (sidebar only)
   { id: 'admin-login',       label: 'Login Admin',       labelLong: 'Login Admin',          icon: Lock,            description: 'Akses fitur khusus admin',          adminOnly: false, headerHidden: true },
 ];
 

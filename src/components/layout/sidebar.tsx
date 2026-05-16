@@ -10,12 +10,48 @@ import {
 import { useFilterStore } from '@/store/filter-store';
 import { useTheme } from 'next-themes';
 import { useMounted } from '@/hooks/use-mounted';
-import { NAV_ITEMS } from '@/lib/constants';
+import { NAV_ITEMS, NAV_GROUPS } from '@/lib/constants';
+import type { NavItem } from '@/lib/constants';
 
 interface SidebarProps {
   open: boolean;
   onClose: () => void;
 }
+
+// Build ordered sidebar sections: standalone items first, then each group as a section
+interface SidebarSection {
+  label: string;
+  color?: string;
+  items: NavItem[];
+}
+
+function buildSidebarSections(): SidebarSection[] {
+  const sections: SidebarSection[] = [];
+
+  // Standalone items (no group) — e.g., Dashboard
+  const standalone = NAV_ITEMS.filter((item) => !item.group && !item.headerHidden);
+  if (standalone.length > 0) {
+    sections.push({ label: 'Utama', items: standalone });
+  }
+
+  // Grouped items
+  for (const group of NAV_GROUPS) {
+    const items = NAV_ITEMS.filter((item) => item.group === group.id);
+    if (items.length > 0) {
+      sections.push({ label: group.label, color: group.color, items });
+    }
+  }
+
+  // Hidden items (like admin-login) — shown at bottom
+  const hidden = NAV_ITEMS.filter((item) => item.headerHidden);
+  if (hidden.length > 0) {
+    sections.push({ label: 'Lainnya', items: hidden });
+  }
+
+  return sections;
+}
+
+const SIDEBAR_SECTIONS = buildSidebarSections();
 
 export function Sidebar({ open, onClose }: SidebarProps) {
   const activeSection = useFilterStore((s) => s.activeSection);
@@ -150,58 +186,83 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           )}
         </div>
 
-        {/* Nav */}
+        {/* Nav — grouped by sections */}
         <nav className="p-3 flex-1 overflow-y-auto">
-          <div
-            className="text-[10px] font-semibold uppercase tracking-widest px-3 mb-2"
-            style={{ color: 'var(--muted-foreground)', opacity: 0.6 }}
-          >
-            Navigasi
-          </div>
-          {NAV_ITEMS.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeSection === item.id;
-            const isLocked = item.adminOnly && !isAdmin;
-            return (
-              <button
-                key={item.id}
-                onClick={() => handleMenuClick(item.id)}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left mb-0.5 group transition-all"
-                style={{
-                  background: isActive && !isLocked
-                    ? 'linear-gradient(135deg, #06B6D4, #0891B2)'
-                    : 'transparent',
-                  color: isActive && !isLocked ? 'white' : isLocked ? 'var(--muted-foreground)' : 'var(--muted-foreground)',
-                  boxShadow: isActive && !isLocked ? '0 4px 16px rgba(6,182,212,0.3)' : 'none',
-                  opacity: isLocked ? 0.5 : 1,
-                }}
-                onMouseEnter={(e) => {
-                  if (!isActive || isLocked) {
-                    e.currentTarget.style.background = 'rgba(6,182,212,0.1)';
-                    e.currentTarget.style.color = '#22D3EE';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isActive || isLocked) {
-                    e.currentTarget.style.background = 'transparent';
-                    e.currentTarget.style.color = 'var(--muted-foreground)';
-                  }
-                }}
+          {SIDEBAR_SECTIONS.map((section, sectionIndex) => (
+            <div key={section.label}>
+              {/* Section header with colored dot */}
+              <div
+                className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-widest px-3 mb-1.5 mt-2"
+                style={{ color: section.color || 'var(--muted-foreground)', opacity: section.color ? 1 : 0.6 }}
               >
-                <Icon size={15} className="shrink-0" />
-                <div className="min-w-0 flex-1">
-                  <span className="text-sm font-medium block truncate">
-                    {item.labelLong}
-                    {isLocked && <Lock className="h-3 w-3 inline ml-1.5" />}
-                  </span>
-                  <span className="block text-[10px] truncate" style={{ opacity: 0.6 }}>
-                    {item.description}
-                  </span>
-                </div>
-                <ChevronRight size={12} style={{ opacity: 0.4 }} />
-              </button>
-            );
-          })}
+                {section.color && (
+                  <span
+                    className="w-1.5 h-1.5 rounded-full shrink-0"
+                    style={{ background: section.color }}
+                  />
+                )}
+                {section.label}
+              </div>
+
+              {/* Section items */}
+              {section.items.map((item) => {
+                const Icon = item.icon;
+                const isActive = activeSection === item.id;
+                const isLocked = item.adminOnly && !isAdmin;
+                const groupColor = section.color || '#06B6D4';
+
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => handleMenuClick(item.id)}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left mb-0.5 group transition-all"
+                    style={{
+                      background: isActive && !isLocked
+                        ? section.color
+                          ? `linear-gradient(135deg, ${section.color}, ${section.color}dd)`
+                          : 'linear-gradient(135deg, #06B6D4, #0891B2)'
+                        : 'transparent',
+                      color: isActive && !isLocked ? 'white' : isLocked ? 'var(--muted-foreground)' : 'var(--muted-foreground)',
+                      boxShadow: isActive && !isLocked ? `0 4px 16px ${groupColor}40` : 'none',
+                      opacity: isLocked ? 0.5 : 1,
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isActive || isLocked) {
+                        e.currentTarget.style.background = `${groupColor}18`;
+                        e.currentTarget.style.color = groupColor;
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isActive || isLocked) {
+                        e.currentTarget.style.background = 'transparent';
+                        e.currentTarget.style.color = 'var(--muted-foreground)';
+                      }
+                    }}
+                  >
+                    <Icon size={15} className="shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <span className="text-sm font-medium block truncate">
+                        {item.labelLong}
+                        {isLocked && <Lock className="h-3 w-3 inline ml-1.5" />}
+                      </span>
+                      <span className="block text-[10px] truncate" style={{ opacity: 0.6 }}>
+                        {item.description}
+                      </span>
+                    </div>
+                    <ChevronRight size={12} style={{ opacity: 0.4 }} />
+                  </button>
+                );
+              })}
+
+              {/* Section divider (except last) */}
+              {sectionIndex < SIDEBAR_SECTIONS.length - 1 && (
+                <div
+                  className="my-2 mx-3 h-px"
+                  style={{ background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }}
+                />
+              )}
+            </div>
+          ))}
         </nav>
 
         {/* Footer */}
