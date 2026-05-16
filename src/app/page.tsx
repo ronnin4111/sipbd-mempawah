@@ -26,6 +26,7 @@ import { useTheme } from 'next-themes';
 import { useMounted } from '@/hooks/use-mounted';
 import { SmartNarrator } from '@/components/ai/smart-narrator';
 import { MediaSosialSection } from '@/components/social-media/media-sosial-section';
+import { LayananSection } from '@/components/layanan/layanan-section';
 
 // Dynamic import PdfDashboardCharts with ssr:false to avoid recharts SSR crash on Vercel
 const PdfDashboardCharts = dynamic(
@@ -437,6 +438,11 @@ export default function Home() {
         return <ImportExportSection />;
       case 'media-sosial':
         return <MediaSosialSection />;
+      case 'layanan-ekusuka':
+      case 'layanan-nib':
+      case 'layanan-cpib':
+      case 'layanan-cbib':
+        return <LayananSection />;
       default:
         return <DashboardSection />;
     }

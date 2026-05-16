@@ -368,6 +368,11 @@ import {
   Lock,
   Share2,
   BarChart3,
+  Briefcase,
+  IdCard,
+  FileCheck,
+  Microscope,
+  Fish,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -395,6 +400,7 @@ export const NAV_GROUPS: NavGroup[] = [
   { id: 'data',         label: 'Data',         icon: Database,       color: '#06B6D4', gradient: 'linear-gradient(135deg, #06B6D4, #0891B2)' },
   { id: 'visualisasi',  label: 'Visualisasi',  icon: BarChart3,      color: '#8B5CF6', gradient: 'linear-gradient(135deg, #8B5CF6, #7C3AED)' },
   { id: 'informasi',    label: 'Informasi',    icon: Share2,         color: '#F59E0B', gradient: 'linear-gradient(135deg, #F59E0B, #D97706)' },
+  { id: 'layanan',      label: 'Layanan',      icon: Briefcase,      color: '#10B981', gradient: 'linear-gradient(135deg, #10B981, #059669)' },
 ];
 
 export const NAV_ITEMS: NavItem[] = [
@@ -414,6 +420,12 @@ export const NAV_ITEMS: NavItem[] = [
   // Group: Informasi
   { id: 'harga-komoditas',   label: 'Harga Komoditas',   labelLong: 'Harga Komoditas',      icon: DollarSign,      description: 'Daftar harga ikan',                 adminOnly: false, group: 'informasi' },
   { id: 'media-sosial',      label: 'Media Sosial',      labelLong: 'Media Sosial',         icon: Share2,          description: 'Akun & postingan resmi dinas',      adminOnly: false, group: 'informasi' },
+
+  // Group: Layanan
+  { id: 'layanan-ekusuka',   label: 'Kartu E-KUSUKA',    labelLong: 'Kartu E-KUSUKA',       icon: IdCard,          description: 'Kartu identitas pelaku KP',          adminOnly: false, group: 'layanan' },
+  { id: 'layanan-nib',       label: 'NIB',               labelLong: 'Nomor Induk Berusaha',  icon: FileCheck,       description: 'Nomor Induk Berusaha via OSS',       adminOnly: false, group: 'layanan' },
+  { id: 'layanan-cpib',      label: 'CPIB',              labelLong: 'CPIB',                  icon: Microscope,      description: 'Cara Pembenihan Ikan yang Baik',      adminOnly: false, group: 'layanan' },
+  { id: 'layanan-cbib',      label: 'CBIB',              labelLong: 'CBIB',                  icon: Fish,            description: 'Cara Budidaya Ikan yang Baik',        adminOnly: false, group: 'layanan' },
 
   // Hidden — Admin Login (sidebar only)
   { id: 'admin-login',       label: 'Login Admin',       labelLong: 'Login Admin',          icon: Lock,            description: 'Akses fitur khusus admin',          adminOnly: false, headerHidden: true },

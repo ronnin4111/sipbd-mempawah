@@ -49,7 +49,6 @@ export function Header({ onMenuClick }: HeaderProps) {
 
   // Dropdown state — which group dropdown is open
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
-  const dropdownTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isDark = mounted ? theme === 'dark' : true;
 
@@ -61,7 +60,7 @@ export function Header({ onMenuClick }: HeaderProps) {
 
   // Close all dropdowns when clicking outside
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
+    const handler = (e: MouseEvent | TouchEvent) => {
       // Close admin menu
       if (loginRef.current && !loginRef.current.contains(e.target as Node)) {
         setShowAdminMenu(false);
@@ -75,7 +74,11 @@ export function Header({ onMenuClick }: HeaderProps) {
       }
     };
     document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    document.addEventListener('touchstart', handler);
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      document.removeEventListener('touchstart', handler);
+    };
   }, []);
 
   // Close dropdown on navigation
@@ -138,18 +141,8 @@ export function Header({ onMenuClick }: HeaderProps) {
     }
   };
 
-  const handleDropdownEnter = (groupId: string) => {
-    if (dropdownTimeoutRef.current) {
-      clearTimeout(dropdownTimeoutRef.current);
-      dropdownTimeoutRef.current = null;
-    }
-    setOpenDropdown(groupId);
-  };
-
-  const handleDropdownLeave = () => {
-    dropdownTimeoutRef.current = setTimeout(() => {
-      setOpenDropdown(null);
-    }, 350);
+  const handleDropdownToggle = (groupId: string) => {
+    setOpenDropdown((prev) => prev === groupId ? null : groupId);
   };
 
   return (
@@ -375,7 +368,7 @@ export function Header({ onMenuClick }: HeaderProps) {
 
       {/* ── Navigation: Standalone + Grouped Dropdowns ────────────────────── */}
       <div className="px-4 pb-0 max-w-screen-2xl mx-auto">
-        <nav className="flex items-center gap-1 overflow-visible pb-0">
+        <nav className="flex items-center gap-1 pb-0 flex-wrap">
 
           {/* Standalone items (e.g., Dashboard) */}
           {STANDALONE_ITEMS.map((item) => {
@@ -418,11 +411,12 @@ export function Header({ onMenuClick }: HeaderProps) {
                 key={group.id}
                 className="relative"
                 data-nav-dropdown={group.id}
-                onMouseEnter={() => handleDropdownEnter(group.id)}
-                onMouseLeave={handleDropdownLeave}
               >
                 <button
-                  onClick={() => setOpenDropdown(isOpen ? null : group.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDropdownToggle(group.id);
+                  }}
                   className="relative px-3 py-2 text-xs font-medium whitespace-nowrap transition-all rounded-t-lg flex items-center gap-1.5"
                   style={{
                     color: isActive ? group.color : 'var(--muted-foreground)',
@@ -434,7 +428,7 @@ export function Header({ onMenuClick }: HeaderProps) {
                   <GroupIcon className="h-3 w-3" />
                   {group.label}
                   <ChevronDown
-                    className="h-2.5 w-2.5 transition-transform"
+                    className="h-2.5 w-2.5 transition-transform duration-200"
                     style={{ transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
                   />
                   {isActive && (
@@ -447,67 +441,72 @@ export function Header({ onMenuClick }: HeaderProps) {
 
                 {/* Dropdown Menu */}
                 {isOpen && (
-                  <div
-                    className="absolute left-0 top-full z-50 min-w-[220px]"
-                    onMouseEnter={() => handleDropdownEnter(group.id)}
-                    onMouseLeave={handleDropdownLeave}
-                  >
+                  <>
+                    {/* Mobile backdrop */}
                     <div
-                      className="rounded-xl overflow-hidden mt-1"
-                      style={{
-                        background: isDark ? '#0D1B2E' : '#FFFFFF',
-                        border: `1px solid ${isDark ? `${group.color}30` : `${group.color}20`}`,
-                        boxShadow: `0 8px 32px rgba(0,0,0,0.3), 0 0 0 1px ${group.color}10`,
-                      }}
+                      className="fixed inset-0 z-40 lg:hidden"
+                      onClick={() => setOpenDropdown(null)}
+                    />
+                    <div
+                      className="absolute left-0 top-full z-50 min-w-[220px]"
                     >
-                      {items.map((item) => {
-                        const isItemActive = activeSection === item.id;
-                        const ItemIcon = item.icon;
-                        return (
-                          <button
-                            key={item.id}
-                            onClick={() => handleItemClick(item)}
-                            className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-all"
-                            style={{
-                              background: isItemActive ? `${group.color}18` : 'transparent',
-                              color: isItemActive ? group.color : 'var(--foreground)',
-                            }}
-                            onMouseEnter={(e) => {
-                              if (!isItemActive) {
-                                e.currentTarget.style.background = `${group.color}10`;
-                              }
-                            }}
-                            onMouseLeave={(e) => {
-                              if (!isItemActive) {
-                                e.currentTarget.style.background = 'transparent';
-                              }
-                            }}
-                          >
-                            <div
-                              className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                      <div
+                        className="rounded-xl overflow-hidden mt-1"
+                        style={{
+                          background: isDark ? '#0D1B2E' : '#FFFFFF',
+                          border: `1px solid ${isDark ? `${group.color}30` : `${group.color}20`}`,
+                          boxShadow: `0 8px 32px rgba(0,0,0,0.3), 0 0 0 1px ${group.color}10`,
+                        }}
+                      >
+                        {items.map((item) => {
+                          const isItemActive = activeSection === item.id;
+                          const ItemIcon = item.icon;
+                          return (
+                            <button
+                              key={item.id}
+                              onClick={() => handleItemClick(item)}
+                              className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-all"
                               style={{
-                                background: isItemActive ? group.gradient : isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
+                                background: isItemActive ? `${group.color}18` : 'transparent',
+                                color: isItemActive ? group.color : 'var(--foreground)',
+                              }}
+                              onMouseEnter={(e) => {
+                                if (!isItemActive) {
+                                  e.currentTarget.style.background = `${group.color}10`;
+                                }
+                              }}
+                              onMouseLeave={(e) => {
+                                if (!isItemActive) {
+                                  e.currentTarget.style.background = 'transparent';
+                                }
                               }}
                             >
-                              <ItemIcon className="h-3.5 w-3.5" style={{ color: isItemActive ? 'white' : 'var(--muted-foreground)' }} />
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-xs font-medium">{item.label}</p>
-                              <p className="text-[10px] leading-tight" style={{ color: 'var(--muted-foreground)' }}>
-                                {item.description}
-                              </p>
-                            </div>
-                            {isItemActive && (
                               <div
-                                className="ml-auto w-1.5 h-1.5 rounded-full shrink-0"
-                                style={{ background: group.color }}
-                              />
-                            )}
-                          </button>
-                        );
-                      })}
+                                className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                                style={{
+                                  background: isItemActive ? group.gradient : isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
+                                }}
+                              >
+                                <ItemIcon className="h-3.5 w-3.5" style={{ color: isItemActive ? 'white' : 'var(--muted-foreground)' }} />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-xs font-medium">{item.label}</p>
+                                <p className="text-[10px] leading-tight" style={{ color: 'var(--muted-foreground)' }}>
+                                  {item.description}
+                                </p>
+                              </div>
+                              {isItemActive && (
+                                <div
+                                  className="ml-auto w-1.5 h-1.5 rounded-full shrink-0"
+                                  style={{ background: group.color }}
+                                />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
+                  </>
                 )}
               </div>
             );
