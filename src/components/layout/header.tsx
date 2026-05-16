@@ -68,7 +68,11 @@ export function Header({ onMenuClick }: HeaderProps) {
         setShowLoginForm(false);
         setLoginError('');
       }
-      // Close group dropdowns — handled per-dropdown ref
+      // Close group dropdowns if click is outside any dropdown area
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-nav-dropdown]')) {
+        setOpenDropdown(null);
+      }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -145,7 +149,7 @@ export function Header({ onMenuClick }: HeaderProps) {
   const handleDropdownLeave = () => {
     dropdownTimeoutRef.current = setTimeout(() => {
       setOpenDropdown(null);
-    }, 200);
+    }, 350);
   };
 
   return (
@@ -371,7 +375,7 @@ export function Header({ onMenuClick }: HeaderProps) {
 
       {/* ── Navigation: Standalone + Grouped Dropdowns ────────────────────── */}
       <div className="px-4 pb-0 max-w-screen-2xl mx-auto">
-        <nav className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-0">
+        <nav className="flex items-center gap-1 overflow-visible pb-0">
 
           {/* Standalone items (e.g., Dashboard) */}
           {STANDALONE_ITEMS.map((item) => {
@@ -413,6 +417,7 @@ export function Header({ onMenuClick }: HeaderProps) {
               <div
                 key={group.id}
                 className="relative"
+                data-nav-dropdown={group.id}
                 onMouseEnter={() => handleDropdownEnter(group.id)}
                 onMouseLeave={handleDropdownLeave}
               >
@@ -443,12 +448,12 @@ export function Header({ onMenuClick }: HeaderProps) {
                 {/* Dropdown Menu */}
                 {isOpen && (
                   <div
-                    className="absolute left-0 top-full pt-1 z-50 min-w-[200px]"
+                    className="absolute left-0 top-full z-50 min-w-[220px]"
                     onMouseEnter={() => handleDropdownEnter(group.id)}
                     onMouseLeave={handleDropdownLeave}
                   >
                     <div
-                      className="rounded-xl overflow-hidden"
+                      className="rounded-xl overflow-hidden mt-1"
                       style={{
                         background: isDark ? '#0D1B2E' : '#FFFFFF',
                         border: `1px solid ${isDark ? `${group.color}30` : `${group.color}20`}`,
