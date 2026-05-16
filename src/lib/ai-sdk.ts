@@ -5,17 +5,18 @@ import { db } from './db';
 /**
  * Unified AI SDK helper — Multi-provider with automatic fallback.
  *
- * Strategy:
- * 1. Google Gemini API (primary — works everywhere, generous free tier)
+ * Strategy (UPDATED — Z.AI as primary):
+ * 1. Z.AI API (primary — always available in sandbox/dev, no API key needed)
+ *    - Uses z-ai-web-dev-sdk with auto-discovered config
+ *    - Models: glm-4-plus, glm-4-flash, etc. (auto-selected by Z.AI)
+ *    - No rate limits for sandbox/dev usage
+ *    - No API key configuration needed!
+ * 2. Google Gemini API (fallback 1 — if API key configured)
  *    - Free: 15 RPM, 1500 RPD for gemini-2.0-flash (default)
  *    - Fallback models: gemini-2.5-flash-preview, gemini-1.5-flash
- *    - No monthly credit limits (unlike Hugging Face)
- * 2. Groq API (fallback 1 — ultra-fast inference, very generous free tier)
+ * 3. Groq API (fallback 2 — if API key configured)
  *    - Free: 30 RPM, 6000 RPD for llama-3.3-70b-versatile (default)
- *    - Fallback models: llama-3.1-8b-instant, llama-3.2-3b-preview, mixtral-8x7b-32768
- *    - LPU hardware accelerator for blazing fast responses
- * 3. z-ai-web-dev-sdk (fallback 2 — works in sandbox/local dev only)
- *    - Requires .z-ai-config file (not available on Vercel)
+ *    - Fallback models: llama-3.1-8b-instant, mixtral-8x7b-32768
  *
  * API Key Resolution (no env var mutation!):
  * - Reads key from DB (AppSetting) and passes directly to AI client constructors
@@ -94,23 +95,145 @@ async function getModel(envVarName: string, dbSettingKey: string): Promise<strin
 }
 
 /**
- * Try calling z-ai-web-dev-sdk as a fallback provider.
- * Only works in environments where .z-ai-config is available (local dev / sandbox).
+ * Get Z.AI config from environment variables.
+ * Returns config object if env vars are set, null otherwise.
+ *
+ * Environment variables (for Vercel / production deployment):
+ * - ZAI_BASE_URL: API base URL (e.g., https://api.z.ai/api/v1)
+ * - ZAI_API_KEY: API key for authentication
+ * - ZAI_CHAT_ID: (optional) Chat session ID
+ * - ZAI_USER_ID: (optional) User ID
+ * - ZAI_TOKEN: (optional) JWT token
+ */
+function getZaiConfigFromEnv(): { baseUrl: string; apiKey: string; chatId?: string; userId?: string; token?: string } | null {
+  const baseUrl = process.env.ZAI_BASE_URL;
+  const apiKey = process.env.ZAI_API_KEY;
+  if (baseUrl && apiKey) {
+    console.log('[AI SDK] Z.AI config found in env vars (ZAI_BASE_URL)');
+    return {
+      baseUrl,
+      apiKey,
+      ...(process.env.ZAI_CHAT_ID ? { chatId: process.env.ZAI_CHAT_ID } : {}),
+      ...(process.env.ZAI_USER_ID ? { userId: process.env.ZAI_USER_ID } : {}),
+      ...(process.env.ZAI_TOKEN ? { token: process.env.ZAI_TOKEN } : {}),
+    };
+  }
+  return null;
+}
+
+/**
+ * Try to load Z.AI config from file system.
+ * Returns config object if found, null otherwise.
+ */
+async function getZaiConfigFromFile(): Promise<{ baseUrl: string; apiKey: string; chatId?: string; userId?: string; token?: string } | null> {
+  try {
+    const fs = await import('fs/promises');
+    const path = await import('path');
+    const os = await import('os');
+
+    const configPaths = [
+      path.join(process.cwd(), '.z-ai-config'),
+      path.join(os.homedir(), '.z-ai-config'),
+      '/etc/.z-ai-config',
+    ];
+
+    for (const configPath of configPaths) {
+      try {
+        const configStr = await fs.readFile(configPath, 'utf-8');
+        const config = JSON.parse(configStr);
+        if (config.baseUrl && config.apiKey) {
+          console.log('[AI SDK] Z.AI config loaded from file:', configPath);
+          return config;
+        }
+      } catch {
+        // Continue to next path
+      }
+    }
+  } catch {
+    // fs import failed (Vercel edge runtime)
+  }
+  return null;
+}
+
+/**
+ * Get Z.AI config from any available source.
+ * Priority: 1. Environment variables → 2. File system → 3. SDK auto-discovery
+ * Note: SDK auto-discovery is handled in callZAI() directly (instance-based).
+ */
+async function getZaiConfig(): Promise<{ baseUrl: string; apiKey: string; chatId?: string; userId?: string; token?: string } | null> {
+  // 1. Check environment variables FIRST (works on Vercel)
+  const envConfig = getZaiConfigFromEnv();
+  if (envConfig) return envConfig;
+
+  // 2. Manual file system config reading (works in sandbox with .z-ai-config)
+  const fileConfig = await getZaiConfigFromFile();
+  if (fileConfig) return fileConfig;
+
+  // 3. SDK auto-discovery is handled separately in callZAI() / checkZaiAvailable()
+  return null;
+}
+
+/**
+ * Check if Z.AI is available by trying to load config.
+ * Returns true if Z.AI can be initialized, false otherwise.
+ */
+export async function checkZaiAvailable(): Promise<boolean> {
+  const config = await getZaiConfig();
+  if (config) {
+    console.log('[AI SDK] Z.AI available: baseUrl=' + config.baseUrl.substring(0, 30) + '...');
+    return true;
+  }
+  // Also check if SDK auto-discovery works (no env vars or file needed)
+  try {
+    const ZAI = (await import('z-ai-web-dev-sdk')).default;
+    await ZAI.create();
+    console.log('[AI SDK] Z.AI available via SDK auto-discovery');
+    return true;
+  } catch {
+    // SDK can't find config
+  }
+  console.log('[AI SDK] Z.AI NOT available — no config found (env vars or file)');
+  return false;
+}
+
+/**
+ * Try calling z-ai-web-dev-sdk as a provider.
+ * Config resolution priority:
+ * 1. Environment variables (ZAI_BASE_URL, ZAI_API_KEY) — works on Vercel
+ * 2. SDK auto-discovery (ZAI.create()) — works in sandbox with .z-ai-config
+ * 3. Manual file reading — fallback when SDK fails but config file exists
  */
 async function callZAI(options: UnifiedAIOptions): Promise<UnifiedAIResult> {
   try {
-    // Dynamic import with cache busting to avoid stale module state
+    // Dynamic import
     const ZAI = (await import('z-ai-web-dev-sdk')).default;
 
-    // Create a fresh instance each time
+    // Resolve config: env vars → file → SDK auto
+    const config = getZaiConfigFromEnv() || await getZaiConfigFromFile();
+
     let zai;
-    try {
-      zai = await ZAI.create();
-    } catch (createError) {
-      // If create() fails (e.g., stale config), try once more after a brief delay
-      console.warn('[AI SDK] z-ai create() failed, retrying...', createError);
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      zai = await ZAI.create();
+    if (config) {
+      // Use resolved config (from env vars or file)
+      zai = new ZAI(config);
+      console.log(`[AI SDK] Z.AI initialized with config: baseUrl=${config.baseUrl.substring(0, 30)}...`);
+    } else {
+      // Try SDK auto-discovery as last resort
+      try {
+        zai = await ZAI.create();
+        console.log('[AI SDK] Z.AI initialized via SDK auto-discovery');
+      } catch (sdkError) {
+        const errMsg = sdkError instanceof Error ? sdkError.message : 'Unknown';
+        let hint = '';
+        if (errMsg.includes('Configuration file not found') || errMsg.includes('config')) {
+          hint = ' Set ZAI_BASE_URL=https://api.z.ai/api/v1 and ZAI_API_KEY in env vars. (NOT chat.z.ai/api/v1 — that is the web frontend!)';
+        }
+        return {
+          success: false,
+          content: '',
+          error: `Z.AI config not found: ${errMsg.substring(0, 200)}.${hint}`,
+          provider: 'z-ai',
+        };
+      }
     }
 
     // z-ai uses 'assistant' role for system prompts
@@ -133,27 +256,25 @@ async function callZAI(options: UnifiedAIOptions): Promise<UnifiedAIResult> {
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    console.warn('[AI SDK] z-ai fallback not available:', message);
+    console.warn('[AI SDK] z-ai error:', message);
+    // Provide helpful error for common issues
+    let helpfulError = message;
+    if (message.includes('status 404')) {
+      helpfulError = `Z.AI API URL tidak valid (404 Not Found). Pastikan ZAI_BASE_URL menggunakan https://api.z.ai/api/v1 BUKAN https://chat.z.ai/api/v1. Detail: ${message}`;
+    } else if (message.includes('Authentication Failed') || message.includes('1000')) {
+      helpfulError = `Z.AI API key tidak valid. Dapatkan API key dari https://chat.z.ai → Settings. Detail: ${message}`;
+    } else if (message.includes('token expired')) {
+      helpfulError = `Z.AI token sudah expired. Perbarui ZAI_TOKEN di environment variables. Detail: ${message}`;
+    }
     return {
       success: false,
       content: '',
-      error: message,
+      error: helpfulError,
       provider: 'z-ai',
     };
   }
 }
 
-/**
- * Call AI using the best available provider with automatic fallback.
- *
- * Key resolution: DB-stored keys are passed DIRECTLY to client constructors.
- * No process.env mutation — works correctly in Vercel serverless functions.
- *
- * Priority:
- * 1. Google Gemini API (if key available via env or DB) — works on Vercel
- * 2. Groq API (if key available via env or DB) — ultra-fast fallback on Vercel
- * 3. z-ai-web-dev-sdk (if .z-ai-config is available) — local dev only
- */
 /**
  * Timeout wrapper — ensures AI calls don't hang forever.
  * Default 30s timeout (Vercel serverless max is 60s for hobby tier).
@@ -171,11 +292,26 @@ function withTimeout<T>(
   ]);
 }
 
+/**
+ * Call AI using the best available provider with automatic fallback.
+ *
+ * NEW PRIORITY (Z.AI as primary):
+ * 1. Z.AI API (always available in sandbox/dev — no API key needed!)
+ * 2. Google Gemini API (if API key configured via env or DB)
+ * 3. Groq API (if API key configured via env or DB)
+ *
+ * Why Z.AI first?
+ * - No API key configuration needed — works out of the box
+ * - Reliable in sandbox/dev environments
+ * - Good model quality (GLM-4-Plus)
+ * - No rate limits for development usage
+ * - Gemini/Groq still available as fallbacks if user configures API keys
+ */
 export async function callAI(options: UnifiedAIOptions): Promise<UnifiedAIResult> {
   const errors: Array<{ provider: string; detail: string }> = [];
   const startTime = Date.now();
 
-  // Resolve API keys from env + database
+  // Resolve API keys from env + database (for fallback providers)
   console.log('[AI SDK] Resolving API keys...');
   const geminiKey = await getApiKey('GEMINI_API_KEY', 'ai_gemini_api_key');
   const groqKey = await getApiKey('GROQ_API_KEY', 'ai_groq_api_key');
@@ -185,9 +321,25 @@ export async function callAI(options: UnifiedAIOptions): Promise<UnifiedAIResult
   console.log(`[AI SDK] Keys resolved: Gemini=${geminiKey ? 'yes(' + geminiKey.substring(0, 6) + '...)' : 'no'}, Groq=${groqKey ? 'yes(' + groqKey.substring(0, 6) + '...)' : 'no'}`);
   console.log(`[AI SDK] Models resolved: Gemini=${geminiModel || 'default'}, Groq=${groqModel || 'default'}`);
 
-  // 1. Try Google Gemini API first — pass key directly
+  // ============================================================
+  // 1. Try Z.AI first — always available in sandbox/dev!
+  // No API key needed, works out of the box.
+  // ============================================================
+  console.log('[AI SDK] Trying Z.AI (primary)...');
+  const zaiResult = await withTimeout(callZAI(options), 60000, 'Z.AI');
+  if (zaiResult.success) {
+    const elapsed = Date.now() - startTime;
+    console.log(`[AI SDK] Z.AI SUCCESS in ${elapsed}ms, model=${zaiResult.model}`);
+    return zaiResult;
+  }
+  errors.push({ provider: 'z-ai', detail: zaiResult.error || 'Not available' });
+  console.warn('[AI SDK] Z.AI failed:', (zaiResult.error || '').substring(0, 200));
+
+  // ============================================================
+  // 2. Try Google Gemini as fallback — if API key available
+  // ============================================================
   if (geminiKey) {
-    console.log('[AI SDK] Trying Google Gemini...');
+    console.log('[AI SDK] Trying Google Gemini (fallback)...');
     try {
       const geminiStart = Date.now();
       const result = await withTimeout(
@@ -195,7 +347,7 @@ export async function callAI(options: UnifiedAIOptions): Promise<UnifiedAIResult
           messages: options.messages,
           temperature: options.temperature,
           max_tokens: options.max_tokens,
-          apiKey: geminiKey,          // Pass directly — no env var mutation
+          apiKey: geminiKey,
           model: geminiModel || undefined,
         }),
         30000,
@@ -230,9 +382,11 @@ export async function callAI(options: UnifiedAIOptions): Promise<UnifiedAIResult
     await new Promise(resolve => setTimeout(resolve, 500));
   }
 
-  // 2. Try Groq as fallback — pass key directly
+  // ============================================================
+  // 3. Try Groq as fallback — if API key available
+  // ============================================================
   if (groqKey) {
-    console.log('[AI SDK] Trying Groq fallback...');
+    console.log('[AI SDK] Trying Groq (fallback)...');
     try {
       const groqStart = Date.now();
       const result = await withTimeout(
@@ -240,7 +394,7 @@ export async function callAI(options: UnifiedAIOptions): Promise<UnifiedAIResult
           messages: options.messages,
           temperature: options.temperature,
           max_tokens: options.max_tokens,
-          apiKey: groqKey,            // Pass directly — no env var mutation
+          apiKey: groqKey,
           model: groqModel || undefined,
         }),
         30000,
@@ -270,23 +424,21 @@ export async function callAI(options: UnifiedAIOptions): Promise<UnifiedAIResult
     console.log('[AI SDK] Skipping Groq — no API key');
   }
 
-  // 3. Try z-ai as local fallback (only works in sandbox)
-  console.log('[AI SDK] Trying z-ai local fallback...');
-  const zaiResult = await callZAI(options);
-  if (zaiResult.success) {
-    return zaiResult;
-  }
-
-  errors.push({ provider: 'z-ai', detail: zaiResult.error || 'Not available' });
-
   // If all providers failed but at least one had a rate limit error,
-  // try the first available provider once more after a delay
+  // try Z.AI again or the first available key-based provider after a delay
   const hasRateLimit = errors.some(e =>
     e.detail.includes('429') || e.detail.includes('rate') || e.detail.includes('RESOURCE_EXHAUSTED')
   );
   if (hasRateLimit) {
-    console.log('[AI SDK] Rate limit detected, retrying primary provider after 3s delay...');
+    console.log('[AI SDK] Rate limit detected, retrying after 3s delay...');
     await new Promise(resolve => setTimeout(resolve, 3000));
+
+    // Try Z.AI first (it's independent of rate limits)
+    const retryZai = await withTimeout(callZAI(options), 60000, 'Z.AI-retry');
+    if (retryZai.success) {
+      console.log('[AI SDK] Z.AI retry SUCCESS');
+      return retryZai;
+    }
 
     if (geminiKey) {
       try {
@@ -346,25 +498,22 @@ export async function callAI(options: UnifiedAIOptions): Promise<UnifiedAIResult
   const totalElapsed = Date.now() - startTime;
   console.error(`[AI SDK] ALL providers failed in ${totalElapsed}ms. Errors:`, JSON.stringify(errors));
 
-  // 4. All providers failed — return combined error with helpful message
-  if (!geminiKey && !groqKey) {
+  // All providers failed — return combined error with helpful message
+  if (!geminiKey && !groqKey && errors.some(e => e.provider === 'z-ai')) {
     return {
       success: false,
       content: '',
-      error: '🔑 API Key belum dikonfigurasi. Klik ikon ⚙️ di chat AI untuk mengatur API key (Gemini/Groq — gratis!).',
+      error: `Z.AI tidak tersedia: ${errors.find(e => e.provider === 'z-ai')?.detail || 'Unknown'}. Untuk fallback, konfigurasi API key Gemini/Groq via ikon ⚙️ di chat AI.`,
       provider: 'none',
     };
   }
 
   // Build user-friendly error message with actual details
   const errorParts = errors.map(e => {
-    // Show actual error details for debugging — don't over-classify
     const d = e.detail;
     if (d.includes('API_KEY_INVALID') || d.includes('API key not valid') || d.includes('Invalid API Key') || d.includes('invalid_api_key')) {
       return `${e.provider}: API Key tidak valid`;
     }
-    // For all other errors, show the raw detail (up to 300 chars) for diagnostics
-    // This helps us see the ACTUAL error instead of a generic "Rate limited" message
     return `${e.provider}: ${d.substring(0, 300)}`;
   });
 
@@ -378,13 +527,14 @@ export async function callAI(options: UnifiedAIOptions): Promise<UnifiedAIResult
 
 /**
  * Check if any AI provider is available (sync — only checks env vars)
+ * Note: Z.AI is checked dynamically at call time
  */
 export function isAIAvailable(): boolean {
   return isGeminiConfigured() || isGroqConfigured(); // z-ai is dynamically checked
 }
 
 /**
- * Check if any AI provider is available (async — checks env vars AND DB)
+ * Check if any AI provider is available (async — checks all providers including Z.AI)
  * This is the accurate check for server-side use.
  */
 export async function isAIAvailableAsync(): Promise<boolean> {
@@ -392,32 +542,40 @@ export async function isAIAvailableAsync(): Promise<boolean> {
     isGeminiConfiguredAsync(),
     isGroqConfiguredAsync(),
   ]);
-  return gemini || groq; // z-ai is dynamically checked at call time
+  // Z.AI is always potentially available — check dynamically
+  if (gemini || groq) return true;
+  // If no key-based providers, check if Z.AI config is available
+  return await checkZaiAvailable();
 }
 
 /**
- * Get status info about available AI providers (async — checks env vars AND DB)
+ * Get status info about available AI providers (async — checks all providers)
  */
 export async function getAIProviderStatusAsync(): Promise<{
-  gemini: { configured: boolean; model: string };
-  groq: { configured: boolean; model: string };
-  zai: { available: boolean };
+  zai: { available: boolean; model: string; priority: number };
+  gemini: { configured: boolean; model: string; priority: number };
+  groq: { configured: boolean; model: string; priority: number };
 }> {
-  const [geminiReady, groqReady] = await Promise.all([
+  const [geminiReady, groqReady, zaiAvailable] = await Promise.all([
     isGeminiConfiguredAsync(),
     isGroqConfiguredAsync(),
+    checkZaiAvailable().then(z => z !== null),
   ]);
   return {
+    zai: {
+      available: zaiAvailable,
+      model: 'GLM-4-Plus (auto)',
+      priority: 1,
+    },
     gemini: {
       configured: geminiReady,
       model: getGeminiModel(),
+      priority: 2,
     },
     groq: {
       configured: groqReady,
       model: getGroqModel(),
-    },
-    zai: {
-      available: false, // dynamically checked at call time
+      priority: 3,
     },
   };
 }
@@ -427,21 +585,25 @@ export async function getAIProviderStatusAsync(): Promise<{
  * @deprecated Use getAIProviderStatusAsync() for accurate DB-aware checks
  */
 export function getAIProviderStatus(): {
-  gemini: { configured: boolean; model: string };
-  groq: { configured: boolean; model: string };
-  zai: { available: boolean };
+  zai: { available: boolean; model: string; priority: number };
+  gemini: { configured: boolean; model: string; priority: number };
+  groq: { configured: boolean; model: string; priority: number };
 } {
   return {
+    zai: {
+      available: true, // dynamically checked at call time
+      model: 'GLM-4-Plus (auto)',
+      priority: 1,
+    },
     gemini: {
       configured: isGeminiConfigured(),
       model: getGeminiModel(),
+      priority: 2,
     },
     groq: {
       configured: isGroqConfigured(),
       model: getGroqModel(),
-    },
-    zai: {
-      available: false, // dynamically checked at call time
+      priority: 3,
     },
   };
 }

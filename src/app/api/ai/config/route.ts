@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { verifyPassword } from '@/lib/passwords';
+import { checkZaiAvailable } from '@/lib/ai-sdk';
 
 // Keys stored in AppSetting table
 const AI_KEY_SETTINGS = {
@@ -28,7 +29,15 @@ export async function GET() {
     const geminiKey = envGeminiKey || results.geminiApiKey;
     const groqKey = envGroqKey || results.groqApiKey;
 
+    // Check Z.AI availability
+    const zaiAvailable = await checkZaiAvailable();
+
     return NextResponse.json({
+      zai: {
+        available: zaiAvailable,
+        model: zaiAvailable ? 'GLM-4-Plus (auto)' : 'not available',
+        note: 'Provider utama — otomatis tersedia tanpa API key',
+      },
       gemini: {
         configured: !!geminiKey,
         source: envGeminiKey ? 'env' : (results.geminiApiKey ? 'database' : 'none'),

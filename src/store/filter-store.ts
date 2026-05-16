@@ -11,6 +11,7 @@ export interface FilterState {
   search: string;
   activeSection: string;
   isAdmin: boolean;
+  kecamatanChartSegment: string;
 }
 
 interface FilterActions {
@@ -24,6 +25,7 @@ interface FilterActions {
   setSearch: (search: string) => void;
   setActiveSection: (section: string) => void;
   setIsAdmin: (isAdmin: boolean) => void;
+  setKecamatanChartSegment: (segment: string) => void;
   resetFilters: () => void;
 }
 
@@ -38,6 +40,7 @@ const initialState: FilterState = {
   search: '',
   activeSection: 'dashboard',
   isAdmin: false,
+  kecamatanChartSegment: 'produksi',
 };
 
 export const useFilterStore = create<FilterState & FilterActions>((set) => ({
@@ -52,5 +55,6 @@ export const useFilterStore = create<FilterState & FilterActions>((set) => ({
   setSearch: (search) => set({ search }),
   setActiveSection: (activeSection) => set({ activeSection }),
   setIsAdmin: (isAdmin) => set({ isAdmin }),
+  setKecamatanChartSegment: (kecamatanChartSegment) => set({ kecamatanChartSegment }),
   resetFilters: () => set(initialState),
 }));

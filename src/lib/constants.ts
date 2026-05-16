@@ -353,6 +353,44 @@ export const DEFAULT_COMMODITY_PRICES: Record<
   },
 };
 
+// ============================================================
+// Navigation — single source of truth for Header tabs & Sidebar
+// ============================================================
+import {
+  LayoutDashboard,
+  Database,
+  Map,
+  TrendingUp,
+  DollarSign,
+  FileSpreadsheet,
+  ExternalLink,
+  CreditCard,
+  Lock,
+  type LucideIcon,
+} from 'lucide-react';
+
+export interface NavItem {
+  id: string;
+  label: string;          // Short label (used in header tabs)
+  labelLong: string;      // Longer label (used in sidebar)
+  icon: LucideIcon;
+  description: string;    // Shown under sidebar items
+  adminOnly: boolean;
+  headerHidden?: boolean; // true = shown in sidebar only (not in header tabs)
+}
+
+export const NAV_ITEMS: NavItem[] = [
+  { id: 'dashboard',         label: 'Dashboard',         labelLong: 'Ringkasan Produksi',  icon: LayoutDashboard, description: 'Ringkasan & statistik',           adminOnly: false },
+  { id: 'data-produksi',     label: 'Data Pembudidaya',  labelLong: 'Data Pembudidaya',    icon: Database,        description: 'Tabel data lengkap',               adminOnly: false },
+  { id: 'data-kusuka',       label: 'Data KUSUKA',       labelLong: 'Data KUSUKA',          icon: CreditCard,      description: 'Registrasi KUSUKA publik',         adminOnly: false },
+  { id: 'peta-lokasi',       label: 'Peta Lokasi',       labelLong: 'Peta Lokasi',          icon: Map,             description: 'Sebaran lokasi budidaya',           adminOnly: false },
+  { id: 'tren-laporan',      label: 'Tren & Laporan',    labelLong: 'Tren & Laporan',       icon: TrendingUp,      description: 'Analisis tren produksi',            adminOnly: false },
+  { id: 'tren-v2',           label: 'Tren V2',           labelLong: 'Tren V2 (Triwulan)',   icon: ExternalLink,    description: 'Data tren versi triwulan',          adminOnly: false },
+  { id: 'harga-komoditas',   label: 'Harga Komoditas',   labelLong: 'Harga Komoditas',      icon: DollarSign,      description: 'Daftar harga ikan',                 adminOnly: false },
+  { id: 'import-export',     label: 'Import / Export',   labelLong: 'Import / Export',      icon: FileSpreadsheet, description: 'Kelola data Excel/PDF',             adminOnly: false },
+  { id: 'admin-login',       label: 'Login Admin',       labelLong: 'Login Admin',          icon: Lock,            description: 'Akses fitur khusus admin',          adminOnly: false, headerHidden: true },
+];
+
 // Default Pembenihan prices (Rp/Ekor) - flat per fish type
 export const DEFAULT_PEMBENIHAN_PRICES: Record<string, number> = {
   Mas: 350,

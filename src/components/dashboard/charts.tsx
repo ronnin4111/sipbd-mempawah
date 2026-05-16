@@ -8,6 +8,7 @@ import {
   BarChart, Bar,
 } from 'recharts';
 import { useFishFarmStats } from '@/hooks/use-fish-farms';
+import { useFilterStore } from '@/store/filter-store';
 import { BarChart3, TrendingUp, PieChart as PieChartIcon } from 'lucide-react';
 
 const CHART_COLORS = [
@@ -128,13 +129,21 @@ function ChartCard({ title, children, index }: { title: string; children: React.
 
 // === BAR LABEL RENDERERS ===
 
+// Format value for chart labels — shows readable numbers like "132K" or "1.2M"
+const formatChartValue = (value: number): string => {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 100_000) return `${(value / 1_000).toFixed(0)}K`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
+  return value.toFixed(0);
+};
+
 const renderBarLabel = (props: Record<string, unknown>) => {
   const x = props.x as number;
   const y = props.y as number;
   const width = props.width as number;
   const value = props.value as number;
   if (!value || value === 0) return <g />;
-  const formatted = value >= 1000 ? `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}k` : value.toFixed(0);
+  const formatted = formatChartValue(value);
   return (
     <text x={x + width / 2} y={y - 4} fill="#E2EDF5" textAnchor="middle" fontSize={9} fontWeight={600} opacity={0.9}>
       {formatted}
@@ -148,7 +157,7 @@ const renderBarLabelPdf = (props: Record<string, unknown>) => {
   const width = props.width as number;
   const value = props.value as number;
   if (!value || value === 0) return <g />;
-  const formatted = value >= 1000 ? `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}k` : value.toFixed(0);
+  const formatted = formatChartValue(value);
   return (
     <text x={x + width / 2} y={y - 4} fill="#1A2332" textAnchor="middle" fontSize={9} fontWeight={600} opacity={0.9}>
       {formatted}
@@ -156,37 +165,59 @@ const renderBarLabelPdf = (props: Record<string, unknown>) => {
   );
 };
 
-// Label renderer for horizontal stacked bar segments (dark theme)
-const renderHorizontalBarLabel = (props: Record<string, unknown>) => {
-  const x = props.x as number;
-  const y = props.y as number;
-  const width = props.width as number;
-  const height = props.height as number;
-  const value = props.value as number;
-  if (!value || value === 0 || width < 25) return <g />;
-  const formatted = value >= 1000 ? `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}k` : value.toFixed(0);
-  return (
-    <text x={x + width / 2} y={y + height / 2 + 4} fill="#fff" textAnchor="middle" fontSize={9} fontWeight={600} opacity={0.9}>
-      {formatted}
-    </text>
-  );
-};
+// Factory: creates a label renderer for horizontal stacked bar segments that shows the
+// CORRECT segment value instead of the cumulative props.value that Recharts provides.
+// Recharts label props include: x, y, width, height, value (cumulative), name (dataKey), index (row index)
+// We use props.index + our chartData closure to look up the real segment value.
+function createStackedBarLabel(
+  dataKey: string,
+  displayName: string,
+  _allSeriesKeys: string[],
+  chartData: Record<string, unknown>[],
+  fill = '#fff'
+) {
+  return (props: Record<string, unknown>) => {
+    const x = props.x as number;
+    const y = props.y as number;
+    const width = props.width as number;
+    const height = props.height as number;
+    const cumulativeValue = props.value as number;
+    const dataIndex = props.index as number;
 
-// Label renderer for horizontal stacked bar segments (PDF/light theme)
-const renderHorizontalBarLabelPdf = (props: Record<string, unknown>) => {
-  const x = props.x as number;
-  const y = props.y as number;
-  const width = props.width as number;
-  const height = props.height as number;
-  const value = props.value as number;
-  if (!value || value === 0 || width < 25) return <g />;
-  const formatted = value >= 1000 ? `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}k` : value.toFixed(0);
-  return (
-    <text x={x + width / 2} y={y + height / 2 + 4} fill="#fff" textAnchor="middle" fontSize={9} fontWeight={600} opacity={0.9}>
-      {formatted}
-    </text>
-  );
-};
+    // Use props.index to look up the actual segment value from our chartData array.
+    // Recharts gives us the cumulative value in props.value, but chartData[index][dataKey]
+    // contains the real individual segment value that we built ourselves.
+    let value = cumulativeValue;
+    if (dataIndex !== undefined && dataIndex >= 0 && dataIndex < chartData.length) {
+      const row = chartData[dataIndex];
+      const segmentValue = row[dataKey] as number;
+      if (segmentValue !== undefined && segmentValue !== null) {
+        value = segmentValue;
+      }
+    }
+
+    // Clean up display name — remove unit suffixes
+    const cleanName = displayName.replace(/ \(Kg\)$/, '').replace(/ \(Ekor\)$/, '');
+    if (!value || value === 0 || width < 20) return <g />;
+    const formatted = formatChartValue(value);
+    // Show name + value when segment is wide enough, just value when narrow
+    const showName = width >= 60;
+    const label = showName ? `${cleanName}: ${formatted}` : formatted;
+    return (
+      <text
+        x={x + width / 2}
+        y={y + height / 2 + 4}
+        fill={fill}
+        textAnchor="middle"
+        fontSize={showName ? 8.5 : 8}
+        fontWeight={600}
+        opacity={0.95}
+      >
+        {label}
+      </text>
+    );
+  };
+}
 
 // === HELPER: Get produksi data from stats ===
 
@@ -488,7 +519,9 @@ function ProduksiChart() {
 
 function ProduksiKecamatanChart() {
   const { data: stats } = useFishFarmStats();
-  const [viewBy, setViewBy] = useState<KecamatanViewBy>('produksi');
+  const kecamatanChartSegment = useFilterStore((s) => s.kecamatanChartSegment);
+  const setKecamatanChartSegment = useFilterStore((s) => s.setKecamatanChartSegment);
+  const viewBy = (kecamatanChartSegment || 'produksi') as KecamatanViewBy;
 
   if (!stats) return null;
 
@@ -638,7 +671,7 @@ function ProduksiKecamatanChart() {
           <SelectorButton
             options={KECAMATAN_VIEWS}
             value={viewBy}
-            onChange={(v) => setViewBy(v as KecamatanViewBy)}
+            onChange={(v) => setKecamatanChartSegment(v)}
           />
           {unitLabel && (
             <p className="text-[10px] mt-1.5 italic" style={{ color: 'var(--muted-foreground)' }}>
@@ -659,11 +692,51 @@ function ProduksiKecamatanChart() {
               />
               <Legend wrapperStyle={{ fontSize: 10 }} />
               {series.map(s => (
-                <Bar key={s.key} dataKey={s.key} fill={s.color} stackId="a" name={s.name} label={renderHorizontalBarLabel} />
+                <Bar key={s.key} dataKey={s.key} fill={s.color} stackId="a" name={s.name} label={createStackedBarLabel(s.key, s.name, series.map(ss => ss.key), data)} />
               ))}
             </BarChart>
           </ResponsiveContainer>
         </div>
+
+        {/* Data Summary Table — readable in PDF export */}
+        {(viewBy !== 'produksi' && viewBy !== 'jenis-usaha') && series.length > 0 && (
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-[10px] sm:text-[11px] border-collapse">
+              <thead>
+                <tr style={{ borderBottom: '2px solid var(--border)' }}>
+                  <th className="text-left py-1.5 px-2 font-semibold" style={{ color: 'var(--foreground)' }}>Kecamatan</th>
+                  {series.map(s => (
+                    <th key={s.key} className="text-right py-1.5 px-2 font-semibold whitespace-nowrap" style={{ color: s.color }}>
+                      {s.name}
+                    </th>
+                  ))}
+                  <th className="text-right py-1.5 px-2 font-bold" style={{ color: 'var(--foreground)' }}>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.map((row, idx) => {
+                  const total = series.reduce((sum, s) => sum + ((row[s.key] as number) || 0), 0);
+                  return (
+                    <tr key={row.name as string} style={{ borderBottom: '1px solid var(--border)', background: idx % 2 === 0 ? 'transparent' : 'rgba(6,182,212,0.03)' }}>
+                      <td className="py-1 px-2 font-medium" style={{ color: 'var(--foreground)' }}>{row.name as string}</td>
+                      {series.map(s => {
+                        const val = (row[s.key] as number) || 0;
+                        return (
+                          <td key={s.key} className="text-right py-1 px-2 tabular-nums" style={{ color: val > 0 ? 'var(--foreground)' : 'var(--muted-foreground)', opacity: val > 0 ? 1 : 0.4 }}>
+                            {val > 0 ? formatNumber(val) : '-'}
+                          </td>
+                        );
+                      })}
+                      <td className="text-right py-1 px-2 font-bold tabular-nums" style={{ color: '#06B6D4' }}>
+                        {formatNumber(total)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </ChartCard>
   );
@@ -690,7 +763,8 @@ export function PdfDashboardCharts() {
   const [trendViewBy, setTrendViewBy] = useState<TrendViewBy>('jenis-usaha');
   const [produksiViewBy, setProduksiViewBy] = useState<ProduksiViewBy>('jenis-ikan');
   const [produksiChartType, setProduksiChartType] = useState<ChartType>('bar');
-  const [kecamatanViewBy, setKecamatanViewBy] = useState<KecamatanViewBy>('produksi');
+  const kecamatanChartSegment = useFilterStore((s) => s.kecamatanChartSegment);
+  const kecamatanViewBy = (kecamatanChartSegment || 'produksi') as KecamatanViewBy;
 
   if (!stats) return null;
 
@@ -802,6 +876,13 @@ export function PdfDashboardCharts() {
 
   const kecTitle = 'Produksi per Kecamatan';
 
+  // Sort kecData by total descending (same as visible chart)
+  kecData.sort((a, b) => {
+    const totalA = kecSeries.reduce((s, ser) => s + ((a[ser.key] as number) || 0), 0);
+    const totalB = kecSeries.reduce((s, ser) => s + ((b[ser.key] as number) || 0), 0);
+    return totalB - totalA;
+  });
+
   const pdfTextStyle = { fill: '#1A2332', fontSize: 11 };
   const pdfGridStyle = { stroke: '#E0E0E0', strokeDasharray: '3 3' };
 
@@ -900,7 +981,7 @@ export function PdfDashboardCharts() {
               formatter={(value: number) => new Intl.NumberFormat('id-ID').format(value)} />
             <Legend wrapperStyle={{ fontSize: 10, color: '#333' }} />
             {kecSeries.map(s => (
-              <Bar key={s.key} dataKey={s.key} fill={s.color} stackId="a" name={s.name} label={renderHorizontalBarLabelPdf} />
+              <Bar key={s.key} dataKey={s.key} fill={s.color} stackId="a" name={s.name} label={createStackedBarLabel(s.key, s.name, kecSeries.map(ss => ss.key), kecData)} />
             ))}
           </BarChart>
         </ResponsiveContainer>
@@ -937,8 +1018,45 @@ export function PdfDashboardCharts() {
 
       {/* Produksi Kecamatan Chart for PDF */}
       <div id="pdf-chart-produksi-kecamatan" style={{ background: '#FFFFFF', padding: 20, width: 900, marginBottom: 16 }}>
-        <h3 style={{ color: '#1A2332', fontSize: 14, fontWeight: 'bold', marginBottom: 8, fontFamily: 'sans-serif' }}>{kecTitle}</h3>
+        <h3 style={{ color: '#1A2332', fontSize: 14, fontWeight: 'bold', marginBottom: 8, fontFamily: 'sans-serif' }}>
+          {kecTitle} — {KECAMATAN_VIEWS.find(v => v.id === kecamatanViewBy)?.label ?? kecamatanViewBy}
+        </h3>
         {renderPdfKecamatanChart()}
+        {/* Data Summary Table for PDF */}
+        {(kecamatanViewBy !== 'produksi' && kecamatanViewBy !== 'jenis-usaha') && kecSeries.length > 0 && (
+          <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 12, fontSize: 10, fontFamily: 'sans-serif' }}>
+            <thead>
+              <tr style={{ borderBottom: '2px solid #ccc' }}>
+                <th style={{ textAlign: 'left', padding: '4px 8px', fontWeight: 600, color: '#333' }}>Kecamatan</th>
+                {kecSeries.map(s => (
+                  <th key={s.key} style={{ textAlign: 'right', padding: '4px 8px', fontWeight: 600, color: s.color, whiteSpace: 'nowrap' }}>{s.name}</th>
+                ))}
+                <th style={{ textAlign: 'right', padding: '4px 8px', fontWeight: 700, color: '#333' }}>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {kecData.map((row, idx) => {
+                const total = kecSeries.reduce((sum, s) => sum + ((row[s.key] as number) || 0), 0);
+                return (
+                  <tr key={row.name as string} style={{ borderBottom: '1px solid #e0e0e0', background: idx % 2 === 0 ? '#fff' : '#f8f8f8' }}>
+                    <td style={{ padding: '3px 8px', fontWeight: 500, color: '#333' }}>{row.name as string}</td>
+                    {kecSeries.map(s => {
+                      const val = (row[s.key] as number) || 0;
+                      return (
+                        <td key={s.key} style={{ textAlign: 'right', padding: '3px 8px', fontVariantNumeric: 'tabular-nums', color: val > 0 ? '#333' : '#aaa' }}>
+                          {val > 0 ? new Intl.NumberFormat('id-ID').format(val) : '-'}
+                        </td>
+                      );
+                    })}
+                    <td style={{ textAlign: 'right', padding: '3px 8px', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: '#06B6D4' }}>
+                      {new Intl.NumberFormat('id-ID').format(total)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {/* Legacy IDs for backward compatibility with PDF export dialog */}

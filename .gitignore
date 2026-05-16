@@ -63,7 +63,7 @@ dev.log
 dev.out.log
 agent-ctx/
 .zscripts/
-upload/
+/upload/
 src_new/
 worklog.md
 db/custom.db
