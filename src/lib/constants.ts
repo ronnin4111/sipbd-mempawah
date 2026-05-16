@@ -366,6 +366,7 @@ import {
   ExternalLink,
   CreditCard,
   Lock,
+  Share2,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -388,6 +389,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'tren-v2',           label: 'Tren V2',           labelLong: 'Tren V2 (Triwulan)',   icon: ExternalLink,    description: 'Data tren versi triwulan',          adminOnly: false },
   { id: 'harga-komoditas',   label: 'Harga Komoditas',   labelLong: 'Harga Komoditas',      icon: DollarSign,      description: 'Daftar harga ikan',                 adminOnly: false },
   { id: 'import-export',     label: 'Import / Export',   labelLong: 'Import / Export',      icon: FileSpreadsheet, description: 'Kelola data Excel/PDF',             adminOnly: false },
+  { id: 'media-sosial',      label: 'Media Sosial',      labelLong: 'Media Sosial',         icon: Share2,          description: 'Akun & postingan resmi dinas',      adminOnly: false },
   { id: 'admin-login',       label: 'Login Admin',       labelLong: 'Login Admin',          icon: Lock,            description: 'Akses fitur khusus admin',          adminOnly: false, headerHidden: true },
 ];
 

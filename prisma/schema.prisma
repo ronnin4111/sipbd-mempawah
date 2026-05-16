@@ -154,3 +154,22 @@ model KnowledgeChunk {
   @@index([chunkIndex])
   @@index([keywords])
 }
+
+model SocialMediaPost {
+  id            String   @id @default(cuid())
+  platform      String   // instagram | facebook | youtube | tiktok | twitter
+  postUrl       String   // Full URL to the original post
+  embedUrl      String   @default("") // Embed URL for iframe (e.g., instagram.com/p/{short}/embed/)
+  caption       String   @default("") // Caption or description of the post
+  thumbnailUrl  String   @default("") // Optional thumbnail image URL
+  isPinned      Boolean  @default(false) // Pinned posts show first
+  sortOrder     Int      @default(0)
+  isActive      Boolean  @default(true)
+  addedBy       String   @default("admin")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([platform])
+  @@index([isActive])
+  @@index([sortOrder])
+}

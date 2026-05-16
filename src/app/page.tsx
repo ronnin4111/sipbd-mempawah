@@ -25,6 +25,7 @@ import { Upload, Lock, Shield, Loader2, LogOut, Brain, FileSpreadsheet, Split, C
 import { useTheme } from 'next-themes';
 import { useMounted } from '@/hooks/use-mounted';
 import { SmartNarrator } from '@/components/ai/smart-narrator';
+import { MediaSosialSection } from '@/components/social-media/media-sosial-section';
 
 // Dynamic import PdfDashboardCharts with ssr:false to avoid recharts SSR crash on Vercel
 const PdfDashboardCharts = dynamic(
@@ -434,6 +435,8 @@ export default function Home() {
         return <AdminLoginSection />;
       case 'import-export':
         return <ImportExportSection />;
+      case 'media-sosial':
+        return <MediaSosialSection />;
       default:
         return <DashboardSection />;
     }
