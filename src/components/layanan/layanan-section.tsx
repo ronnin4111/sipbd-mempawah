@@ -79,7 +79,7 @@ const LAYANAN_DATA: LayananData[] = [
     title: 'Kartu E-KUSUKA',
     subtitle: 'Kartu Pelaku Usaha Kelautan dan Perikanan',
     description: 'Identitas tunggal bagi pelaku usaha kelautan dan perikanan yang diterbitkan oleh Kementerian Kelautan dan Perikanan Republik Indonesia.',
-    image: '/images/layanan/kartu-ekusuka.png',
+    image: '/images/layanan/kartu-ekusuka.jpeg',
     accentColor: '#10B981',
     accentGradient: 'linear-gradient(135deg, #10B981, #059669)',
     icon: IdCard,
