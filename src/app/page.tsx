@@ -27,6 +27,7 @@ import { useMounted } from '@/hooks/use-mounted';
 import { SmartNarrator } from '@/components/ai/smart-narrator';
 import { MediaSosialSection } from '@/components/social-media/media-sosial-section';
 import { LayananSection } from '@/components/layanan/layanan-section';
+import { LaunchVideoSection } from '@/components/launching/launch-video-section';
 
 // Dynamic import PdfDashboardCharts with ssr:false to avoid recharts SSR crash on Vercel
 const PdfDashboardCharts = dynamic(
@@ -443,6 +444,8 @@ export default function Home() {
       case 'layanan-cpib':
       case 'layanan-cbib':
         return <LayananSection />;
+      case 'launching-video':
+        return <LaunchVideoSection />;
       default:
         return <DashboardSection />;
     }

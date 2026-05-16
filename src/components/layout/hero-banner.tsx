@@ -2,10 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Fish, Users, MapPin, Award } from 'lucide-react';
+import { Fish, Users, MapPin, Award, Play } from 'lucide-react';
 import { useFishFarmStats } from '@/hooks/use-fish-farms';
 import { useMounted } from '@/hooks/use-mounted';
 import { useTheme } from 'next-themes';
+import { useFilterStore } from '@/store/filter-store';
 
 function formatNumber(num: number): string {
   return new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 }).format(num);
@@ -291,6 +292,31 @@ export function HeroBanner() {
             Dashboard terintegrasi data produksi pembesaran &amp; pembenihan perikanan budidaya
             Kabupaten Mempawah, Kalimantan Barat
           </p>
+
+          {/* Launch Video Button */}
+          <motion.button
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.6 }}
+            onClick={() => useFilterStore.getState().setActiveSection('launching-video')}
+            className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold transition-all"
+            style={{
+              background: isDark ? 'rgba(6,182,212,0.12)' : 'rgba(8,145,178,0.08)',
+              border: `1px solid ${isDark ? 'rgba(6,182,212,0.3)' : 'rgba(8,145,178,0.2)'}`,
+              color: '#06B6D4',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(6,182,212,0.2)';
+              e.currentTarget.style.boxShadow = '0 4px 20px rgba(6,182,212,0.15)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = isDark ? 'rgba(6,182,212,0.12)' : 'rgba(8,145,178,0.08)';
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+          >
+            <Play className="h-3.5 w-3.5" />
+            Tonton Video Launching
+          </motion.button>
         </motion.div>
 
         {/* Stats Cards */}

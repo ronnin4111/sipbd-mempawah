@@ -369,6 +369,7 @@ import {
   Share2,
   BarChart3,
   Briefcase,
+  Play,
   IdCard,
   FileCheck,
   Microscope,
@@ -426,6 +427,9 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'layanan-nib',       label: 'NIB',               labelLong: 'Nomor Induk Berusaha',  icon: FileCheck,       description: 'Nomor Induk Berusaha via OSS',       adminOnly: false, group: 'layanan' },
   { id: 'layanan-cpib',      label: 'CPIB',              labelLong: 'CPIB',                  icon: Microscope,      description: 'Cara Pembenihan Ikan yang Baik',      adminOnly: false, group: 'layanan' },
   { id: 'layanan-cbib',      label: 'CBIB',              labelLong: 'CBIB',                  icon: Fish,            description: 'Cara Budidaya Ikan yang Baik',        adminOnly: false, group: 'layanan' },
+
+  // Standalone — Launching Video
+  { id: 'launching-video',   label: 'Launching',          labelLong: 'Video Launching',       icon: Play,            description: 'Video launching website',            adminOnly: false, headerHidden: true },
 
   // Hidden — Admin Login (sidebar only)
   { id: 'admin-login',       label: 'Login Admin',       labelLong: 'Login Admin',          icon: Lock,            description: 'Akses fitur khusus admin',          adminOnly: false, headerHidden: true },
