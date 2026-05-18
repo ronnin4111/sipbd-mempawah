@@ -134,3 +134,35 @@ Stage Summary:
 - Improved API error handling (empty array fallback, descriptive error messages)
 - Improved frontend error display (shows specific API error messages)
 - Deployed to Vercel, waiting for build to complete
+
+---
+Task ID: 5
+Agent: main
+Task: Fix data still not saving - runtime DB init approach
+
+Work Log:
+- Identified root cause: `prisma db push` CLI does NOT work with Turso's libsql:// URLs
+  - Prisma CLI's SQLite provider only understands `file:` paths
+  - Only the Prisma Client with `@prisma/adapter-libsql` can connect to Turso at runtime
+  - Previous fix (adding prisma db push to build script) was ineffective
+- Created src/lib/db-init.ts - Runtime database initialization module
+  - Uses `db.$executeRawUnsafe()` to create tables via raw SQL
+  - This works because it goes through the same Prisma Client + adapter that connects to Turso
+  - Uses `CREATE TABLE IF NOT EXISTS` for idempotent table creation
+  - Deduplicates concurrent initialization calls with shared promise
+- Updated all Penyuluh/Pegawai API routes to call `ensureTablesExist()` before every operation
+  - /api/penyuluh (GET, POST)
+  - /api/penyuluh/[id] (PUT, DELETE)
+  - /api/pegawai (GET, POST)
+  - /api/pegawai/[id] (PUT, DELETE)
+- Created /api/init-db endpoint for manual database initialization and debugging
+- Reverted build script back to `next build` (removed ineffective db-push)
+- Removed scripts/db-push-turso.sh and scripts/db-push-turso.js
+- Improved frontend error handling with HTTP status code in error messages
+- Pushed to Vercel (commit fb2959a)
+
+Stage Summary:
+- Tables will now be auto-created at runtime on first API call to Penyuluh/Pegawai endpoints
+- No build-time dependency on Prisma CLI for Turso schema push
+- /api/init-db endpoint available for manual initialization check
+- Data should now persist correctly on Vercel after deployment completes
