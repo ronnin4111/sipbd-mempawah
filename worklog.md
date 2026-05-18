@@ -190,3 +190,32 @@ Stage Summary:
 - Auto-compression ensures cropped images stay under 1MB for database storage
 - Files modified: src/components/staff/staff-data-section.tsx
 - Files created: src/components/staff/image-crop-modal.tsx
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: Fix AI chat not answering specific kelompok name questions like "kelompok kawan sejati berapa orang"
+
+Work Log:
+- Investigated the AI chat architecture in src/app/api/ai/chat/route.ts (2249 lines)
+- Found root cause: classifyQuestion() had no pattern to match "kelompok [nama spesifik]" questions
+- Questions like "kelompok kawan sejati mempunyai anggota berapa orang" were classified as 'general' 
+- 'general' classification only loads fetchCompactDataContext() which has NO group member details
+- Fix 1: Added /kelompok\s+(?!di|yang|ini|itu|dari|ke|ada|apa|dengan|untuk|pada|semua|seluruh)\w+/i to specificPatterns
+  - Uses negative lookahead to avoid matching "kelompok di", "kelompok yang", etc.
+  - Correctly matches "kelompok kawan", "kelompok mantap jaya", etc.
+- Fix 2: Added /berapa\s+(orang|anggota|member)/i to specificPatterns for member count questions
+- Fix 3: Added per-group member count listing (DAFTAR KELOMPOK) to fetchStatsDataContext
+  - Even stats-classified questions now include group names with member counts
+  - Format: "Kawan Sejati (Kec:Siantan) 12org {Pembesaran}"
+- Fix 4: Added name and kec fields to groupMap in fetchStatsDataContext
+- Verified classification logic with test cases:
+  - "kelompok kawan sejati mempunyai anggota berapa orang" → specific ✓ (was general ✗)
+  - "berapa kelompok di mempawah hilir" → stats ✓
+  - "berapa jumlah kelompok" → stats ✓
+
+Stage Summary:
+- AI chat now correctly classifies specific kelompok name questions as 'specific'
+- Both 'specific' and 'stats' data contexts now include group member counts
+- AI should be able to answer "kelompok kawan sejati berapa orang" correctly
+- Pushed as commit 1c79804
