@@ -1,16 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { ensureTablesExist } from '@/lib/db-init';
 
 // GET /api/pegawai - List all pegawai
 export async function GET() {
   try {
+    await ensureTablesExist();
     const data = await db.pegawai.findMany({
       orderBy: { nama: 'asc' },
     });
     return NextResponse.json(data);
   } catch (error) {
     console.error('Error fetching pegawai:', error);
-    // Return empty array instead of 500 if table doesn't exist yet
+    // Return empty array if still failing after init attempt
     return NextResponse.json([]);
   }
 }
@@ -18,6 +20,7 @@ export async function GET() {
 // POST /api/pegawai - Create new pegawai
 export async function POST(request: NextRequest) {
   try {
+    await ensureTablesExist();
     const body = await request.json();
     const { nama, nip, pangkatGolRuang, jabatan } = body;
 
@@ -38,7 +41,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Error creating pegawai:', error);
     return NextResponse.json(
-      { error: 'Gagal menyimpan data pegawai. Pastikan database sudah terkonfigurasi dengan benar.' },
+      { error: 'Gagal menyimpan data pegawai. Silakan coba lagi.' },
       { status: 500 }
     );
   }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { ensureTablesExist } from '@/lib/db-init';
 
 // PUT /api/penyuluh/[id] - Update penyuluh
 export async function PUT(
@@ -7,6 +8,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    await ensureTablesExist();
     const { id } = await params;
     const body = await request.json();
     const { nama, nip, pangkatGolRuang, jabatan } = body;
@@ -41,6 +43,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    await ensureTablesExist();
     const { id } = await params;
     await db.penyuluh.delete({ where: { id } });
     return NextResponse.json({ success: true });

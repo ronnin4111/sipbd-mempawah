@@ -306,8 +306,13 @@ export function StaffDataSection({ type }: StaffDataSectionProps) {
       
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
-        const errorMsg = errorData.error || 'Gagal menyimpan data';
+        const errorMsg = errorData.error || `Gagal menyimpan (HTTP ${res.status})`;
         throw new Error(errorMsg);
+      }
+      
+      const savedData = await res.json();
+      if (!savedData || !savedData.id) {
+        throw new Error('Data tidak tersimpan dengan benar');
       }
       
       toast({
@@ -331,7 +336,10 @@ export function StaffDataSection({ type }: StaffDataSectionProps) {
     setDeleting(true);
     try {
       const res = await fetch(`${config.apiPath}/${deletingRecord.id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Failed to delete');
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Gagal menghapus');
+      }
       toast({
         title: 'Data dihapus',
         description: `${deletingRecord.nama} berhasil dihapus`,
