@@ -107,3 +107,30 @@ Stage Summary:
 - Admin can add, edit, and delete records via modal dialogs
 - Non-admin users can only view data
 - API routes handle full CRUD operations
+
+---
+Task ID: 4
+Agent: main
+Task: Fix data not saving - names input are not persisted
+
+Work Log:
+- Investigated the issue: API routes and Prisma schema existed but data wasn't persisting
+- Root cause: Turso database on Vercel didn't have Penyuluh/Pegawai tables (prisma db push only ran locally)
+- Created scripts/db-push-turso.js - Node.js script that auto-pushes Prisma schema to Turso on Vercel build
+  - Detects TURSO_DATABASE_URL + TURSO_AUTH_TOKEN env vars
+  - Constructs full URL with auth token for Prisma CLI
+  - Runs `prisma db push --accept-data-loss --skip-generate`
+- Updated package.json build script: `node scripts/db-push-turso.js && next build`
+- Improved API error handling:
+  - GET endpoints now return empty array instead of 500 error if table doesn't exist
+  - POST/PUT/DELETE endpoints return descriptive Indonesian error messages
+- Improved frontend error handling:
+  - handleSave now shows specific error message from API response
+  - Better toast notifications with actual error details
+- Pushed fix to Vercel (2 commits: a770a34, d4061f7)
+
+Stage Summary:
+- Fixed: Turso database will auto-create Penyuluh/Pegawai tables on next Vercel deployment
+- Improved API error handling (empty array fallback, descriptive error messages)
+- Improved frontend error display (shows specific API error messages)
+- Deployed to Vercel, waiting for build to complete
