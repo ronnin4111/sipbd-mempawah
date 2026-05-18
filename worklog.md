@@ -166,3 +166,27 @@ Stage Summary:
 - No build-time dependency on Prisma CLI for Turso schema push
 - /api/init-db endpoint available for manual initialization check
 - Data should now persist correctly on Vercel after deployment completes
+
+---
+Task ID: 1
+Agent: Main Agent
+Task: Add circular crop modal for Penyuluh/Pegawai profile photo upload
+
+Work Log:
+- Created new component `src/components/staff/image-crop-modal.tsx` with full-featured circular crop UI
+- Features implemented: circular crop area with dark overlay outside circle, drag & move (pointer events), zoom slider (1x-3x) with Slider component, mouse wheel zoom, touch pinch zoom, reset button, crosshair guides
+- Auto-compression: progressive JPEG quality reduction (0.92 → 0.1), then size reduction if still > 1MB
+- Output: 400x400px circular JPEG, compressed to fit under 1MB
+- Integrated into EditDialog in `staff-data-section.tsx`:
+  - File select now opens crop modal instead of directly setting fotoUrl
+  - Crop modal rendered at z-[60] above EditDialog (z-50)
+  - handleCropComplete sets both fotoUrl and photoPreview with cropped result
+  - Increased max file size from 2MB to 5MB (since crop will compress)
+- No new dependencies required (uses Canvas API, existing Slider component)
+
+Stage Summary:
+- Circular crop modal fully functional for profile photo selection
+- Users can see exactly which area of their photo will be displayed as avatar
+- Auto-compression ensures cropped images stay under 1MB for database storage
+- Files modified: src/components/staff/staff-data-section.tsx
+- Files created: src/components/staff/image-crop-modal.tsx

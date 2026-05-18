@@ -12,6 +12,7 @@ import { useFilterStore } from '@/store/filter-store';
 import { useTheme } from 'next-themes';
 import { useMounted } from '@/hooks/use-mounted';
 import { useToast } from '@/hooks/use-toast';
+import { ImageCropModal } from './image-crop-modal';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 interface StaffRecord {
@@ -103,6 +104,8 @@ function EditDialog({
   const [noWa, setNoWa] = useState('');
   const [prevOpen, setPrevOpen] = useState(false);
   const [photoPreview, setPhotoPreview] = useState('');
+  const [cropOpen, setCropOpen] = useState(false);
+  const [cropImageSrc, setCropImageSrc] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Reset form when dialog opens/changes record
@@ -130,19 +133,28 @@ function EditDialog({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Max 2MB
-    if (file.size > 2 * 1024 * 1024) {
-      alert('Ukuran foto maksimal 2MB');
+    // Max 5MB for original image (will be compressed after crop)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Ukuran foto maksimal 5MB');
       return;
     }
 
     const reader = new FileReader();
     reader.onloadend = () => {
       const base64 = reader.result as string;
-      setFotoUrl(base64);
-      setPhotoPreview(base64);
+      // Open crop modal instead of directly setting fotoUrl
+      setCropImageSrc(base64);
+      setCropOpen(true);
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleCropComplete = (croppedBase64: string) => {
+    setFotoUrl(croppedBase64);
+    setPhotoPreview(croppedBase64);
+    setCropOpen(false);
+    setCropImageSrc('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleRemovePhoto = () => {
@@ -308,6 +320,15 @@ function EditDialog({
           </Button>
         </div>
       </motion.div>
+
+      {/* Image Crop Modal - rendered at z-[60] above this dialog (z-50) */}
+      <ImageCropModal
+        open={cropOpen}
+        onClose={() => { setCropOpen(false); setCropImageSrc(''); }}
+        imageSrc={cropImageSrc}
+        onCropComplete={handleCropComplete}
+        accentColor={color}
+      />
     </div>
   );
 }
