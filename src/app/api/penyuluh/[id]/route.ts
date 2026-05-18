@@ -11,7 +11,7 @@ export async function PUT(
     await ensureTablesExist();
     const { id } = await params;
     const body = await request.json();
-    const { nama, nip, pangkatGolRuang, jabatan } = body;
+    const { nama, nip, pangkatGolRuang, jabatan, fotoUrl, noWa } = body;
 
     if (!nama || !nama.trim()) {
       return NextResponse.json({ error: 'Nama wajib diisi' }, { status: 400 });
@@ -24,6 +24,8 @@ export async function PUT(
         nip: nip?.trim() || '',
         pangkatGolRuang: pangkatGolRuang?.trim() || '',
         jabatan: jabatan?.trim() || '',
+        fotoUrl: fotoUrl || '',
+        noWa: noWa?.trim() || '',
       },
     });
 

@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Plus, Pencil, Trash2, X, Save, Search, Users, UserCheck, Loader2, AlertCircle
+  Plus, Pencil, Trash2, X, Save, Search, Users, UserCheck, Loader2, AlertCircle,
+  Camera, Phone, MessageCircle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,6 +20,8 @@ interface StaffRecord {
   nip: string;
   pangkatGolRuang: string;
   jabatan: string;
+  fotoUrl: string;
+  noWa: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -59,6 +62,21 @@ const STAFF_CONFIG: Record<StaffType, {
   },
 };
 
+// ─── Helper: Get initials from name ─────────────────────────────────────
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return name.substring(0, 2).toUpperCase();
+}
+
+// ─── Helper: Format WA number to wa.me link ────────────────────────────
+function formatWaLink(noWa: string): string {
+  let num = noWa.replace(/[^0-9]/g, '');
+  if (num.startsWith('0')) num = '62' + num.substring(1);
+  if (!num.startsWith('62')) num = '62' + num;
+  return `https://wa.me/${num}`;
+}
+
 // ─── Edit Dialog ────────────────────────────────────────────────────────────
 function EditDialog({
   open,
@@ -71,7 +89,7 @@ function EditDialog({
 }: {
   open: boolean;
   onClose: () => void;
-  onSave: (data: { nama: string; nip: string; pangkatGolRuang: string; jabatan: string }) => void;
+  onSave: (data: { nama: string; nip: string; pangkatGolRuang: string; jabatan: string; fotoUrl: string; noWa: string }) => void;
   record: StaffRecord | null;
   isLoading: boolean;
   color: string;
@@ -81,7 +99,11 @@ function EditDialog({
   const [nip, setNip] = useState('');
   const [pangkatGolRuang, setPangkatGolRuang] = useState('');
   const [jabatan, setJabatan] = useState('');
+  const [fotoUrl, setFotoUrl] = useState('');
+  const [noWa, setNoWa] = useState('');
   const [prevOpen, setPrevOpen] = useState(false);
+  const [photoPreview, setPhotoPreview] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Reset form when dialog opens/changes record
   if (open !== prevOpen) {
@@ -92,13 +114,42 @@ function EditDialog({
         setNip(record.nip);
         setPangkatGolRuang(record.pangkatGolRuang);
         setJabatan(record.jabatan);
+        setFotoUrl(record.fotoUrl || '');
+        setNoWa(record.noWa || '');
+        setPhotoPreview(record.fotoUrl || '');
       } else {
         setNama(''); setNip(''); setPangkatGolRuang(''); setJabatan('');
+        setFotoUrl(''); setNoWa(''); setPhotoPreview('');
       }
     }
   }
 
   if (!open) return null;
+
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Max 2MB
+    if (file.size > 2 * 1024 * 1024) {
+      alert('Ukuran foto maksimal 2MB');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64 = reader.result as string;
+      setFotoUrl(base64);
+      setPhotoPreview(base64);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemovePhoto = () => {
+    setFotoUrl('');
+    setPhotoPreview('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
@@ -107,7 +158,7 @@ function EditDialog({
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
-        className="relative w-full max-w-md rounded-2xl p-6"
+        className="relative w-full max-w-md rounded-2xl p-6 max-h-[90vh] overflow-y-auto"
         style={{
           background: 'var(--background)',
           border: `1px solid ${color}30`,
@@ -126,6 +177,59 @@ function EditDialog({
           >
             <X className="h-4 w-4" />
           </button>
+        </div>
+
+        {/* Photo Upload Section */}
+        <div className="flex flex-col items-center mb-5">
+          <div className="relative group">
+            <div
+              className="w-24 h-24 rounded-full overflow-hidden flex items-center justify-center"
+              style={{
+                background: photoPreview ? 'transparent' : `linear-gradient(135deg, ${color}30, ${color}10)`,
+                border: `3px solid ${color}40`,
+              }}
+            >
+              {photoPreview ? (
+                <img src={photoPreview} alt="Preview" className="w-full h-full object-cover" />
+              ) : (
+                <Camera className="h-8 w-8" style={{ color: `${color}80` }} />
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="absolute bottom-0 right-0 w-8 h-8 rounded-full flex items-center justify-center shadow-lg transition-transform hover:scale-110"
+              style={{ background: color }}
+            >
+              <Camera className="h-4 w-4 text-white" />
+            </button>
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handlePhotoChange}
+            className="hidden"
+          />
+          <div className="flex items-center gap-2 mt-2">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="text-xs font-medium hover:underline"
+              style={{ color }}
+            >
+              Upload Foto
+            </button>
+            {photoPreview && (
+              <button
+                type="button"
+                onClick={handleRemovePhoto}
+                className="text-xs text-red-400 hover:underline"
+              >
+                Hapus
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="space-y-4">
@@ -168,6 +272,21 @@ function EditDialog({
               className="h-11"
             />
           </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+              <span className="inline-flex items-center gap-1">
+                <Phone className="h-3 w-3" />
+                No. WhatsApp
+              </span>
+            </label>
+            <Input
+              value={noWa}
+              onChange={(e) => setNoWa(e.target.value)}
+              placeholder="Contoh: 081234567890"
+              className="h-11"
+            />
+            <p className="text-[10px] text-muted-foreground mt-1">Nomor akan ditampilkan sebagai tombol WhatsApp</p>
+          </div>
         </div>
 
         <div className="flex gap-3 mt-6">
@@ -175,7 +294,7 @@ function EditDialog({
             Batal
           </Button>
           <Button
-            onClick={() => onSave({ nama, nip, pangkatGolRuang, jabatan })}
+            onClick={() => onSave({ nama, nip, pangkatGolRuang, jabatan, fotoUrl, noWa })}
             disabled={isLoading || !nama.trim()}
             className="flex-1 h-11 gap-2"
             style={{ background: color }}
@@ -253,6 +372,159 @@ function DeleteDialog({
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Staff Card Component (for card view)
+// ═══════════════════════════════════════════════════════════════════════════════
+function StaffCard({
+  item,
+  idx,
+  config,
+  isDark,
+  isAdmin,
+  onEdit,
+  onDelete,
+}: {
+  item: StaffRecord;
+  idx: number;
+  config: typeof STAFF_CONFIG['penyuluh'];
+  isDark: boolean;
+  isAdmin: boolean;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25, delay: idx * 0.04 }}
+      className="rounded-xl overflow-hidden transition-all hover:shadow-lg group"
+      style={{
+        background: isDark ? 'rgba(13,27,46,0.6)' : 'rgba(255,255,255,0.9)',
+        border: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}`,
+        backdropFilter: 'blur(8px)',
+      }}
+    >
+      {/* Top color bar */}
+      <div className="h-1.5" style={{ background: config.gradient }} />
+
+      <div className="p-4 sm:p-5">
+        {/* Profile Section */}
+        <div className="flex items-start gap-3.5 mb-3">
+          {/* Avatar */}
+          <div
+            className="w-14 h-14 rounded-full overflow-hidden flex items-center justify-center shrink-0 ring-2"
+            style={{
+              background: item.fotoUrl ? 'transparent' : `linear-gradient(135deg, ${config.color}25, ${config.color}10)`,
+              ringColor: `${config.color}30`,
+            }}
+          >
+            {item.fotoUrl ? (
+              <img
+                src={item.fotoUrl}
+                alt={item.nama}
+                className="w-full h-full object-cover"
+                loading="lazy"
+              />
+            ) : (
+              <span
+                className="text-base font-bold"
+                style={{ color: config.color }}
+              >
+                {getInitials(item.nama)}
+              </span>
+            )}
+          </div>
+
+          {/* Name + Info */}
+          <div className="min-w-0 flex-1">
+            <h3 className="font-semibold text-sm truncate">{item.nama}</h3>
+            {item.jabatan && (
+              <p className="text-xs text-muted-foreground truncate mt-0.5">{item.jabatan}</p>
+            )}
+            {item.pangkatGolRuang && (
+              <span
+                className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-medium mt-1"
+                style={{
+                  background: `${config.color}10`,
+                  color: config.color,
+                  border: `1px solid ${config.color}20`,
+                }}
+              >
+                {item.pangkatGolRuang}
+              </span>
+            )}
+          </div>
+
+          {/* Admin actions */}
+          {isAdmin && (
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                onClick={onEdit}
+                className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors opacity-0 group-hover:opacity-100"
+                style={{
+                  background: `${config.color}10`,
+                  color: config.color,
+                  border: `1px solid ${config.color}20`,
+                }}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={onDelete}
+                className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors opacity-0 group-hover:opacity-100"
+                style={{
+                  background: 'rgba(239,68,68,0.1)',
+                  color: '#EF4444',
+                  border: '1px solid rgba(239,68,68,0.2)',
+                }}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* NIP row */}
+        {item.nip && (
+          <div className="text-[11px] text-muted-foreground mb-3 font-mono">
+            NIP: {item.nip}
+          </div>
+        )}
+
+        {/* Bottom: WhatsApp button */}
+        <div className="flex items-center gap-2 mt-auto">
+          {item.noWa ? (
+            <a
+              href={formatWaLink(item.noWa)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-white transition-all hover:shadow-md hover:scale-[1.02] active:scale-[0.98]"
+              style={{
+                background: '#25D366',
+                boxShadow: '0 2px 8px rgba(37,211,102,0.3)',
+              }}
+            >
+              <MessageCircle className="h-3.5 w-3.5" />
+              Hubungi via WhatsApp
+            </a>
+          ) : (
+            <span
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs text-muted-foreground"
+              style={{
+                background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
+                border: `1px dashed ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}`,
+              }}
+            >
+              <Phone className="h-3 w-3" />
+              Belum ada kontak
+            </span>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Main component
 // ═══════════════════════════════════════════════════════════════════════════════
 export function StaffDataSection({ type }: StaffDataSectionProps) {
@@ -293,7 +565,7 @@ export function StaffDataSection({ type }: StaffDataSectionProps) {
     fetchData();
   }, [fetchData]);
 
-  const handleSave = async (formData: { nama: string; nip: string; pangkatGolRuang: string; jabatan: string }) => {
+  const handleSave = async (formData: { nama: string; nip: string; pangkatGolRuang: string; jabatan: string; fotoUrl: string; noWa: string }) => {
     setSaving(true);
     try {
       const url = editingRecord ? `${config.apiPath}/${editingRecord.id}` : config.apiPath;
@@ -303,18 +575,18 @@ export function StaffDataSection({ type }: StaffDataSectionProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
       });
-      
+
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
         const errorMsg = errorData.error || `Gagal menyimpan (HTTP ${res.status})`;
         throw new Error(errorMsg);
       }
-      
+
       const savedData = await res.json();
       if (!savedData || !savedData.id) {
         throw new Error('Data tidak tersimpan dengan benar');
       }
-      
+
       toast({
         title: editingRecord ? 'Data diperbarui' : 'Data ditambahkan',
         description: `${formData.nama} berhasil ${editingRecord ? 'diperbarui' : 'ditambahkan'}`,
@@ -362,7 +634,8 @@ export function StaffDataSection({ type }: StaffDataSectionProps) {
       item.nama.toLowerCase().includes(q) ||
       item.nip.toLowerCase().includes(q) ||
       item.pangkatGolRuang.toLowerCase().includes(q) ||
-      item.jabatan.toLowerCase().includes(q)
+      item.jabatan.toLowerCase().includes(q) ||
+      (item.noWa || '').toLowerCase().includes(q)
     );
   });
 
@@ -431,149 +704,64 @@ export function StaffDataSection({ type }: StaffDataSectionProps) {
         )}
       </div>
 
-      {/* Table */}
-      <div
-        className="rounded-xl overflow-hidden"
-        style={{
-          border: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}`,
-        }}
-      >
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr
-                style={{
-                  background: isDark ? 'rgba(13,27,46,0.8)' : 'rgba(240,249,255,0.8)',
-                  borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}`,
-                }}
-              >
-                <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground w-12">No</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground">Nama</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground hidden sm:table-cell">NIP</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground hidden md:table-cell">Pangkat Gol/Ruang</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground hidden lg:table-cell">Jabatan</th>
-                {isAdmin && (
-                  <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground w-24">Aksi</th>
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading ? (
-                Array.from({ length: 3 }).map((_, i) => (
-                  <tr key={i} className="animate-pulse">
-                    <td className="px-4 py-3"><div className="h-4 bg-muted rounded w-8" /></td>
-                    <td className="px-4 py-3"><div className="h-4 bg-muted rounded w-32" /></td>
-                    <td className="px-4 py-3 hidden sm:table-cell"><div className="h-4 bg-muted rounded w-28" /></td>
-                    <td className="px-4 py-3 hidden md:table-cell"><div className="h-4 bg-muted rounded w-16" /></td>
-                    <td className="px-4 py-3 hidden lg:table-cell"><div className="h-4 bg-muted rounded w-24" /></td>
-                    {isAdmin && <td className="px-4 py-3"><div className="h-4 bg-muted rounded w-16 mx-auto" /></td>}
-                  </tr>
-                ))
-              ) : filteredData.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={isAdmin ? 6 : 5}
-                    className="px-4 py-12 text-center text-muted-foreground"
-                  >
-                    <Icon className="h-10 w-10 mx-auto mb-3 opacity-20" />
-                    <p className="text-sm font-medium">Belum ada data</p>
-                    <p className="text-xs mt-1">
-                      {isAdmin ? 'Klik "Tambah Data" untuk menambahkan' : 'Data belum tersedia'}
-                    </p>
-                  </td>
-                </tr>
-              ) : (
-                filteredData.map((item, idx) => (
-                  <motion.tr
-                    key={item.id}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.2, delay: idx * 0.03 }}
-                    className="transition-colors"
-                    style={{
-                      borderBottom: `1px solid ${isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)'}`,
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = isDark ? 'rgba(6,182,212,0.04)' : 'rgba(8,145,178,0.03)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'transparent';
-                    }}
-                  >
-                    <td className="px-4 py-3 text-xs text-muted-foreground">{idx + 1}</td>
-                    <td className="px-4 py-3">
-                      <div>
-                        <span className="font-medium text-sm">{item.nama}</span>
-                        {/* Show NIP/Jabatan on mobile inline */}
-                        <div className="sm:hidden text-[10px] text-muted-foreground mt-0.5">
-                          {item.nip && <span className="mr-2">NIP: {item.nip}</span>}
-                          {item.jabatan && <span>{item.jabatan}</span>}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-xs hidden sm:table-cell">
-                      <span className="font-mono text-muted-foreground">{item.nip || '-'}</span>
-                    </td>
-                    <td className="px-4 py-3 text-xs hidden md:table-cell">
-                      <span
-                        className="inline-flex px-2 py-0.5 rounded-md text-[11px] font-medium"
-                        style={{
-                          background: item.pangkatGolRuang ? `${config.color}10` : 'transparent',
-                          color: item.pangkatGolRuang ? config.color : 'var(--muted-foreground)',
-                          border: item.pangkatGolRuang ? `1px solid ${config.color}20` : 'none',
-                        }}
-                      >
-                        {item.pangkatGolRuang || '-'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground hidden lg:table-cell">{item.jabatan || '-'}</td>
-                    {isAdmin && (
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-center gap-1">
-                          <button
-                            onClick={() => { setEditingRecord(item); setEditOpen(true); }}
-                            className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors"
-                            style={{
-                              background: `${config.color}10`,
-                              color: config.color,
-                              border: `1px solid ${config.color}20`,
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.background = `${config.color}20`;
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.background = `${config.color}10`;
-                            }}
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            onClick={() => { setDeletingRecord(item); setDeleteOpen(true); }}
-                            className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors"
-                            style={{
-                              background: 'rgba(239,68,68,0.1)',
-                              color: '#EF4444',
-                              border: '1px solid rgba(239,68,68,0.2)',
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.background = 'rgba(239,68,68,0.2)';
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.background = 'rgba(239,68,68,0.1)';
-                            }}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    )}
-                  </motion.tr>
-                ))
-              )}
-            </tbody>
-          </table>
+      {/* Card Grid */}
+      {isLoading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div
+              key={i}
+              className="rounded-xl animate-pulse"
+              style={{
+                background: isDark ? 'rgba(13,27,46,0.4)' : 'rgba(240,249,255,0.5)',
+                border: `1px solid ${isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)'}`,
+              }}
+            >
+              <div className="h-1.5 rounded-t-xl" style={{ background: `${config.color}20` }} />
+              <div className="p-4">
+                <div className="flex items-start gap-3.5">
+                  <div className="w-14 h-14 rounded-full" style={{ background: `${config.color}10` }} />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-4 rounded w-28" style={{ background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }} />
+                    <div className="h-3 rounded w-20" style={{ background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }} />
+                  </div>
+                </div>
+                <div className="h-8 rounded-lg mt-3 w-40" style={{ background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }} />
+              </div>
+            </div>
+          ))}
         </div>
-      </div>
+      ) : filteredData.length === 0 ? (
+        <div
+          className="text-center py-16 px-4 rounded-xl"
+          style={{
+            background: isDark ? 'rgba(13,27,46,0.4)' : 'rgba(240,249,255,0.5)',
+            border: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}`,
+          }}
+        >
+          <Icon className="h-12 w-12 mx-auto mb-3 opacity-15" />
+          <p className="text-sm font-medium">Belum ada data</p>
+          <p className="text-xs mt-1 text-muted-foreground">
+            {isAdmin ? 'Klik "Tambah Data" untuk menambahkan' : 'Data belum tersedia'}
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <AnimatePresence>
+            {filteredData.map((item, idx) => (
+              <StaffCard
+                key={item.id}
+                item={item}
+                idx={idx}
+                config={config}
+                isDark={isDark}
+                isAdmin={isAdmin}
+                onEdit={() => { setEditingRecord(item); setEditOpen(true); }}
+                onDelete={() => { setDeletingRecord(item); setDeleteOpen(true); }}
+              />
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
 
       {/* Admin notice */}
       {!isAdmin && (

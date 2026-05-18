@@ -23,6 +23,8 @@ const CREATE_TABLES_SQL = [
     nip TEXT NOT NULL DEFAULT '',
     pangkatGolRuang TEXT NOT NULL DEFAULT '',
     jabatan TEXT NOT NULL DEFAULT '',
+    fotoUrl TEXT NOT NULL DEFAULT '',
+    noWa TEXT NOT NULL DEFAULT '',
     createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
@@ -35,10 +37,20 @@ const CREATE_TABLES_SQL = [
     nip TEXT NOT NULL DEFAULT '',
     pangkatGolRuang TEXT NOT NULL DEFAULT '',
     jabatan TEXT NOT NULL DEFAULT '',
+    fotoUrl TEXT NOT NULL DEFAULT '',
+    noWa TEXT NOT NULL DEFAULT '',
     createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
   `CREATE INDEX IF NOT EXISTS Pegawai_nama_idx ON Pegawai(nama)`,
+];
+
+const ALTER_TABLES_SQL = [
+  // Add fotoUrl and noWa columns if they don't exist (for existing Turso tables)
+  `ALTER TABLE Penyuluh ADD COLUMN fotoUrl TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE Penyuluh ADD COLUMN noWa TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE Pegawai ADD COLUMN fotoUrl TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE Pegawai ADD COLUMN noWa TEXT NOT NULL DEFAULT ''`,
 ];
 
 /**
@@ -52,9 +64,20 @@ export async function ensureTablesExist(): Promise<void> {
   if (!initPromise) {
     initPromise = (async () => {
       try {
+        // Create tables (idempotent)
         for (const sql of CREATE_TABLES_SQL) {
           await db.$executeRawUnsafe(sql);
         }
+
+        // Try to add new columns (will fail silently if column already exists)
+        for (const sql of ALTER_TABLES_SQL) {
+          try {
+            await db.$executeRawUnsafe(sql);
+          } catch {
+            // Column already exists — expected for existing databases
+          }
+        }
+
         initialized = true;
         console.log('[db-init] ✅ Tables ensured successfully');
       } catch (error) {

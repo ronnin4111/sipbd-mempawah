@@ -12,7 +12,6 @@ export async function GET() {
     return NextResponse.json(data);
   } catch (error) {
     console.error('Error fetching penyuluh:', error);
-    // Return empty array if still failing after init attempt
     return NextResponse.json([]);
   }
 }
@@ -22,7 +21,7 @@ export async function POST(request: NextRequest) {
   try {
     await ensureTablesExist();
     const body = await request.json();
-    const { nama, nip, pangkatGolRuang, jabatan } = body;
+    const { nama, nip, pangkatGolRuang, jabatan, fotoUrl, noWa } = body;
 
     if (!nama || !nama.trim()) {
       return NextResponse.json({ error: 'Nama wajib diisi' }, { status: 400 });
@@ -34,6 +33,8 @@ export async function POST(request: NextRequest) {
         nip: nip?.trim() || '',
         pangkatGolRuang: pangkatGolRuang?.trim() || '',
         jabatan: jabatan?.trim() || '',
+        fotoUrl: fotoUrl || '',
+        noWa: noWa?.trim() || '',
       },
     });
 

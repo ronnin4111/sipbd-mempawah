@@ -161,6 +161,8 @@ model Penyuluh {
   nip             String   @default("")
   pangkatGolRuang String   @default("")
   jabatan         String   @default("")
+  fotoUrl         String   @default("")
+  noWa            String   @default("")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -173,6 +175,8 @@ model Pegawai {
   nip             String   @default("")
   pangkatGolRuang String   @default("")
   jabatan         String   @default("")
+  fotoUrl         String   @default("")
+  noWa            String   @default("")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
