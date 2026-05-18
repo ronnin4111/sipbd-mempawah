@@ -155,6 +155,30 @@ model KnowledgeChunk {
   @@index([keywords])
 }
 
+model Penyuluh {
+  id              String   @id @default(cuid())
+  nama            String
+  nip             String   @default("")
+  pangkatGolRuang String   @default("")
+  jabatan         String   @default("")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([nama])
+}
+
+model Pegawai {
+  id              String   @id @default(cuid())
+  nama            String
+  nip             String   @default("")
+  pangkatGolRuang String   @default("")
+  jabatan         String   @default("")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([nama])
+}
+
 model SocialMediaPost {
   id            String   @id @default(cuid())
   platform      String   // instagram | facebook | youtube | tiktok | twitter

@@ -374,6 +374,8 @@ import {
   FileCheck,
   Microscope,
   Fish,
+  Users,
+  UserCheck,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -421,6 +423,8 @@ export const NAV_ITEMS: NavItem[] = [
   // Group: Informasi
   { id: 'harga-komoditas',   label: 'Harga Komoditas',   labelLong: 'Harga Komoditas',      icon: DollarSign,      description: 'Daftar harga ikan',                 adminOnly: false, group: 'informasi' },
   { id: 'media-sosial',      label: 'Media Sosial',      labelLong: 'Media Sosial',         icon: Share2,          description: 'Akun & postingan resmi dinas',      adminOnly: false, group: 'informasi' },
+  { id: 'data-penyuluh',     label: 'Data Penyuluh',     labelLong: 'Data Penyuluh',        icon: UserCheck,       description: 'Data penyuluh pertanian/perikanan', adminOnly: false, group: 'informasi' },
+  { id: 'data-pegawai',      label: 'Data Pegawai',      labelLong: 'Data Pegawai',         icon: Users,           description: 'Data pegawai dinas',                adminOnly: false, group: 'informasi' },
 
   // Group: Layanan
   { id: 'layanan-ekusuka',   label: 'Kartu E-KUSUKA',    labelLong: 'Kartu E-KUSUKA',       icon: IdCard,          description: 'Kartu identitas pelaku KP',          adminOnly: false, group: 'layanan' },

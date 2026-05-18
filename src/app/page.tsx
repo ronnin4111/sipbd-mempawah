@@ -28,6 +28,7 @@ import { SmartNarrator } from '@/components/ai/smart-narrator';
 import { MediaSosialSection } from '@/components/social-media/media-sosial-section';
 import { LayananSection } from '@/components/layanan/layanan-section';
 import { LaunchVideoSection } from '@/components/launching/launch-video-section';
+import { StaffDataSection } from '@/components/staff/staff-data-section';
 
 // Dynamic import PdfDashboardCharts with ssr:false to avoid recharts SSR crash on Vercel
 const PdfDashboardCharts = dynamic(
@@ -446,6 +447,10 @@ export default function Home() {
         return <LayananSection />;
       case 'launching-video':
         return <LaunchVideoSection />;
+      case 'data-penyuluh':
+        return <StaffDataSection type="penyuluh" />;
+      case 'data-pegawai':
+        return <StaffDataSection type="pegawai" />;
       default:
         return <DashboardSection />;
     }
