@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { ensureTablesExist } from '@/lib/db-init';
+import { verifyPassword } from '@/lib/passwords';
 
 // GET — list all active social media posts, sorted by pinned first then sortOrder
 export async function GET(req: NextRequest) {
   try {
+    await ensureTablesExist();
     const platform = req.nextUrl.searchParams.get('platform');
     const admin = req.nextUrl.searchParams.get('admin') === 'true';
 
@@ -26,22 +29,23 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ posts });
   } catch (error) {
     console.error('[social-media] GET error:', error);
-    return NextResponse.json({ error: 'Gagal mengambil data media sosial' }, { status: 500 });
+    return NextResponse.json({ posts: [] });
   }
 }
 
 // POST — add a new social media post (admin only)
 export async function POST(req: NextRequest) {
   try {
+    await ensureTablesExist();
     const body = await req.json();
     const { postUrl, platform, caption, thumbnailUrl, isPinned, sortOrder, adminPassword } = body;
 
-    // Verify admin password
+    // Verify admin password using the shared password system
     if (!adminPassword) {
       return NextResponse.json({ error: 'Password admin diperlukan' }, { status: 401 });
     }
-    const setting = await db.appSetting.findUnique({ where: { key: 'admin_password' } });
-    if (!setting || setting.value !== adminPassword) {
+    const isValid = await verifyPassword(adminPassword, 'admin');
+    if (!isValid) {
       return NextResponse.json({ error: 'Password admin salah' }, { status: 401 });
     }
 
@@ -52,29 +56,23 @@ export async function POST(req: NextRequest) {
     // Generate embed URL based on platform
     let embedUrl = '';
     if (platform === 'instagram') {
-      // Extract shortcode from Instagram URL
-      // Formats: https://www.instagram.com/p/SHORTCODE/ or /reel/SHORTCODE/
       const match = postUrl.match(/instagram\.com\/(p|reel|tv)\/([A-Za-z0-9_-]+)/);
       if (match) {
         embedUrl = `https://www.instagram.com/p/${match[2]}/embed/`;
       }
     } else if (platform === 'youtube') {
-      // Extract YouTube video ID
       const match = postUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([A-Za-z0-9_-]+)/);
       if (match) {
         embedUrl = `https://www.youtube.com/embed/${match[1]}`;
       }
     } else if (platform === 'tiktok') {
-      // TikTok embed
       const match = postUrl.match(/tiktok\.com\/@[^/]+\/video\/(\d+)/);
       if (match) {
         embedUrl = `https://www.tiktok.com/embed/v2/${match[1]}`;
       }
     } else if (platform === 'facebook') {
-      // Facebook embed — use the post URL directly in iframe
       embedUrl = `https://www.facebook.com/plugins/post.php?href=${encodeURIComponent(postUrl)}`;
     } else if (platform === 'twitter') {
-      // Twitter/X embed — will use blockquote approach on frontend
       embedUrl = postUrl;
     }
 
@@ -102,14 +100,15 @@ export async function POST(req: NextRequest) {
 // PUT — update a social media post
 export async function PUT(req: NextRequest) {
   try {
+    await ensureTablesExist();
     const body = await req.json();
     const { id, caption, thumbnailUrl, isPinned, sortOrder, isActive, adminPassword } = body;
 
     if (!adminPassword) {
       return NextResponse.json({ error: 'Password admin diperlukan' }, { status: 401 });
     }
-    const setting = await db.appSetting.findUnique({ where: { key: 'admin_password' } });
-    if (!setting || setting.value !== adminPassword) {
+    const isValid = await verifyPassword(adminPassword, 'admin');
+    if (!isValid) {
       return NextResponse.json({ error: 'Password admin salah' }, { status: 401 });
     }
 
@@ -139,14 +138,15 @@ export async function PUT(req: NextRequest) {
 // DELETE — delete a social media post
 export async function DELETE(req: NextRequest) {
   try {
+    await ensureTablesExist();
     const body = await req.json();
     const { id, adminPassword } = body;
 
     if (!adminPassword) {
       return NextResponse.json({ error: 'Password admin diperlukan' }, { status: 401 });
     }
-    const setting = await db.appSetting.findUnique({ where: { key: 'admin_password' } });
-    if (!setting || setting.value !== adminPassword) {
+    const isValid = await verifyPassword(adminPassword, 'admin');
+    if (!isValid) {
       return NextResponse.json({ error: 'Password admin salah' }, { status: 401 });
     }
 

@@ -43,6 +43,32 @@ const CREATE_TABLES_SQL = [
     updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
   `CREATE INDEX IF NOT EXISTS Pegawai_nama_idx ON Pegawai(nama)`,
+
+  // AppSetting table (used for passwords, social media accounts, etc.)
+  `CREATE TABLE IF NOT EXISTS AppSetting (
+    key TEXT PRIMARY KEY NOT NULL,
+    value TEXT NOT NULL DEFAULT '',
+    updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
+
+  // SocialMediaPost table
+  `CREATE TABLE IF NOT EXISTS SocialMediaPost (
+    id TEXT PRIMARY KEY NOT NULL,
+    platform TEXT NOT NULL,
+    postUrl TEXT NOT NULL,
+    embedUrl TEXT NOT NULL DEFAULT '',
+    caption TEXT NOT NULL DEFAULT '',
+    thumbnailUrl TEXT NOT NULL DEFAULT '',
+    isPinned INTEGER NOT NULL DEFAULT 0,
+    sortOrder INTEGER NOT NULL DEFAULT 0,
+    isActive INTEGER NOT NULL DEFAULT 1,
+    addedBy TEXT NOT NULL DEFAULT 'admin',
+    createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE INDEX IF NOT EXISTS SocialMediaPost_platform_idx ON SocialMediaPost(platform)`,
+  `CREATE INDEX IF NOT EXISTS SocialMediaPost_isActive_idx ON SocialMediaPost(isActive)`,
+  `CREATE INDEX IF NOT EXISTS SocialMediaPost_sortOrder_idx ON SocialMediaPost(sortOrder)`,
 ];
 
 const ALTER_TABLES_SQL = [
