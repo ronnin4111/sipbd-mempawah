@@ -73,3 +73,37 @@ Stage Summary:
 - Interactive controls (play/pause, navigate, restart)
 - Accessible via sidebar "Launching" item or "Tonton Video Launching" button on dashboard
 - All lint checks pass
+
+---
+Task ID: 3
+Agent: main
+Task: Add Data Penyuluh and Data Pegawai pages under Informasi group with admin CRUD
+
+Work Log:
+- Added Penyuluh and Pegawai models to Prisma schema (id, nama, nip, pangkatGolRuang, jabatan)
+- Ran db:push to sync schema
+- Created API routes:
+  - /api/penyuluh (GET list, POST create)
+  - /api/penyuluh/[id] (PUT update, DELETE)
+  - /api/pegawai (GET list, POST create)
+  - /api/pegawai/[id] (PUT update, DELETE)
+- Created StaffDataSection shared component with:
+  - Config-driven UI (different color/icon per type: green for Penyuluh, amber for Pegawai)
+  - Responsive table (Nama, NIP, Pangkat Gol/Ruang, Jabatan)
+  - Search/filter functionality
+  - Admin-only CRUD (Add, Edit, Delete) with dialog modals
+  - Toast notifications for success/error
+  - Non-admin sees "Login sebagai admin" notice
+- Added nav items to constants.ts under 'informasi' group:
+  - data-penyuluh (UserCheck icon, green)
+  - data-pegawai (Users icon, amber)
+- Added routes to page.tsx
+- Seeded sample data for both tables
+- Pushed to Vercel
+
+Stage Summary:
+- Data Penyuluh & Data Pegawai pages created under Informasi dropdown
+- Both pages show table with Nama, NIP, Pangkat Gol/Ruang, Jabatan
+- Admin can add, edit, and delete records via modal dialogs
+- Non-admin users can only view data
+- API routes handle full CRUD operations
