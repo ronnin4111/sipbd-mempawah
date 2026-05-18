@@ -303,7 +303,13 @@ export function StaffDataSection({ type }: StaffDataSectionProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
       });
-      if (!res.ok) throw new Error('Failed to save');
+      
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        const errorMsg = errorData.error || 'Gagal menyimpan data';
+        throw new Error(errorMsg);
+      }
+      
       toast({
         title: editingRecord ? 'Data diperbarui' : 'Data ditambahkan',
         description: `${formData.nama} berhasil ${editingRecord ? 'diperbarui' : 'ditambahkan'}`,
@@ -313,7 +319,8 @@ export function StaffDataSection({ type }: StaffDataSectionProps) {
       fetchData();
     } catch (err) {
       console.error('Error saving:', err);
-      toast({ title: 'Gagal menyimpan', description: 'Terjadi kesalahan', variant: 'destructive' });
+      const message = err instanceof Error ? err.message : 'Terjadi kesalahan';
+      toast({ title: 'Gagal menyimpan', description: message, variant: 'destructive' });
     } finally {
       setSaving(false);
     }

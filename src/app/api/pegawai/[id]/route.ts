@@ -10,11 +10,11 @@ export async function PUT(
     const { id } = await params;
     const body = await request.json();
     const { nama, nip, pangkatGolRuang, jabatan } = body;
-    
+
     if (!nama || !nama.trim()) {
-      return NextResponse.json({ error: 'Nama is required' }, { status: 400 });
+      return NextResponse.json({ error: 'Nama wajib diisi' }, { status: 400 });
     }
-    
+
     const pegawai = await db.pegawai.update({
       where: { id },
       data: {
@@ -24,11 +24,14 @@ export async function PUT(
         jabatan: jabatan?.trim() || '',
       },
     });
-    
+
     return NextResponse.json(pegawai);
   } catch (error) {
     console.error('Error updating pegawai:', error);
-    return NextResponse.json({ error: 'Failed to update pegawai' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Gagal memperbarui data pegawai' },
+      { status: 500 }
+    );
   }
 }
 
@@ -43,6 +46,9 @@ export async function DELETE(
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error deleting pegawai:', error);
-    return NextResponse.json({ error: 'Failed to delete pegawai' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Gagal menghapus data pegawai' },
+      { status: 500 }
+    );
   }
 }

@@ -10,11 +10,11 @@ export async function PUT(
     const { id } = await params;
     const body = await request.json();
     const { nama, nip, pangkatGolRuang, jabatan } = body;
-    
+
     if (!nama || !nama.trim()) {
-      return NextResponse.json({ error: 'Nama is required' }, { status: 400 });
+      return NextResponse.json({ error: 'Nama wajib diisi' }, { status: 400 });
     }
-    
+
     const penyuluh = await db.penyuluh.update({
       where: { id },
       data: {
@@ -24,11 +24,14 @@ export async function PUT(
         jabatan: jabatan?.trim() || '',
       },
     });
-    
+
     return NextResponse.json(penyuluh);
   } catch (error) {
     console.error('Error updating penyuluh:', error);
-    return NextResponse.json({ error: 'Failed to update penyuluh' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Gagal memperbarui data penyuluh' },
+      { status: 500 }
+    );
   }
 }
 
@@ -43,6 +46,9 @@ export async function DELETE(
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error deleting penyuluh:', error);
-    return NextResponse.json({ error: 'Failed to delete penyuluh' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Gagal menghapus data penyuluh' },
+      { status: 500 }
+    );
   }
 }
