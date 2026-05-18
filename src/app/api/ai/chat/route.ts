@@ -147,6 +147,13 @@ function classifyQuestion(message: string): 'specific' | 'personnel' | 'stats' |
     // It matched ANY mention of pembesaran, even in counting questions like
     // "berapa produksi pembesaran" which should be 'stats'.
     /nama\s+anggota/i, /anggota\s+dari/i,
+    // "kelompok [nama]" — specific group by name (e.g. "kelompok kawan sejati")
+    // Must come AFTER /kelompok\s+(pembenih|pembenihan|pembesaran)/i so business types match first
+    // Exclude common function words: "di", "yang", "ini", "itu", "dari", "ke", "ada", "apa"
+    /kelompok\s+(?!di\b|yang\b|ini\b|itu\b|dari\b|ke\b|ada\b|apa\b|dengan\b|untuk\b|pada\b|semua\b|seluruh\b)\w+/i,
+    // "berapa orang/anggota" + specific group name context
+    // e.g. "kelompok kawan sejati mempunyai anggota berapa orang"
+    /berapa\s+(orang|anggota|member)/i,
     // KUSUKA-specific patterns
     /kusuka/i, /kartu\s+usaha/i, /registrasi/i, /pendaftaran/i,
     /perorangan/i, /pembenih\s+perorangan/i, /nama\s+pembudidaya/i,
@@ -925,6 +932,7 @@ async function fetchStatsDataContext(filters: {
 
     // Build group data for counting (but NOT for listing)
     const groupMap = new Map<string, {
+      name: string; kec: string;
       businessTypes: Set<string>; memberCount: number; rtpCount: number;
     }>();
     const allFarmerLatest = new Map<string, typeof records[0]>();
@@ -934,7 +942,7 @@ async function fetchStatsDataContext(filters: {
       if (!r.groupName?.trim()) return;
       const key = `${r.groupName.trim().toLowerCase()}|${r.kecamatan}`;
       if (!groupMap.has(key)) {
-        groupMap.set(key, { businessTypes: new Set(), memberCount: 0, rtpCount: 0 });
+        groupMap.set(key, { name: r.groupName.trim(), kec: r.kecamatan, businessTypes: new Set(), memberCount: 0, rtpCount: 0 });
       }
       groupMap.get(key)!.businessTypes.add(r.businessType);
 
@@ -978,7 +986,7 @@ async function fetchStatsDataContext(filters: {
     // Per-kecamatan group count (use groupMap for unique groups, NOT raw records)
     const kecGroupCounts = new Map<string, Set<string>>();
     for (const [key, group] of groupMap) {
-      const kec = group.kecamatan;
+      const kec = group.kec;
       if (!kecGroupCounts.has(kec)) kecGroupCounts.set(kec, new Set());
       kecGroupCounts.get(kec)!.add(key);
     }
@@ -987,6 +995,19 @@ async function fetchStatsDataContext(filters: {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([kec, desas]) => `${kec} (${[...desas].sort().join(', ')})`)
       .join(', ');
+
+    // Per-kecamatan group listing with member counts (compact format)
+    // So AI can answer specific group questions like "kelompok kawan sejati berapa anggota?"
+    const kecGroupDetailLines = [...groupMap.entries()]
+      .sort(([a], [b]) => a[0].localeCompare(b[0]))
+      .map(([key, group]) => {
+        const bizStr = [...group.businessTypes].sort().join('/');
+        return `${group.name} (Kec:${group.kecamatan}) ${group.memberCount}org {${bizStr}}`;
+      });
+    // Limit to keep context manageable (max 200 groups)
+    const groupDetailStr = kecGroupDetailLines.length > 200
+      ? kecGroupDetailLines.slice(0, 200).join(', ') + ` ...dan ${kecGroupDetailLines.length - 200} lagi`
+      : kecGroupDetailLines.join(', ');
 
     const dataContext = `\n=== DATA CONTEXT (WAJIB: gunakan HANYA data ini, jangan mengarang) ===
 Total kelompok: ${totalGroups}
@@ -1006,6 +1027,9 @@ Jenis usaha: ${businessTypeList.join(', ')}
 Wadah budidaya: ${containerTypeList.join(', ')}
 
 Kelompok per kecamatan: ${[...kecGroupCounts.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([kec, keys]) => `${kec} (${keys.size})`).join(', ')}
+
+DAFTAR KELOMPOK (${totalGroups} kelompok — nama | kecamatan | jumlah anggota | jenis usaha):
+${groupDetailStr}
 
 CATATAN: Untuk daftar nama kelompok atau anggota, tanyakan secara spesifik.`;
 
