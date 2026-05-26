@@ -247,34 +247,44 @@ export function HeroBanner() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, ease: 'easeOut' }}
-          className="text-center mb-8 sm:mb-10"
+          className="mb-8 sm:mb-10"
         >
+          {/* Logo + Department Name - Left aligned banner */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.5, delay: 0.1 }}
-            className="inline-flex items-center gap-2.5 mb-4 sm:mb-5"
-            style={{
-              background: isDark ? 'rgba(6,182,212,0.1)' : 'rgba(8,145,178,0.08)',
-              border: `1px solid ${isDark ? 'rgba(6,182,212,0.25)' : 'rgba(8,145,178,0.2)'}`,
-              borderRadius: '99px',
-              padding: '6px 16px',
-            }}
+            className="flex items-center gap-3 sm:gap-4 mb-5 sm:mb-6"
           >
             <img
               src="/logo-sipbk-transparent.png"
-              alt="Logo SIPBK"
-              className="h-7 sm:h-8 w-auto object-contain"
-              style={{ filter: isDark ? 'brightness(1.1) drop-shadow(0 0 6px rgba(6,182,212,0.2))' : 'none' }}
+              alt="Logo SIPBD"
+              className="h-14 sm:h-16 lg:h-20 w-auto object-contain flex-shrink-0"
+              style={{ filter: isDark ? 'brightness(1.1) drop-shadow(0 0 8px rgba(6,182,212,0.25))' : 'drop-shadow(0 2px 8px rgba(0,0,0,0.1))' }}
             />
-            <span
-              className="text-xs font-semibold tracking-widest uppercase"
-              style={{ color: isDark ? '#06B6D4' : '#0891B2' }}
+            <div
+              className="px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl"
+              style={{
+                background: isDark ? 'rgba(6,182,212,0.1)' : 'rgba(8,145,178,0.08)',
+                border: `1px solid ${isDark ? 'rgba(6,182,212,0.25)' : 'rgba(8,145,178,0.2)'}`,
+              }}
             >
-              Dinas Pertanian Ketahanan Pangan dan Perikanan Kab. Mempawah
-            </span>
+              <p
+                className="text-xs sm:text-sm lg:text-base font-semibold tracking-wide leading-tight"
+                style={{ color: isDark ? '#06B6D4' : '#0891B2' }}
+              >
+                Dinas Pertanian Ketahanan Pangan dan Perikanan
+              </p>
+              <p
+                className="text-[10px] sm:text-xs lg:text-sm font-medium tracking-wider leading-tight mt-0.5"
+                style={{ color: isDark ? 'rgba(6,182,212,0.7)' : 'rgba(8,145,178,0.6)' }}
+              >
+                Kabupaten Mempawah
+              </p>
+            </div>
           </motion.div>
 
+          {/* Title - Left aligned */}
           <h1
             className="text-3xl sm:text-4xl lg:text-5xl font-bold leading-tight mb-3 sm:mb-4"
             style={{ fontFamily: 'Syne, sans-serif', color: 'var(--foreground)' }}
@@ -286,7 +296,7 @@ export function HeroBanner() {
           </h1>
 
           <p
-            className="text-sm sm:text-base max-w-2xl mx-auto leading-relaxed"
+            className="text-sm sm:text-base max-w-2xl leading-relaxed"
             style={{ color: 'var(--muted-foreground)' }}
           >
             Dashboard terintegrasi data produksi pembesaran &amp; pembenihan perikanan budidaya
