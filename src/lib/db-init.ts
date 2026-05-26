@@ -104,6 +104,19 @@ export async function ensureTablesExist(): Promise<void> {
           }
         }
 
+        // Initialize default passwords if not set
+        try {
+          const adminPwd = await db.$executeRawUnsafe(
+            `INSERT OR IGNORE INTO AppSetting (key, value, updatedAt) VALUES ('password_admin', 'sipbd2024', CURRENT_TIMESTAMP)`
+          );
+          const exportPwd = await db.$executeRawUnsafe(
+            `INSERT OR IGNORE INTO AppSetting (key, value, updatedAt) VALUES ('password_export', 'sipbd2024', CURRENT_TIMESTAMP)`
+          );
+          console.log('[db-init] 🔑 Default passwords initialized in database');
+        } catch (pwdErr) {
+          console.warn('[db-init] ⚠️ Could not initialize default passwords:', pwdErr);
+        }
+
         initialized = true;
         console.log('[db-init] ✅ Tables ensured successfully');
       } catch (error) {
