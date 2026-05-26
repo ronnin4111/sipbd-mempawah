@@ -1,5 +1,6 @@
 import { db } from '@/lib/db';
 import { IMPORT_PASSWORD, EXPORT_PASSWORD } from '@/lib/constants';
+import { ensureTablesExist } from '@/lib/db-init';
 
 // Warn if passwords are not set in environment variables
 if (!IMPORT_PASSWORD) {
@@ -9,12 +10,19 @@ if (!EXPORT_PASSWORD) {
   console.warn('⚠️ EXPORT_PASSWORD environment variable is not set!');
 }
 
+// Default password used when no password is found anywhere
+const DEFAULT_PASSWORD = 'sipbd2024';
+
 // Cache passwords in memory for 60 seconds to avoid DB hit on every request
 let passwordCache: { admin: string; exportPwd: string; fetchedAt: number } | null = null;
 const CACHE_TTL = 60_000; // 60 seconds
 
 /**
- * Get passwords from database (AppSetting) with fallback to hardcoded constants.
+ * Get passwords from database (AppSetting) with fallback chain:
+ * 1. Database (Turso) AppSetting table
+ * 2. Environment variables (ADMIN_PASSWORD / EXPORT_PASSWORD)
+ * 3. Default password ('sipbd2024')
+ *
  * Keys in DB:
  *   - "password_admin"  → admin/import password
  *   - "password_export" → Excel export password
@@ -26,20 +34,27 @@ export async function getPasswords(): Promise<{ admin: string; exportPwd: string
   }
 
   try {
+    // Ensure AppSetting table exists before querying
+    await ensureTablesExist();
+
     const [adminSetting, exportSetting] = await Promise.all([
       db.appSetting.findUnique({ where: { key: 'password_admin' } }),
       db.appSetting.findUnique({ where: { key: 'password_export' } }),
     ]);
 
-    const admin = adminSetting?.value?.replace(/^"|"$/g, '') || IMPORT_PASSWORD;
-    const exportPwd = exportSetting?.value?.replace(/^"|"$/g, '') || EXPORT_PASSWORD;
+    const admin = adminSetting?.value?.replace(/^"|"$/g, '') || IMPORT_PASSWORD || DEFAULT_PASSWORD;
+    const exportPwd = exportSetting?.value?.replace(/^"|"$/g, '') || EXPORT_PASSWORD || DEFAULT_PASSWORD;
 
     passwordCache = { admin, exportPwd, fetchedAt: Date.now() };
 
     return { admin, exportPwd };
-  } catch {
-    // Fallback to hardcoded if DB is unavailable
-    return { admin: IMPORT_PASSWORD, exportPwd: EXPORT_PASSWORD };
+  } catch (err) {
+    console.error('[passwords] Failed to read from DB:', err);
+    // Fallback chain: env var → default password
+    return {
+      admin: IMPORT_PASSWORD || DEFAULT_PASSWORD,
+      exportPwd: EXPORT_PASSWORD || DEFAULT_PASSWORD
+    };
   }
 }
 
