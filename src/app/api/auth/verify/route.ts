@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyPassword, verifyAnyPassword } from '@/lib/passwords';
+import { ensureTablesExist } from '@/lib/db-init';
 
 export async function POST(request: NextRequest) {
   try {
+    await ensureTablesExist();
     const body = await request.json();
     const { password, type } = body as { password: string; type?: 'admin' | 'export' };
 

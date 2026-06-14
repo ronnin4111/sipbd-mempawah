@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { callAI } from '@/lib/ai-sdk';
 import { retrieveMemories, storeMemories, extractMemoriesFromConversation, formatMemoriesForPrompt, clearMemories } from '@/lib/ai-memory';
 import { db } from '@/lib/db';
+import { ensureTablesExist } from '@/lib/db-init';
 import { generateFarmerId } from '@/lib/farmer-id';
 import { searchKnowledgeBase, getKnowledgeBaseContext, countMatchingChunks, countUniquePegawai, getAllPegawaiChunks } from "@/lib/knowledge-base";
 
@@ -1732,6 +1733,7 @@ function buildCompactStats(statsContext?: Record<string, unknown>): string {
 
 export async function POST(request: NextRequest) {
   try {
+    await ensureTablesExist();
     const body = await request.json();
     const {
       message,

@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { changePassword } from '@/lib/passwords';
+import { ensureTablesExist } from '@/lib/db-init';
 
 export async function POST(request: NextRequest) {
   try {
+    await ensureTablesExist();
     const body = await request.json();
     const { currentPassword, type, newPassword } = body as {
       currentPassword: string;

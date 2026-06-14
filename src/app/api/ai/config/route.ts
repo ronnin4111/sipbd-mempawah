@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { ensureTablesExist } from '@/lib/db-init';
 import { verifyPassword } from '@/lib/passwords';
 import { checkZaiAvailable } from '@/lib/ai-sdk';
 
@@ -14,6 +15,7 @@ const AI_KEY_SETTINGS = {
 // GET /api/ai/config — check AI provider configuration status
 export async function GET() {
   try {
+    await ensureTablesExist();
     const results: Record<string, string | null> = {};
 
     for (const [name, key] of Object.entries(AI_KEY_SETTINGS)) {
@@ -63,6 +65,7 @@ export async function GET() {
 // PUT /api/ai/config — save AI provider configuration (requires password)
 export async function PUT(request: NextRequest) {
   try {
+    await ensureTablesExist();
     const body = await request.json();
     const { password, geminiApiKey, groqApiKey, geminiModel, groqModel } = body;
 

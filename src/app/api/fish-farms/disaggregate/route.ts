@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { ensureTablesExist } from '@/lib/db-init';
 import { verifyPassword } from '@/lib/passwords';
 import { generateFarmerId } from '@/lib/farmer-id';
 
@@ -25,6 +26,7 @@ const VALID_TRIWULAN = ['Q1', 'Q2', 'Q3', 'Q4'];
  */
 export async function GET(request: NextRequest) {
   try {
+    await ensureTablesExist();
     const { searchParams } = new URL(request.url);
     const action = searchParams.get('action');
 
@@ -265,6 +267,7 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    await ensureTablesExist();
     const body = await request.json();
     const {
       password,

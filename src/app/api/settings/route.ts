@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { ensureTablesExist } from '@/lib/db-init';
 import { verifyPassword } from '@/lib/passwords';
 
 // GET /api/settings?key=columnVisibility — get a setting
 export async function GET(request: NextRequest) {
   try {
+    await ensureTablesExist();
     const { searchParams } = new URL(request.url);
     const key = searchParams.get('key');
     if (!key) {
@@ -22,6 +24,7 @@ export async function GET(request: NextRequest) {
 // PUT /api/settings — save a setting (requires admin password)
 export async function PUT(request: NextRequest) {
   try {
+    await ensureTablesExist();
     const body = await request.json();
     const { password, key, value } = body;
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { ensureTablesExist } from '@/lib/db-init';
 
 // Case-insensitive contains filter
 // SQLite: contains is already case-insensitive
@@ -13,6 +14,7 @@ const ciContains = (value: string) => {
 
 export async function GET(request: NextRequest) {
   try {
+    await ensureTablesExist();
     const { searchParams } = new URL(request.url);
 
     // Parse filter parameters

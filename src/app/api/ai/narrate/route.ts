@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { callAI } from '@/lib/ai-sdk';
 import { db } from '@/lib/db';
+import { ensureTablesExist } from '@/lib/db-init';
 
 /** Maximum context characters sent to AI to avoid 413 errors */
 const MAX_CONTEXT_CHARS = 8000;
@@ -185,6 +186,7 @@ async function getAvailableYears(): Promise<number[]> {
 
 export async function POST(request: NextRequest) {
   try {
+    await ensureTablesExist();
     const body = await request.json();
     const { statsContext, type = 'summary' } = body as {
       statsContext?: Record<string, unknown>;

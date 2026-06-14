@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { ensureTablesExist } from '@/lib/db-init';
 import { generateFarmerId } from '@/lib/farmer-id';
 
 /**
@@ -13,6 +14,7 @@ import { generateFarmerId } from '@/lib/farmer-id';
  */
 export async function GET(request: NextRequest) {
   try {
+    await ensureTablesExist();
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search')?.trim();
     const limit = Math.min(parseInt(searchParams.get('limit') || '100', 10), 200);

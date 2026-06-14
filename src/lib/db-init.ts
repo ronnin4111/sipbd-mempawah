@@ -69,6 +69,169 @@ const CREATE_TABLES_SQL = [
   `CREATE INDEX IF NOT EXISTS SocialMediaPost_platform_idx ON SocialMediaPost(platform)`,
   `CREATE INDEX IF NOT EXISTS SocialMediaPost_isActive_idx ON SocialMediaPost(isActive)`,
   `CREATE INDEX IF NOT EXISTS SocialMediaPost_sortOrder_idx ON SocialMediaPost(sortOrder)`,
+
+  // ==========================================
+  // NEW TABLES — added for complete schema
+  // ==========================================
+
+  // DisaggregationBatch — must be created BEFORE FishFarm (FK dependency)
+  `CREATE TABLE IF NOT EXISTS DisaggregationBatch (
+    id TEXT PRIMARY KEY NOT NULL,
+    year INTEGER NOT NULL,
+    triwulan TEXT NOT NULL,
+    kecamatan TEXT NOT NULL,
+    fishType TEXT NOT NULL,
+    containerType TEXT NOT NULL,
+    businessType TEXT NOT NULL,
+    totalQty REAL NOT NULL,
+    notes TEXT NOT NULL DEFAULT '',
+    createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
+
+  // FishFarm table
+  `CREATE TABLE IF NOT EXISTS FishFarm (
+    id TEXT PRIMARY KEY NOT NULL,
+    farmerId TEXT NOT NULL DEFAULT '',
+    year INTEGER NOT NULL,
+    triwulan TEXT NOT NULL DEFAULT 'Q4',
+    kecamatan TEXT NOT NULL,
+    desa TEXT NOT NULL,
+    fishType TEXT NOT NULL,
+    containerType TEXT NOT NULL,
+    businessType TEXT NOT NULL,
+    farmerName TEXT NOT NULL DEFAULT '',
+    groupName TEXT NOT NULL DEFAULT '',
+    productionQty REAL NOT NULL,
+    rtpCount INTEGER NOT NULL,
+    farmerCount INTEGER NOT NULL,
+    groupCount INTEGER NOT NULL,
+    targetQty REAL NOT NULL,
+    productionValue REAL NOT NULL,
+    latitude REAL NOT NULL,
+    longitude REAL NOT NULL,
+    kusuka TEXT NOT NULL DEFAULT '',
+    cpib INTEGER NOT NULL DEFAULT 0,
+    cbib INTEGER NOT NULL DEFAULT 0,
+    disaggregationBatchId TEXT,
+    createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (disaggregationBatchId) REFERENCES DisaggregationBatch(id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS FishFarm_kecamatan_idx ON FishFarm(kecamatan)`,
+  `CREATE INDEX IF NOT EXISTS FishFarm_desa_idx ON FishFarm(desa)`,
+  `CREATE INDEX IF NOT EXISTS FishFarm_fishType_idx ON FishFarm(fishType)`,
+  `CREATE INDEX IF NOT EXISTS FishFarm_businessType_idx ON FishFarm(businessType)`,
+  `CREATE INDEX IF NOT EXISTS FishFarm_year_idx ON FishFarm(year)`,
+  `CREATE INDEX IF NOT EXISTS FishFarm_farmerId_idx ON FishFarm(farmerId)`,
+
+  // CommodityPrice table
+  `CREATE TABLE IF NOT EXISTS CommodityPrice (
+    id TEXT PRIMARY KEY NOT NULL,
+    fishType TEXT NOT NULL,
+    containerType TEXT NOT NULL,
+    price REAL NOT NULL DEFAULT 0,
+    createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(fishType, containerType)
+  )`,
+
+  // ChatMemory table
+  `CREATE TABLE IF NOT EXISTS ChatMemory (
+    id TEXT PRIMARY KEY NOT NULL,
+    sessionId TEXT NOT NULL DEFAULT 'default',
+    category TEXT NOT NULL DEFAULT 'fact',
+    key TEXT NOT NULL,
+    value TEXT NOT NULL,
+    context TEXT NOT NULL DEFAULT '',
+    confidence REAL NOT NULL DEFAULT 1.0,
+    source TEXT NOT NULL DEFAULT 'user_told',
+    accessCount INTEGER NOT NULL DEFAULT 0,
+    lastAccessedAt DATETIME,
+    expiresAt DATETIME,
+    createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE INDEX IF NOT EXISTS ChatMemory_sessionId_category_idx ON ChatMemory(sessionId, category)`,
+  `CREATE INDEX IF NOT EXISTS ChatMemory_sessionId_key_idx ON ChatMemory(sessionId, key)`,
+  `CREATE INDEX IF NOT EXISTS ChatMemory_expiresAt_idx ON ChatMemory(expiresAt)`,
+
+  // KusukaRegistration table
+  `CREATE TABLE IF NOT EXISTS KusukaRegistration (
+    id TEXT PRIMARY KEY NOT NULL,
+    nama TEXT NOT NULL,
+    provinsi TEXT NOT NULL DEFAULT 'KALIMANTAN BARAT',
+    kabKota TEXT NOT NULL DEFAULT 'MEMPAWAH',
+    kecamatan TEXT NOT NULL,
+    kelDesa TEXT NOT NULL,
+    noKusuka TEXT NOT NULL DEFAULT '',
+    namaKelompok TEXT NOT NULL DEFAULT '',
+    bentukUsaha TEXT NOT NULL DEFAULT 'Perseorangan',
+    profesiUtama TEXT NOT NULL DEFAULT 'Subsektor Pembudidaya Ikan',
+    alamat TEXT NOT NULL DEFAULT '',
+    tglDibuat DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    dibuatOleh TEXT NOT NULL DEFAULT '',
+    tglDiperbaharui DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    diperbaharuiOleh TEXT NOT NULL DEFAULT '',
+    divalidasiOleh TEXT NOT NULL DEFAULT '',
+    tglDivalidasi DATETIME,
+    statusKusuka TEXT NOT NULL DEFAULT 'Valid',
+    createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE INDEX IF NOT EXISTS KusukaRegistration_kecamatan_idx ON KusukaRegistration(kecamatan)`,
+  `CREATE INDEX IF NOT EXISTS KusukaRegistration_kelDesa_idx ON KusukaRegistration(kelDesa)`,
+  `CREATE INDEX IF NOT EXISTS KusukaRegistration_namaKelompok_idx ON KusukaRegistration(namaKelompok)`,
+  `CREATE INDEX IF NOT EXISTS KusukaRegistration_noKusuka_idx ON KusukaRegistration(noKusuka)`,
+  `CREATE INDEX IF NOT EXISTS KusukaRegistration_statusKusuka_idx ON KusukaRegistration(statusKusuka)`,
+  `CREATE INDEX IF NOT EXISTS KusukaRegistration_profesiUtama_idx ON KusukaRegistration(profesiUtama)`,
+
+  // KnowledgeDocument table
+  `CREATE TABLE IF NOT EXISTS KnowledgeDocument (
+    id TEXT PRIMARY KEY NOT NULL,
+    title TEXT NOT NULL,
+    fileType TEXT NOT NULL,
+    fileSize INTEGER NOT NULL DEFAULT 0,
+    description TEXT NOT NULL DEFAULT '',
+    category TEXT NOT NULL DEFAULT 'umum',
+    contentHash TEXT NOT NULL DEFAULT '',
+    totalChunks INTEGER NOT NULL DEFAULT 0,
+    isActive INTEGER NOT NULL DEFAULT 1,
+    uploadedBy TEXT NOT NULL DEFAULT 'admin',
+    createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE INDEX IF NOT EXISTS KnowledgeDocument_category_idx ON KnowledgeDocument(category)`,
+  `CREATE INDEX IF NOT EXISTS KnowledgeDocument_isActive_idx ON KnowledgeDocument(isActive)`,
+  `CREATE INDEX IF NOT EXISTS KnowledgeDocument_contentHash_idx ON KnowledgeDocument(contentHash)`,
+
+  // KnowledgeChunk table
+  `CREATE TABLE IF NOT EXISTS KnowledgeChunk (
+    id TEXT PRIMARY KEY NOT NULL,
+    documentId TEXT NOT NULL,
+    chunkIndex INTEGER NOT NULL,
+    content TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT '',
+    keywords TEXT NOT NULL DEFAULT '',
+    accessCount INTEGER NOT NULL DEFAULT 0,
+    createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (documentId) REFERENCES KnowledgeDocument(id) ON DELETE CASCADE
+  )`,
+  `CREATE INDEX IF NOT EXISTS KnowledgeChunk_documentId_idx ON KnowledgeChunk(documentId)`,
+  `CREATE INDEX IF NOT EXISTS KnowledgeChunk_chunkIndex_idx ON KnowledgeChunk(chunkIndex)`,
+  `CREATE INDEX IF NOT EXISTS KnowledgeChunk_keywords_idx ON KnowledgeChunk(keywords)`,
+
+  // PushSubscription table (for web push notifications)
+  `CREATE TABLE IF NOT EXISTS PushSubscription (
+    id TEXT PRIMARY KEY NOT NULL,
+    endpoint TEXT NOT NULL,
+    p256dh TEXT NOT NULL DEFAULT '',
+    auth TEXT NOT NULL DEFAULT '',
+    userId TEXT NOT NULL DEFAULT 'admin',
+    createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
 ];
 
 const ALTER_TABLES_SQL = [
@@ -77,6 +240,13 @@ const ALTER_TABLES_SQL = [
   `ALTER TABLE Penyuluh ADD COLUMN noWa TEXT NOT NULL DEFAULT ''`,
   `ALTER TABLE Pegawai ADD COLUMN fotoUrl TEXT NOT NULL DEFAULT ''`,
   `ALTER TABLE Pegawai ADD COLUMN noWa TEXT NOT NULL DEFAULT ''`,
+
+  // FishFarm — add newer columns in case table exists but was created before these were added
+  `ALTER TABLE FishFarm ADD COLUMN farmerId TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE FishFarm ADD COLUMN kusuka TEXT NOT NULL DEFAULT ''`,
+  `ALTER TABLE FishFarm ADD COLUMN cpib INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE FishFarm ADD COLUMN cbib INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE FishFarm ADD COLUMN disaggregationBatchId TEXT`,
 ];
 
 /**

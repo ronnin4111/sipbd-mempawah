@@ -219,3 +219,37 @@ Stage Summary:
 - Both 'specific' and 'stats' data contexts now include group member counts
 - AI should be able to answer "kelompok kawan sejati berapa orang" correctly
 - Pushed as commit 1c79804
+
+---
+Task ID: 1
+Agent: Main Agent
+Task: Fix Turso database missing tables — add all missing CREATE TABLE statements and ensureTablesExist() to all API routes
+
+Work Log:
+- Root cause: db-init.ts only created 4 tables (Penyuluh, Pegawai, AppSetting, SocialMediaPost) but the app needs 8 more (FishFarm, CommodityPrice, ChatMemory, KusukaRegistration, KnowledgeDocument, KnowledgeChunk, DisaggregationBatch, PushSubscription)
+- Many API routes didn't call ensureTablesExist() before querying, causing "table not found" errors on Turso
+- Updated src/lib/db-init.ts:
+  - Added CREATE TABLE IF NOT EXISTS for all 8 missing tables with correct column types and constraints
+  - Table creation order: DisaggregationBatch before FishFarm (FK dependency)
+  - Added all indexes: FishFarm (kecamatan, desa, fishType, businessType, year, farmerId), ChatMemory (sessionId+category, sessionId+key, expiresAt), KusukaRegistration (kecamatan, kelDesa, namaKelompok, noKusuka, statusKusuka, profesiUtama), KnowledgeDocument (category, isActive, contentHash), KnowledgeChunk (documentId, chunkIndex, keywords)
+  - Added ALTER TABLE statements for FishFarm to add newer columns (farmerId, kusuka, cpib, cbib, disaggregationBatchId) in case the table exists but is missing these
+  - Kept existing ALTER TABLE statements for Penyuluh/Pegawai (fotoUrl, noWa)
+  - Kept existing password initialization code
+- Added ensureTablesExist() to ALL API routes that were missing it (27 route files, 39 handler functions):
+  - fish-farms: route.ts, stats/route.ts, [id]/route.ts, create/route.ts, delete-all/route.ts, import/route.ts, import-file/route.ts, disaggregate/route.ts, backfill-farmer-id/route.ts, export-pdf/route.ts, years/route.ts, filter-options/route.ts, group-names/route.ts, export/route.ts
+  - commodity-prices/route.ts (GET, PUT, POST)
+  - kusuka: stats/route.ts, import/route.ts
+  - knowledge-base: list/route.ts, search/route.ts, reindex/route.ts, delete/route.ts
+  - ai: chat/route.ts, memory/route.ts, config/route.ts, narrate/route.ts, data-context/route.ts
+  - auth: verify/route.ts, change-password/route.ts
+  - settings/route.ts
+- Updated /api/init-db route to check all 12 tables (was only checking 2)
+- Routes that don't need ensureTablesExist (no DB access): /api/route.ts, /api/ai/route.ts, /api/ai/zai-proxy/route.ts, /api/notifications/vapid-public-key/route.ts
+- No commit/push per instructions
+
+Stage Summary:
+- All 12 database tables will now be auto-created at runtime on first API call to any endpoint
+- FishFarm table supports all columns including newer ones (kusuka, cpib, cbib, farmerId, disaggregationBatchId)
+- ALTER TABLE statements handle migrations for existing databases missing newer columns
+- 27 API route files updated to call ensureTablesExist() before every database operation
+- /api/init-db now reports status of all 12 tables for debugging

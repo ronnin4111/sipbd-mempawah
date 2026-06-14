@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { ensureTablesExist } from '@/lib/db-init';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -80,6 +81,7 @@ function formatNumber(n: number): string {
 
 export async function GET(request: NextRequest) {
   try {
+    await ensureTablesExist();
     const { searchParams } = new URL(request.url);
     const where = buildWhere(searchParams);
 

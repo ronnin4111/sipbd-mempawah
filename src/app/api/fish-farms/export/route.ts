@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { ensureTablesExist } from '@/lib/db-init';
 import * as XLSX from 'xlsx';
 
 export const maxDuration = 60;
@@ -67,6 +68,7 @@ function buildWhere(searchParams: URLSearchParams) {
 
 export async function GET(request: NextRequest) {
   try {
+    await ensureTablesExist();
     const { searchParams } = new URL(request.url);
     const where = buildWhere(searchParams);
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { ensureTablesExist } from '@/lib/db-init';
 import { verifyPassword } from '@/lib/passwords';
 
 export async function PUT(
@@ -7,6 +8,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    await ensureTablesExist();
     const { id } = await params;
     const body = await request.json();
     const { password, data } = body as {
@@ -75,6 +77,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    await ensureTablesExist();
     const { id } = await params;
     const body = await request.json();
     const { password } = body as { password: string };

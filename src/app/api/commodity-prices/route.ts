@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { ensureTablesExist } from '@/lib/db-init';
 import { DEFAULT_COMMODITY_PRICES, DEFAULT_PEMBENIHAN_PRICES, FISH_TYPES, CONTAINER_TYPES } from '@/lib/constants';
 import { verifyPassword } from '@/lib/passwords';
 
 // GET /api/commodity-prices - Get all commodity prices in matrix format
 export async function GET() {
   try {
+    await ensureTablesExist();
     const prices = await db.commodityPrice.findMany();
 
     // Build a matrix: fishType -> containerType -> price
@@ -40,6 +42,7 @@ export async function GET() {
 // PUT /api/commodity-prices - Update commodity prices
 export async function PUT(request: NextRequest) {
   try {
+    await ensureTablesExist();
     const body = await request.json();
     const { password, data } = body as {
       password: string;
@@ -104,6 +107,7 @@ export async function PUT(request: NextRequest) {
 // POST /api/commodity-prices - Import commodity prices from Excel sheet data
 export async function POST(request: NextRequest) {
   try {
+    await ensureTablesExist();
     const body = await request.json();
     const { password, data } = body as {
       password: string;

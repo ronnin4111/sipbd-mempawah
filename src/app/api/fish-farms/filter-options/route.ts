@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { ensureTablesExist } from '@/lib/db-init';
 
 /**
  * GET /api/fish-farms/filter-options
@@ -23,6 +24,7 @@ import { db } from '@/lib/db';
  */
 export async function GET(request: NextRequest) {
   try {
+    await ensureTablesExist();
     const { searchParams } = new URL(request.url);
 
     // Parse all filter params into arrays

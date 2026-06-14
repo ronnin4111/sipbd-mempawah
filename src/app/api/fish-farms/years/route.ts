@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { ensureTablesExist } from '@/lib/db-init';
 
 export async function GET() {
   try {
+    await ensureTablesExist();
     const result = await db.fishFarm.findMany({
       select: { year: true },
       distinct: ['year'],

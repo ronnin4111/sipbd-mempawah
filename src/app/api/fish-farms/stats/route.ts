@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { ensureTablesExist } from '@/lib/db-init';
 import { generateFarmerId } from '@/lib/farmer-id';
 
 // Helper to generate farmerId from a database record (fallback for old records without farmerId)
@@ -83,6 +84,7 @@ function buildWhere(searchParams: URLSearchParams) {
 
 export async function GET(request: NextRequest) {
   try {
+    await ensureTablesExist();
     const { searchParams } = new URL(request.url);
     const now = new Date();
     const calendarYear = now.getFullYear();

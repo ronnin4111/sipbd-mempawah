@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { ensureTablesExist } from '@/lib/db-init';
 import { verifyPassword } from '@/lib/passwords';
 import { generateFarmerId } from '@/lib/farmer-id';
 import * as XLSX from 'xlsx';
@@ -40,6 +41,7 @@ export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   try {
+    await ensureTablesExist();
     const formData = await request.formData();
     const password = formData.get('password') as string;
     const file = formData.get('file') as File;

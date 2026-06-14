@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { extractKeywordsFromContent } from "@/lib/knowledge-base";
+import { ensureTablesExist } from "@/lib/db-init";
 
 /**
  * Re-index all existing knowledge base chunks.
@@ -9,6 +10,7 @@ import { extractKeywordsFromContent } from "@/lib/knowledge-base";
  */
 export async function POST(request: NextRequest) {
   try {
+    await ensureTablesExist();
     const password = request.headers.get("x-admin-password");
 
     // Verify password

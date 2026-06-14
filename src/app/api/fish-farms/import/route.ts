@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { ensureTablesExist } from '@/lib/db-init';
 import { verifyPassword } from '@/lib/passwords';
 import { generateFarmerId } from '@/lib/farmer-id';
 
@@ -88,6 +89,7 @@ export const maxDuration = 60; // 60 seconds timeout for Vercel
 
 export async function POST(request: NextRequest) {
   try {
+    await ensureTablesExist();
     const body = await request.json();
     const { password, data, replaceAll } = body as { password: string; data: ImportFishFarm[]; replaceAll?: boolean };
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAllMemories, clearMemories } from '@/lib/ai-memory';
+import { ensureTablesExist } from '@/lib/db-init';
 
 /**
  * AI Memory Management API
@@ -8,6 +9,7 @@ import { getAllMemories, clearMemories } from '@/lib/ai-memory';
  */
 export async function GET(request: NextRequest) {
   try {
+    await ensureTablesExist();
     const { searchParams } = new URL(request.url);
     const sessionId = searchParams.get('sessionId') || 'default';
 
@@ -43,6 +45,7 @@ export async function GET(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    await ensureTablesExist();
     const { searchParams } = new URL(request.url);
     const sessionId = searchParams.get('sessionId') || 'default';
 

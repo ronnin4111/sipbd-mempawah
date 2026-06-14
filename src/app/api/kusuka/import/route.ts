@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { ensureTablesExist } from '@/lib/db-init';
 import { verifyPassword } from '@/lib/passwords';
 import * as XLSX from 'xlsx';
 
@@ -222,6 +223,7 @@ export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
   try {
+    await ensureTablesExist();
     const contentType = request.headers.get('content-type') || '';
 
     // ── JSON mode: direct data array for seed ──

@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { deleteDocument } from "@/lib/knowledge-base";
 import { verifyPassword } from "@/lib/passwords";
+import { ensureTablesExist } from "@/lib/db-init";
 
 export async function DELETE(request: NextRequest) {
   try {
+    await ensureTablesExist();
     // Verify admin password
     const password = request.headers.get("x-admin-password");
     const valid = await verifyPassword(password || "", "admin");

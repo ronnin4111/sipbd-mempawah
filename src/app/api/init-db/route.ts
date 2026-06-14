@@ -9,16 +9,34 @@ export async function GET() {
     await ensureTablesExist();
 
     // Check which tables exist
-    const penyuluhOk = await tableExists('Penyuluh');
-    const pegawaiOk = await tableExists('Pegawai');
+    const tableNames = [
+      'Penyuluh',
+      'Pegawai',
+      'AppSetting',
+      'SocialMediaPost',
+      'DisaggregationBatch',
+      'FishFarm',
+      'CommodityPrice',
+      'ChatMemory',
+      'KusukaRegistration',
+      'KnowledgeDocument',
+      'KnowledgeChunk',
+      'PushSubscription',
+    ];
+
+    const tableChecks = await Promise.all(
+      tableNames.map(async (name) => {
+        const exists = await tableExists(name);
+        return [name, exists] as const;
+      })
+    );
+
+    const tables = Object.fromEntries(tableChecks);
 
     return NextResponse.json({
       success: true,
       message: 'Database initialized successfully',
-      tables: {
-        Penyuluh: penyuluhOk,
-        Pegawai: pegawaiOk,
-      },
+      tables,
     });
   } catch (error) {
     console.error('Error initializing database:', error);

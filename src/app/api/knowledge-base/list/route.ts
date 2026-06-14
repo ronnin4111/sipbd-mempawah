@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listDocuments, getKnowledgeBaseStats } from "@/lib/knowledge-base";
+import { ensureTablesExist } from "@/lib/db-init";
 
 export async function GET(request: NextRequest) {
   try {
+    await ensureTablesExist();
     const { searchParams } = new URL(request.url);
     const category = searchParams.get("category") || undefined;
     const includeStats = searchParams.get("stats") === "true";

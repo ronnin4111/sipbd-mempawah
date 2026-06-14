@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { ensureTablesExist } from '@/lib/db-init';
 
 /**
  * GET /api/fish-farms/group-names
@@ -18,6 +19,7 @@ import { db } from '@/lib/db';
  */
 export async function GET(request: NextRequest) {
   try {
+    await ensureTablesExist();
     const { searchParams } = new URL(request.url);
 
     // Build where clause from filter params (same pattern as other routes)
