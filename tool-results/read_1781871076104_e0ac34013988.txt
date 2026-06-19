@@ -1,0 +1,773 @@
+     1→'use client';
+     2→
+     3→import { useState, useRef, useEffect, useCallback } from 'react';
+     4→import { motion, AnimatePresence } from 'framer-motion';
+     5→import { MessageSquare, X, Send, Bot, User, Sparkles, Trash2, Loader2, Settings, Key, CheckCircle2, AlertCircle, Eye, EyeOff, Wifi, WifiOff } from 'lucide-react';
+     6→import { useFilterStore } from '@/store/filter-store';
+     7→import { useFishFarmStats } from '@/hooks/use-fish-farms';
+     8→
+     9→interface Message {
+    10→  role: 'user' | 'assistant';
+    11→  content: string;
+    12→  timestamp: Date;
+    13→}
+    14→
+    15→interface AIConfig {
+    16→  gemini: { configured: boolean; source: string; model: string; keyHint: string | null };
+    17→  groq: { configured: boolean; source: string; model: string; keyHint: string | null };
+    18→}
+    19→
+    20→interface AITestResult {
+    21→  gemini: { keyFound: boolean; keySource: string; keyHint: string | null; testResult: string; latencyMs: number; error: string | null };
+    22→  groq: { keyFound: boolean; keySource: string; keyHint: string | null; testResult: string; latencyMs: number; error: string | null };
+    23→  dbConnection: { ok: boolean; error: string | null };
+    24→  summary: string;
+    25→}
+    26→
+    27→const QUICK_PROMPTS = [
+    28→  '📊 Ringkasan produksi tahun ini',
+    29→  '👥 Daftar kelompok pembudidaya',
+    30→  '📈 Kecamatan mana yang produksinya tertinggi?',
+    31→  '🐟 Jenis ikan apa yang paling banyak diproduksi?',
+    32→  '📉 Bagaimana tren produksi 5 tahun terakhir?',
+    33→  '🎯 Berapa jumlah RTP dan kelompok?',
+    34→  '🧠 Hapus semua memori AI',
+    35→];
+    36→
+    37→export function AIChatWidget() {
+    38→  const [isOpen, setIsOpen] = useState(false);
+    39→  const [messages, setMessages] = useState<Message[]>([]);
+    40→  const [input, setInput] = useState('');
+    41→  const [isLoading, setIsLoading] = useState(false);
+    42→  const [showConfig, setShowConfig] = useState(false);
+    43→  const [aiConfig, setAiConfig] = useState<AIConfig | null>(null);
+    44→  const [configGeminiKey, setConfigGeminiKey] = useState('');
+    45→  const [configGroqKey, setConfigGroqKey] = useState('');
+    46→  const [configPassword, setConfigPassword] = useState('');
+    47→  const [isSavingConfig, setIsSavingConfig] = useState(false);
+    48→  const [configMessage, setConfigMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+    49→  const [showGeminiKey, setShowGeminiKey] = useState(false);
+    50→  const [showGroqKey, setShowGroqKey] = useState(false);
+    51→  const [isTestingAI, setIsTestingAI] = useState(false);
+    52→  const [testResult, setTestResult] = useState<AITestResult | null>(null);
+    53→  const messagesEndRef = useRef<HTMLDivElement>(null);
+    54→  const inputRef = useRef<HTMLInputElement>(null);
+    55→
+    56→  // 🧠 Persistent session ID — stored in localStorage so memories survive across browser sessions
+    57→  const [sessionId] = useState(() => {
+    58→    if (typeof window === 'undefined') return 'default';
+    59→    const stored = localStorage.getItem('sipbd-ai-session-id');
+    60→    if (stored) return stored;
+    61→    const newId = `session_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    62→    localStorage.setItem('sipbd-ai-session-id', newId);
+    63→    return newId;
+    64→  });
+    65→
+    66→  // Get current filter state for context
+    67→  const years = useFilterStore((s) => s.years);
+    68→  const kecamatan = useFilterStore((s) => s.kecamatan);
+    69→  const desa = useFilterStore((s) => s.desa);
+    70→  const fishType = useFilterStore((s) => s.fishType);
+    71→  const containerType = useFilterStore((s) => s.containerType);
+    72→  const businessType = useFilterStore((s) => s.businessType);
+    73→
+    74→  // Get stats data for AI context
+    75→  const { data: stats } = useFishFarmStats();
+    76→
+    77→  // Fetch AI config when panel opens
+    78→  const fetchAIConfig = useCallback(async () => {
+    79→    try {
+    80→      const res = await fetch('/api/ai/config');
+    81→      if (res.ok) {
+    82→        const data = await res.json();
+    83→        setAiConfig(data);
+    84→      }
+    85→    } catch {
+    86→      // ignore
+    87→    }
+    88→  }, []);
+    89→
+    90→  useEffect(() => {
+    91→    if (isOpen) fetchAIConfig();
+    92→  }, [isOpen, fetchAIConfig]);
+    93→
+    94→  const scrollToBottom = useCallback(() => {
+    95→    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    96→  }, []);
+    97→
+    98→  useEffect(() => {
+    99→    scrollToBottom();
+   100→  }, [messages, scrollToBottom]);
+   101→
+   102→  useEffect(() => {
+   103→    if (isOpen && inputRef.current && !showConfig) {
+   104→      inputRef.current.focus();
+   105→    }
+   106→  }, [isOpen, showConfig]);
+   107→
+   108→  const saveConfig = async () => {
+   109→    setIsSavingConfig(true);
+   110→    setConfigMessage(null);
+   111→    try {
+   112→      const res = await fetch('/api/ai/config', {
+   113→        method: 'PUT',
+   114→        headers: { 'Content-Type': 'application/json' },
+   115→        body: JSON.stringify({
+   116→          password: configPassword,
+   117→          geminiApiKey: configGeminiKey || undefined,
+   118→          groqApiKey: configGroqKey || undefined,
+   119→        }),
+   120→      });
+   121→      const data = await res.json();
+   122→      if (data.success) {
+   123→        setConfigMessage({ type: 'success', text: '✅ Konfigurasi AI berhasil disimpan!' });
+   124→        setConfigGeminiKey('');
+   125→        setConfigGroqKey('');
+   126→        setConfigPassword('');
+   127→        fetchAIConfig();
+   128→        // Auto-test after saving
+   129→        testAIConnection();
+   130→      } else {
+   131→        setConfigMessage({ type: 'error', text: `❌ ${data.error || 'Gagal menyimpan'}` });
+   132→      }
+   133→    } catch {
+   134→      setConfigMessage({ type: 'error', text: '❌ Gagal terhubung ke server' });
+   135→    } finally {
+   136→      setIsSavingConfig(false);
+   137→    }
+   138→  };
+   139→
+   140→  const testAIConnection = async () => {
+   141→    setIsTestingAI(true);
+   142→    setTestResult(null);
+   143→    try {
+   144→      const res = await fetch('/api/ai/test');
+   145→      if (res.ok) {
+   146→        const data = await res.json();
+   147→        setTestResult(data.results);
+   148→      } else {
+   149→        setTestResult({
+   150→          gemini: { keyFound: false, keySource: 'none', keyHint: null, testResult: 'failed', latencyMs: 0, error: 'Failed to fetch test results' },
+   151→          groq: { keyFound: false, keySource: 'none', keyHint: null, testResult: 'failed', latencyMs: 0, error: 'Failed to fetch test results' },
+   152→          dbConnection: { ok: false, error: 'Test endpoint failed' },
+   153→          summary: 'Test endpoint returned error',
+   154→        });
+   155→      }
+   156→    } catch (err) {
+   157→      setTestResult({
+   158→        gemini: { keyFound: false, keySource: 'none', keyHint: null, testResult: 'failed', latencyMs: 0, error: 'Network error' },
+   159→        groq: { keyFound: false, keySource: 'none', keyHint: null, testResult: 'failed', latencyMs: 0, error: 'Network error' },
+   160→        dbConnection: { ok: false, error: 'Network error' },
+   161→        summary: 'Network error - cannot reach test endpoint',
+   162→      });
+   163→    } finally {
+   164→      setIsTestingAI(false);
+   165→    }
+   166→  };
+   167→
+   168→  const sendMessage = async (text: string) => {
+   169→    if (!text.trim() || isLoading) return;
+   170→
+   171→    const userMessage: Message = {
+   172→      role: 'user',
+   173→      content: text.trim(),
+   174→      timestamp: new Date(),
+   175→    };
+   176→
+   177→    setMessages((prev) => [...prev, userMessage]);
+   178→    setInput('');
+   179→    setIsLoading(true);
+   180→
+   181→    try {
+   182→      // Build conversation history (last 10 messages)
+   183→      const history = messages.slice(-10).map((m) => ({
+   184→        role: m.role,
+   185→        content: m.content,
+   186→      }));
+   187→
+   188→      // Build stats context with filter info
+   189→      const statsContext = stats
+   190→        ? {
+   191→            periodLabel: stats.periodLabel,
+   192→            currentYear: stats.currentYear,
+   193→            pembesaranProduction: stats.pembesaranProduction,
+   194→            pembenihanProduction: stats.pembenihanProduction,
+   195→            totalRtp: stats.totalRtp,
+   196→            totalFarmer: stats.totalFarmer,
+   197→            totalGroup: stats.totalGroup,
+   198→            totalKusuka: stats.totalKusuka,
+   199→            rtpByBusinessType: stats.rtpByBusinessType,
+   200→            farmerByBusinessType: stats.farmerByBusinessType,
+   201→            productionByFishType: stats.productionByFishType,
+   202→            productionByKecamatan: stats.productionByKecamatan,
+   203→            productionByContainer: stats.productionByContainer,
+   204→            productionByKecamatanDetail: stats.productionByKecamatanDetail,
+   205→            productionByFishTypeDetail: stats.productionByFishTypeDetail,
+   206→            trend5Year: stats.trend5Year,
+   207→            targetVsRealisasiPembesaran: stats.targetVsRealisasiPembesaran,
+   208→            targetVsRealisasiPembenihan: stats.targetVsRealisasiPembenihan,
+   209→            commodityPrices: stats.commodityPrices,
+   210→            activeFilters: {
+   211→              years: years.length > 0 ? years : 'Semua tahun',
+   212→              kecamatan: kecamatan.length > 0 ? kecamatan : 'Semua kecamatan',
+   213→              desa: desa.length > 0 ? desa : 'Semua desa',
+   214→              fishType: fishType.length > 0 ? fishType : 'Semua jenis ikan',
+   215→              containerType: containerType.length > 0 ? containerType : 'Semua wadah',
+   216→              businessType: businessType.length > 0 ? businessType : 'Semua jenis usaha',
+   217→            },
+   218→          }
+   219→        : null;
+   220→
+   221→      // Send filters so the backend can fetch data context server-side
+   222→      const filters = {
+   223→        years: years.length > 0 ? years : [],
+   224→        kecamatan: kecamatan.length > 0 ? kecamatan : [],
+   225→        desa: desa.length > 0 ? desa : [],
+   226→        fishType: fishType.length > 0 ? fishType : [],
+   227→        containerType: containerType.length > 0 ? containerType : [],
+   228→        businessType: businessType.length > 0 ? businessType : [],
+   229→      };
+   230→
+   231→      const response = await fetch('/api/ai/chat', {
+   232→        method: 'POST',
+   233→        headers: { 'Content-Type': 'application/json' },
+   234→        body: JSON.stringify({
+   235→          message: text.trim(),
+   236→          messages: history,
+   237→          statsContext,
+   238→          filters,
+   239→          sessionId,  // 🧠 Session ID for memory persistence
+   240→        }),
+   241→      });
+   242→
+   243→      const data = await response.json();
+   244→
+   245→      if (data.success && data.response) {
+   246→        const aiMessage: Message = {
+   247→          role: 'assistant',
+   248→          content: data.response,
+   249→          timestamp: new Date(),
+   250→        };
+   251→        setMessages((prev) => [...prev, aiMessage]);
+   252→      } else {
+   253→        const errorDetail = data.detail || data.error || '';
+   254→        // Check if it's a missing API key error
+   255→        const isKeyMissing = errorDetail.includes('API Key belum dikonfigurasi') || errorDetail.includes('Z.AI tidak tersedia');
+   256→        const isRateLimited = errorDetail.includes('Batas permintaan') || errorDetail.includes('rate');
+   257→        const isInvalidKey = errorDetail.includes('API Key tidak valid') || errorDetail.includes('INVALID_API_KEY');
+   258→        const errorMessage: Message = {
+   259→          role: 'assistant',
+   260→          content: isKeyMissing
+   261→            ? '⚠️ **Provider AI tidak tersedia.**\n\nZ.AI sedang tidak dapat diakses, dan API key Gemini/Groq belum dikonfigurasi.\n\nKlik ikon ⚙️ di header chat untuk:\n- Cek status Z.AI\n- Atur API key Gemini/Groq sebagai fallback\n\n**Gratis & mudah:**\n- Gemini: https://aistudio.google.com/apikey\n- Groq: https://console.groq.com'
+   262→            : isRateLimited
+   263→              ? `⏳ **Batas permintaan tercapai.**\n\n${errorDetail}\n\nTunggu 1-2 menit lalu coba lagi. Gunakan ⚙️ → Test Koneksi untuk diagnose.`
+   264→              : isInvalidKey
+   265→                ? `🔑 **API Key tidak valid.**\n\n${errorDetail}\n\nPeriksa API key di pengaturan (⚙️). Pastikan key yang dimasukkan benar.`
+   266→                : errorDetail
+   267→                  ? `Maaf, terjadi kesalahan: ${errorDetail}. Silakan coba lagi. 🙏`
+   268→                  : 'Maaf, terjadi kesalahan saat memproses pertanyaan Anda. Silakan coba lagi. 🙏',
+   269→          timestamp: new Date(),
+   270→        };
+   271→        setMessages((prev) => [...prev, errorMessage]);
+   272→
+   273→        // Auto-show config if keys are missing
+   274→        if (isKeyMissing) {
+   275→          fetchAIConfig();
+   276→        }
+   277→      }
+   278→    } catch (err) {
+   279→      console.error('Chat fetch error:', err);
+   280→      const errorMessage: Message = {
+   281→        role: 'assistant',
+   282→        content: 'Maaf, koneksi AI sedang bermasalah. Silakan coba lagi dalam beberapa saat. 🙏',
+   283→        timestamp: new Date(),
+   284→      };
+   285→      setMessages((prev) => [...prev, errorMessage]);
+   286→    } finally {
+   287→      setIsLoading(false);
+   288→    }
+   289→  };
+   290→
+   291→  const handleKeyDown = (e: React.KeyboardEvent) => {
+   292→    if (e.key === 'Enter' && !e.shiftKey) {
+   293→      e.preventDefault();
+   294→      sendMessage(input);
+   295→    }
+   296→  };
+   297→
+   298→  const clearChat = () => {
+   299→    setMessages([]);
+   300→  };
+   301→
+   302→  // Check if any AI provider is available (Z.AI is always available in sandbox)
+   303→  const isAIConfigured = aiConfig?.zai?.available || aiConfig?.gemini?.configured || aiConfig?.groq?.configured;
+   304→
+   305→  // Format message content with simple markdown-like rendering
+   306→  const formatContent = (content: string) => {
+   307→    // Split by newlines and handle bullet points
+   308→    return content.split('\n').map((line, i) => {
+   309→      // Bold text
+   310→      const formattedLine = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+   311→      // Bullet points
+   312→      if (line.trimStart().startsWith('- ') || line.trimStart().startsWith('• ') || line.trimStart().startsWith('* ')) {
+   313→        return (
+   314→          <div key={i} className="flex gap-1.5 ml-1">
+   315→            <span className="shrink-0">•</span>
+   316→            <span dangerouslySetInnerHTML={{ __html: formattedLine.replace(/^[\s]*[-•*]\s*/, '') }} />
+   317→          </div>
+   318→        );
+   319→      }
+   320→      // Numbered lists
+   321→      const numMatch = line.trimStart().match(/^(\d+)\.\s/);
+   322→      if (numMatch) {
+   323→        return (
+   324→          <div key={i} className="flex gap-1.5 ml-1">
+   325→            <span className="shrink-0">{numMatch[1]}.</span>
+   326→            <span dangerouslySetInnerHTML={{ __html: formattedLine.replace(/^\s*\d+\.\s/, '') }} />
+   327→          </div>
+   328→        );
+   329→      }
+   330→      // Empty line = paragraph break
+   331→      if (line.trim() === '') {
+   332→        return <div key={i} className="h-2" />;
+   333→      }
+   334→      return <div key={i} dangerouslySetInnerHTML={{ __html: formattedLine }} />;
+   335→    });
+   336→  };
+   337→
+   338→  // Render test result badge
+   339→  const renderTestBadge = (result: 'success' | 'failed' | 'testing' | 'not_tested' | 'empty_response', label: string) => {
+   340→    if (result === 'success') return <span className="text-green-600 font-medium">✅ {label} OK</span>;
+   341→    if (result === 'failed') return <span className="text-red-600 font-medium">❌ {label} GAGAL</span>;
+   342→    if (result === 'testing') return <span className="text-amber-600">⏳ Testing...</span>;
+   343→    if (result === 'empty_response') return <span className="text-amber-600">⚠️ {label} kosong</span>;
+   344→    return <span className="text-gray-400">⏸ Belum ditest</span>;
+   345→  };
+   346→
+   347→  return (
+   348→    <>
+   349→      {/* Floating button */}
+   350→      <AnimatePresence>
+   351→        {!isOpen && (
+   352→          <motion.button
+   353→            initial={{ scale: 0, opacity: 0 }}
+   354→            animate={{ scale: 1, opacity: 1 }}
+   355→            exit={{ scale: 0, opacity: 0 }}
+   356→            transition={{ type: 'spring', stiffness: 260, damping: 20 }}
+   357→            onClick={() => setIsOpen(true)}
+   358→            className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full shadow-lg flex items-center justify-center group"
+   359→            style={{
+   360→              background: 'linear-gradient(135deg, #06B6D4, #0891B2)',
+   361→              boxShadow: '0 4px 20px rgba(6,182,212,0.4)',
+   362→            }}
+   363→            aria-label="Buka Asisten AI"
+   364→          >
+   365→            <MessageSquare className="h-6 w-6 text-white group-hover:scale-110 transition-transform" />
+   366→            {!isAIConfigured && (
+   367→              <span className="absolute -top-1 -right-1 w-4 h-4 bg-amber-400 rounded-full flex items-center justify-center">
+   368→                <Key className="h-2.5 w-2.5 text-amber-900" />
+   369→              </span>
+   370→            )}
+   371→            {isAIConfigured && (
+   372→              <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full animate-pulse" />
+   373→            )}
+   374→          </motion.button>
+   375→        )}
+   376→      </AnimatePresence>
+   377→
+   378→      {/* Chat panel */}
+   379→      <AnimatePresence>
+   380→        {isOpen && (
+   381→          <motion.div
+   382→            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+   383→            animate={{ opacity: 1, y: 0, scale: 1 }}
+   384→            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+   385→            transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+   386→            className="fixed bottom-6 right-6 z-50 w-[400px] max-w-[calc(100vw-48px)] flex flex-col rounded-2xl overflow-hidden border"
+   387→            style={{
+   388→              height: 'min(620px, calc(100vh - 120px))',
+   389→              background: 'var(--background)',
+   390→              borderColor: 'var(--border)',
+   391→              boxShadow: '0 8px 40px rgba(0,0,0,0.15), 0 0 0 1px rgba(6,182,212,0.1)',
+   392→            }}
+   393→          >
+   394→            {/* Header */}
+   395→            <div
+   396→              className="shrink-0 px-4 py-3 flex items-center gap-3"
+   397→              style={{
+   398→                background: 'linear-gradient(135deg, #06B6D4, #0891B2)',
+   399→              }}
+   400→            >
+   401→              <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
+   402→                <Sparkles className="h-4 w-4 text-white" />
+   403→              </div>
+   404→              <div className="flex-1 min-w-0">
+   405→                <div className="text-sm font-bold text-white">Asisten AI Perikanan</div>
+   406→                <div className="text-[10px] text-cyan-100">
+   407→                  SIPBD · Mempawah {!isAIConfigured && '· ⚠️ API Key belum diatur'}
+   408→                </div>
+   409→              </div>
+   410→              <button
+   411→                onClick={() => { setShowConfig(!showConfig); fetchAIConfig(); }}
+   412→                className="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
+   413→                title="Pengaturan AI"
+   414→              >
+   415→                <Settings className="h-3.5 w-3.5 text-white" />
+   416→              </button>
+   417→              <button
+   418→                onClick={clearChat}
+   419→                className="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
+   420→                title="Hapus percakapan"
+   421→              >
+   422→                <Trash2 className="h-3.5 w-3.5 text-white" />
+   423→              </button>
+   424→              <button
+   425→                onClick={() => setIsOpen(false)}
+   426→                className="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
+   427→                title="Tutup"
+   428→              >
+   429→                <X className="h-3.5 w-3.5 text-white" />
+   430→              </button>
+   431→            </div>
+   432→
+   433→            {/* Config panel */}
+   434→            <AnimatePresence>
+   435→              {showConfig && (
+   436→                <motion.div
+   437→                  initial={{ height: 0, opacity: 0 }}
+   438→                  animate={{ height: 'auto', opacity: 1 }}
+   439→                  exit={{ height: 0, opacity: 0 }}
+   440→                  className="overflow-hidden border-b"
+   441→                  style={{ borderColor: 'var(--border)' }}
+   442→                >
+   443→                  <div className="p-4 space-y-3 max-h-[50vh] overflow-y-auto" style={{ background: 'var(--card)' }}>
+   444→                    <div className="text-xs font-semibold flex items-center gap-2" style={{ color: 'var(--foreground)' }}>
+   445→                      <Key className="h-3.5 w-3.5" /> Konfigurasi AI Provider
+   446→                    </div>
+   447→                    <p className="text-[10px]" style={{ color: 'var(--muted-foreground)' }}>
+   448→                      Z.AI (chat.z.ai) adalah provider utama — otomatis tersedia, tanpa API key! Gemini/Groq sebagai fallback opsional.
+   449→                    </p>
+   450→
+   451→                    {/* Status indicators */}
+   452→                    <div className="flex gap-2 flex-wrap">
+   453→                      <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] ${aiConfig?.zai?.available ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
+   454→                        {aiConfig?.zai?.available ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
+   455→                        Z.AI {aiConfig?.zai?.available ? '✓' : '✗'} <span className="opacity-60">(primary)</span>
+   456→                      </div>
+   457→                      <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] ${aiConfig?.gemini?.configured ? 'bg-green-50 text-green-700' : 'bg-gray-50 text-gray-500'}`}>
+   458→                        {aiConfig?.gemini?.configured ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
+   459→                        Gemini {aiConfig?.gemini?.configured ? '✓' : '✗'}
+   460→                        {aiConfig?.gemini?.keyHint && <span className="opacity-60">({aiConfig.gemini.keyHint})</span>}
+   461→                      </div>
+   462→                      <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] ${aiConfig?.groq?.configured ? 'bg-green-50 text-green-700' : 'bg-gray-50 text-gray-500'}`}>
+   463→                        {aiConfig?.groq?.configured ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
+   464→                        Groq {aiConfig?.groq?.configured ? '✓' : '✗'}
+   465→                        {aiConfig?.groq?.keyHint && <span className="opacity-60">({aiConfig.groq.keyHint})</span>}
+   466→                      </div>
+   467→                    </div>
+   468→
+   469→                    {/* Gemini Key Input */}
+   470→                    <div>
+   471→                      <label className="text-[10px] font-medium block mb-1" style={{ color: 'var(--foreground)' }}>
+   472→                        Gemini API Key <span className="opacity-50">(fallback opsional — https://aistudio.google.com/apikey)</span>
+   473→                      </label>
+   474→                      <div className="relative">
+   475→                        <input
+   476→                          type={showGeminiKey ? 'text' : 'password'}
+   477→                          value={configGeminiKey}
+   478→                          onChange={(e) => setConfigGeminiKey(e.target.value)}
+   479→                          placeholder={aiConfig?.gemini?.configured ? 'Kosongkan jika tidak ingin mengubah' : 'AIzaSy...'}
+   480→                          className="w-full text-[11px] px-3 py-1.5 rounded-lg border pr-8 outline-none focus:ring-1 focus:ring-cyan-400"
+   481→                          style={{ borderColor: 'var(--border)', background: 'var(--background)', color: 'var(--foreground)' }}
+   482→                        />
+   483→                        <button
+   484→                          type="button"
+   485→                          onClick={() => setShowGeminiKey(!showGeminiKey)}
+   486→                          className="absolute right-2 top-1/2 -translate-y-1/2 opacity-40 hover:opacity-70"
+   487→                        >
+   488→                          {showGeminiKey ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+   489→                        </button>
+   490→                      </div>
+   491→                    </div>
+   492→
+   493→                    {/* Groq Key Input */}
+   494→                    <div>
+   495→                      <label className="text-[10px] font-medium block mb-1" style={{ color: 'var(--foreground)' }}>
+   496→                        Groq API Key <span className="opacity-50">(fallback opsional — https://console.groq.com)</span>
+   497→                      </label>
+   498→                      <div className="relative">
+   499→                        <input
+   500→                          type={showGroqKey ? 'text' : 'password'}
+   501→                          value={configGroqKey}
+   502→                          onChange={(e) => setConfigGroqKey(e.target.value)}
+   503→                          placeholder={aiConfig?.groq?.configured ? 'Kosongkan jika tidak ingin mengubah' : 'gsk_...'}
+   504→                          className="w-full text-[11px] px-3 py-1.5 rounded-lg border pr-8 outline-none focus:ring-1 focus:ring-cyan-400"
+   505→                          style={{ borderColor: 'var(--border)', background: 'var(--background)', color: 'var(--foreground)' }}
+   506→                        />
+   507→                        <button
+   508→                          type="button"
+   509→                          onClick={() => setShowGroqKey(!showGroqKey)}
+   510→                          className="absolute right-2 top-1/2 -translate-y-1/2 opacity-40 hover:opacity-70"
+   511→                        >
+   512→                          {showGroqKey ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+   513→                        </button>
+   514→                      </div>
+   515→                    </div>
+   516→
+   517→                    {/* Admin Password */}
+   518→                    <div>
+   519→                      <label className="text-[10px] font-medium block mb-1" style={{ color: 'var(--foreground)' }}>
+   520→                        Password Admin
+   521→                      </label>
+   522→                      <input
+   523→                        type="password"
+   524→                        value={configPassword}
+   525→                        onChange={(e) => setConfigPassword(e.target.value)}
+   526→                        placeholder="Masukkan password admin"
+   527→                        className="w-full text-[11px] px-3 py-1.5 rounded-lg border outline-none focus:ring-1 focus:ring-cyan-400"
+   528→                        style={{ borderColor: 'var(--border)', background: 'var(--background)', color: 'var(--foreground)' }}
+   529→                      />
+   530→                    </div>
+   531→
+   532→                    {/* Save button */}
+   533→                    <button
+   534→                      onClick={saveConfig}
+   535→                      disabled={isSavingConfig || !configPassword}
+   536→                      className="w-full text-[11px] px-3 py-2 rounded-lg text-white font-medium transition-all disabled:opacity-40"
+   537→                      style={{ background: 'linear-gradient(135deg, #06B6D4, #0891B2)' }}
+   538→                    >
+   539→                      {isSavingConfig ? (
+   540→                        <span className="flex items-center justify-center gap-2">
+   541→                          <Loader2 className="h-3 w-3 animate-spin" /> Menyimpan...
+   542→                        </span>
+   543→                      ) : '💾 Simpan Konfigurasi'}
+   544→                    </button>
+   545→
+   546→                    {/* Config message */}
+   547→                    {configMessage && (
+   548→                      <div className={`text-[10px] px-2 py-1 rounded ${configMessage.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+   549→                        {configMessage.text}
+   550→                      </div>
+   551→                    )}
+   552→
+   553→                    {/* Test Connection Section */}
+   554→                    <div className="border-t pt-3" style={{ borderColor: 'var(--border)' }}>
+   555→                      <div className="flex items-center gap-2 mb-2">
+   556→                        {testResult?.gemini?.testResult === 'success' || testResult?.groq?.testResult === 'success' ? (
+   557→                          <Wifi className="h-3.5 w-3.5 text-green-500" />
+   558→                        ) : testResult ? (
+   559→                          <WifiOff className="h-3.5 w-3.5 text-red-500" />
+   560→                        ) : (
+   561→                          <Wifi className="h-3.5 w-3.5" style={{ color: 'var(--muted-foreground)' }} />
+   562→                        )}
+   563→                        <span className="text-[10px] font-semibold" style={{ color: 'var(--foreground)' }}>
+   564→                          Diagnosa Koneksi AI
+   565→                        </span>
+   566→                      </div>
+   567→
+   568→                      <button
+   569→                        onClick={testAIConnection}
+   570→                        disabled={isTestingAI}
+   571→                        className="w-full text-[11px] px-3 py-2 rounded-lg border font-medium transition-all disabled:opacity-40 hover:bg-accent"
+   572→                        style={{ borderColor: 'var(--border)', color: 'var(--foreground)' }}
+   573→                      >
+   574→                        {isTestingAI ? (
+   575→                          <span className="flex items-center justify-center gap-2">
+   576→                            <Loader2 className="h-3 w-3 animate-spin" /> Testing koneksi...
+   577→                          </span>
+   578→                        ) : '🔍 Test Koneksi AI'}
+   579→                      </button>
+   580→
+   581→                      {/* Test Results */}
+   582→                      {testResult && (
+   583→                        <div className="mt-2 space-y-1.5 text-[10px]">
+   584→                          {/* DB Connection */}
+   585→                          <div className={`px-2 py-1 rounded ${testResult.dbConnection?.ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+   586→                            {testResult.dbConnection?.ok ? '✅ Database: Terhubung' : `❌ Database: ${testResult.dbConnection?.error || 'Gagal'}`}
+   587→                          </div>
+   588→
+   589→                          {/* Gemini Result */}
+   590→                          <div className={`px-2 py-1 rounded ${testResult.gemini.testResult === 'success' ? 'bg-green-50 text-green-700' : testResult.gemini.keyFound ? 'bg-red-50 text-red-700' : 'bg-gray-50 text-gray-500'}`}>
+   591→                            {renderTestBadge(testResult.gemini.testResult, 'Gemini')}
+   592→                            {testResult.gemini.keyFound && (
+   593→                              <span className="opacity-60 ml-1">({testResult.gemini.keySource}, {testResult.gemini.latencyMs}ms)</span>
+   594→                            )}
+   595→                            {testResult.gemini.error && (
+   596→                              <div className="mt-0.5 opacity-70 break-all">{testResult.gemini.error.substring(0, 200)}</div>
+   597→                            )}
+   598→                          </div>
+   599→
+   600→                          {/* Groq Result */}
+   601→                          <div className={`px-2 py-1 rounded ${testResult.groq.testResult === 'success' ? 'bg-green-50 text-green-700' : testResult.groq.keyFound ? 'bg-red-50 text-red-700' : 'bg-gray-50 text-gray-500'}`}>
+   602→                            {renderTestBadge(testResult.groq.testResult, 'Groq')}
+   603→                            {testResult.groq.keyFound && (
+   604→                              <span className="opacity-60 ml-1">({testResult.groq.keySource}, {testResult.groq.latencyMs}ms)</span>
+   605→                            )}
+   606→                            {testResult.groq.error && (
+   607→                              <div className="mt-0.5 opacity-70 break-all">{testResult.groq.error.substring(0, 200)}</div>
+   608→                            )}
+   609→                          </div>
+   610→                        </div>
+   611→                      )}
+   612→                    </div>
+   613→                  </div>
+   614→                </motion.div>
+   615→              )}
+   616→            </AnimatePresence>
+   617→
+   618→            {/* Messages */}
+   619→            <div className="flex-1 overflow-y-auto p-4 space-y-4" style={{ scrollbarWidth: 'thin' }}>
+   620→              {/* Welcome message */}
+   621→              {messages.length === 0 && (
+   622→                <div className="text-center py-4">
+   623→                  <div
+   624→                    className="w-14 h-14 rounded-2xl mx-auto mb-3 flex items-center justify-center"
+   625→                    style={{ background: 'linear-gradient(135deg, #06B6D4, #0891B2)' }}
+   626→                  >
+   627→                    <Bot className="h-7 w-7 text-white" />
+   628→                  </div>
+   629→                  <p className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>
+   630→                    Halo! Saya Asisten AI 👋
+   631→                  </p>
+   632→                  <p className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
+   633→                    Tanyakan tentang data perikanan budidaya, kelompok, pembudidaya, dan produksi di Kab. Mempawah
+   634→                  </p>
+   635→
+   636→                  {!isAIConfigured && (
+   637→                    <div className="mt-3 p-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-[10px]">
+   638→                      ⚠️ Tidak ada provider AI tersedia. Klik ⚙️ di atas untuk mengatur API key (Gemini/Groq) sebagai fallback.
+   639→                    </div>
+   640→                  )}
+   641→
+   642→                  {/* Quick prompts */}
+   643→                  <div className="mt-4 space-y-2">
+   644→                    {QUICK_PROMPTS.map((prompt) => (
+   645→                      <button
+   646→                        key={prompt}
+   647→                        onClick={() => sendMessage(prompt)}
+   648→                        className="block w-full text-left text-xs px-3 py-2 rounded-lg border transition-colors hover:bg-accent"
+   649→                        style={{
+   650→                          borderColor: 'var(--border)',
+   651→                          color: 'var(--muted-foreground)',
+   652→                        }}
+   653→                      >
+   654→                        {prompt}
+   655→                      </button>
+   656→                    ))}
+   657→                  </div>
+   658→                </div>
+   659→              )}
+   660→
+   661→              {/* Chat messages */}
+   662→              {messages.map((msg, i) => (
+   663→                <div
+   664→                  key={i}
+   665→                  className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+   666→                >
+   667→                  {msg.role === 'assistant' && (
+   668→                    <div
+   669→                      className="w-6 h-6 rounded-full shrink-0 flex items-center justify-center mt-1"
+   670→                      style={{ background: 'linear-gradient(135deg, #06B6D4, #0891B2)' }}
+   671→                    >
+   672→                      <Bot className="h-3 w-3 text-white" />
+   673→                    </div>
+   674→                  )}
+   675→                  <div
+   676→                    className={`max-w-[80%] rounded-2xl px-3 py-2 text-xs leading-relaxed ${
+   677→                      msg.role === 'user'
+   678→                        ? 'text-white rounded-br-md'
+   679→                        : 'rounded-bl-md'
+   680→                    }`}
+   681→                    style={{
+   682→                      background:
+   683→                        msg.role === 'user'
+   684→                          ? 'linear-gradient(135deg, #06B6D4, #0891B2)'
+   685→                          : 'var(--muted)',
+   686→                      color: msg.role === 'user' ? 'white' : 'var(--foreground)',
+   687→                    }}
+   688→                  >
+   689→                    {msg.role === 'user' ? (
+   690→                      <div className="whitespace-pre-wrap">{msg.content}</div>
+   691→                    ) : (
+   692→                      <div className="space-y-0.5">{formatContent(msg.content)}</div>
+   693→                    )}
+   694→                  </div>
+   695→                  {msg.role === 'user' && (
+   696→                    <div
+   697→                      className="w-6 h-6 rounded-full shrink-0 flex items-center justify-center mt-1"
+   698→                      style={{ background: 'var(--muted)' }}
+   699→                    >
+   700→                      <User className="h-3 w-3" style={{ color: 'var(--muted-foreground)' }} />
+   701→                    </div>
+   702→                  )}
+   703→                </div>
+   704→              ))}
+   705→
+   706→              {/* Loading indicator */}
+   707→              {isLoading && (
+   708→                <div className="flex gap-2 justify-start">
+   709→                  <div
+   710→                    className="w-6 h-6 rounded-full shrink-0 flex items-center justify-center"
+   711→                    style={{ background: 'linear-gradient(135deg, #06B6D4, #0891B2)' }}
+   712→                  >
+   713→                    <Bot className="h-3 w-3 text-white" />
+   714→                  </div>
+   715→                  <div
+   716→                    className="rounded-2xl rounded-bl-md px-4 py-3"
+   717→                    style={{ background: 'var(--muted)' }}
+   718→                  >
+   719→                    <div className="flex items-center gap-2">
+   720→                      <Loader2 className="h-3 w-3 animate-spin" style={{ color: '#06B6D4' }} />
+   721→                      <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+   722→                        Sedang berpikir...
+   723→                      </span>
+   724→                    </div>
+   725→                  </div>
+   726→                </div>
+   727→              )}
+   728→
+   729→              <div ref={messagesEndRef} />
+   730→            </div>
+   731→
+   732→            {/* Input area */}
+   733→            <div
+   734→              className="shrink-0 p-3 border-t"
+   735→              style={{ borderColor: 'var(--border)', background: 'var(--card)' }}
+   736→            >
+   737→              <div
+   738→                className="flex items-center gap-2 rounded-xl px-3 py-2 border"
+   739→                style={{ borderColor: 'var(--border)', background: 'var(--background)' }}
+   740→              >
+   741→                <input
+   742→                  ref={inputRef}
+   743→                  type="text"
+   744→                  value={input}
+   745→                  onChange={(e) => setInput(e.target.value)}
+   746→                  onKeyDown={handleKeyDown}
+   747→                  placeholder="Tanyakan tentang kelompok, produksi, RTP..."
+   748→                  className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+   749→                  style={{ color: 'var(--foreground)' }}
+   750→                  disabled={isLoading}
+   751→                />
+   752→                <button
+   753→                  onClick={() => sendMessage(input)}
+   754→                  disabled={!input.trim() || isLoading}
+   755→                  className="w-7 h-7 rounded-lg flex items-center justify-center transition-all shrink-0 disabled:opacity-30"
+   756→                  style={{
+   757→                    background: input.trim() ? 'linear-gradient(135deg, #06B6D4, #0891B2)' : 'var(--muted)',
+   758→                  }}
+   759→                >
+   760→                  <Send className="h-3.5 w-3.5 text-white" />
+   761→                </button>
+   762→              </div>
+   763→              <div className="text-[9px] text-center mt-1.5" style={{ color: 'var(--muted-foreground)', opacity: 0.5 }}>
+   764→                Data dari filter aktif · AI bisa membuat kesalahan
+   765→              </div>
+   766→            </div>
+   767→          </motion.div>
+   768→        )}
+   769→      </AnimatePresence>
+   770→    </>
+   771→  );
+   772→}
+   773→

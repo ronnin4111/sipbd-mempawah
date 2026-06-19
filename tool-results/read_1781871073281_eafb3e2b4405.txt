@@ -1,0 +1,2002 @@
+     1→import { NextRequest, NextResponse } from 'next/server';
+     2→import { callAI } from '@/lib/ai-sdk';
+     3→import { retrieveMemories, storeMemories, extractMemoriesFromConversation, formatMemoriesForPrompt, clearMemories } from '@/lib/ai-memory';
+     4→import { db } from '@/lib/db';
+     5→import { ensureTablesExist } from '@/lib/db-init';
+     6→import { generateFarmerId } from '@/lib/farmer-id';
+     7→import { searchKnowledgeBase, getKnowledgeBaseContext, countMatchingChunks, countUniquePegawai, getAllPegawaiChunks } from "@/lib/knowledge-base";
+     8→
+     9→/**
+    10→ * Compact system prompt for SIPBD AI assistant.
+    11→ * Option B: Flexible — prioritize fishery, but can answer general questions.
+    12→ *
+    13→ * IMPORTANT: Do NOT hardcode kecamatan/fish types/etc — derive from data context.
+    14→ * The data context will provide the actual lists from the database.
+    15→ */
+    16→const BASE_SYSTEM_PROMPT = `Anda adalah Asisten AI Perikanan Budidaya (SIPBD AI), asisten ahli Dinas Pertanian Ketahanan Pangan dan Perikanan Kabupaten Mempawah, Kalimantan Barat.
+    17→
+    18→Peran utama:
+    19→- Menjawab pertanyaan tentang data produksi perikanan budidaya di Kab. Mempawah
+    20→- Menganalisis tren, membandingkan kecamatan, memberikan rekomendasi
+    21→- Mencari data kelompok/pembudidaya spesifik dari konteks yang disediakan
+    22→- KUSUKA=Kartu Identitas Usaha Perikanan — data registrasi perorangan pembudidaya
+    23→
+    24→Anda juga fleksibel:
+    25→- Pertanyaan umum tentang budidaya ikan, akuakultur, dll → jawab dengan pengetahuan Anda
+    26→- Pertanyaan di luar topik → jawab singkat, arahkan kembali ke perikanan budidaya 😊
+    27→
+    28→Anda juga bisa menjawab pertanyaan tentang data registrasi KUSUKA perorangan, status kartu, dan detail alamat pembudidaya.
+    29→
+    30→⚠️ BATAS DATA (DATA BOUNDARIES) — SANGAT PENTING:
+    31→- Sistem ini HANYA mencakup data Kabupaten Mempawah, Kalimantan Barat
+    32→- Daftar kecamatan yang tersedia akan dicantumkan di DATA CONTEXT — HANYA gunakan kecamatan yang ada di sana
+    33→- Daftar jenis ikan yang tersedia akan dicantumkan di DATA CONTEXT — HANYA gunakan jenis ikan yang ada di sana
+    34→- Tahun data yang tersedia akan dicantumkan di informasi "Tahun data tersedia di database"
+    35→- Jika user menanyakan kecamatan/tahun/jenis ikan yang TIDAK ada di DATA CONTEXT, katakan: "Data untuk [item] tidak tersedia" — JANGAN membuat data palsu untuk itu
+    36→- CONTOH: Jika user bertanya tentang "Weda Selatan" tapi itu TIDAK ada di daftar kecamatan DATA CONTEXT, katakan "Data untuk Kecamatan Weda Selatan tidak tersedia di sistem SIPBD Kab. Mempawah"
+    37→- JANGAN pernah menyebutkan kecamatan, desa, atau jenis ikan yang TIDAK ada di DATA CONTEXT, bahkan jika Anda tahu itu ada di dunia nyata
+    38→
+    39→Aturan respons SANGAT PENTING:
+    40→- WAJIB bahasa Indonesia
+    41→- Angka format Indonesia (1.234.567 kg, Rp 25.000)
+    42→- ⚠️ ANTI-HALLUCINASI #1: JANGAN PERNAH mengarang/membuat angka yang TIDAK ADA di DATA CONTEXT. Jika DATA CONTEXT berkata "TIDAK ADA DATA", maka TIDAK ADA DATA — jangan membuat angka palsu.
+    43→- ⚠️ ANTI-HALLUCINASI #2: HANYA gunakan kategori yang ada di DATA CONTEXT. Jika hanya ada "Produksi Pembesaran" dan "Produksi Pembenihan", JANGAN membuat kategori lain seperti "Produksi Laut" atau "Produksi Air Tawar".
+    44→- ⚠️ ANTI-HALLUCINASI #3: JANGAN bilang "Mohon menunggu sambil saya mengakses database" — Anda TIDAK memiliki akses database secara langsung. Data sudah disediakan di DATA CONTEXT.
+    45→- ⚠️ JANGAN menyebutkan nama kecamatan/kelompok/ikan yang TIDAK ada di DATA CONTEXT
+    46→- Jika data tidak tersedia di konteks, katakan jujur "Data tidak tersedia di konteks yang diberikan" — JANGAN mengarang
+    47→- ⚠️ PENTING: Jika data ADA di DATA CONTEXT, JANGAN bilang data tidak tersedia. Data di DATA CONTEXT sudah diambil langsung dari database sesuai pertanyaan Anda.
+    48→- DATA CONTEXT berisi data yang SUDAH diquery dari database sesuai pertanyaan Anda. JANGAN bilang data tidak tersedia jika ada angka di DATA CONTEXT.
+    49→- Jika nama kelompok/pembudidaya tidak ditemukan, sarankan nama mirip dari DATA CONTEXT
+    50→- Daftar kelompok/kecamatan/desa HANYA dari data yang disediakan — JANGAN tebak
+    51→- Saat diminta daftar kelompok, GUNAKAN nomor urut sesuai DATA CONTEXT
+    52→- Jika ada nama kelompok yang sama di desa berbeda, SEBUTKAN keduanya dengan lokasinya
+    53→- JANGAN bilang "data tidak lengkap" atau "data tidak ada" — semua data kelompok dan anggota sudah disediakan lengkap di DATA CONTEXT
+    54→- Saat ditanya tentang kelompok pembenih/pembenihan atau pembesaran, gunakan RINGKASAN JENIS USAHA di DATA CONTEXT
+    55→- Saat ditanya tentang anggota kelompok, gunakan DAFTAR ANGGOTA yang disediakan di DATA CONTEXT
+    56→- Untuk pertanyaan tentang KUSUKA/registrasi perorangan, gunakan DATA KUSUKA di DATA CONTEXT
+    57→
+    58→Istilah:
+    59→- RTP=Rumah Tangga Perikanan, KUSUKA=Kartu Identitas Usaha Perikanan — data registrasi perorangan pembudidaya
+    60→- CPIB=Cara Pembenihan Ikan Baik, CBIB=Cara Budidaya Ikan Baik
+    61→- Kelompok=poktan/pokdakan (kelompok pembudidaya ikan), Anggota=jumlah anggota kelompok
+    62→- Jenis Usaha: Pembesaran=membesarkan ikan untuk dikonsumsi, Pembenihan=memijahkan/menghasilkan benih ikan
+    63→- PENTING: "Desa" adalah alamat tempat tinggal pembudidaya, BUKAN alamat kelompok
+    64→  Satu kelompok bisa memiliki anggota dari beberapa desa
+    65→- MEMORI: Anda memiliki memori dari percakapan sebelumnya. Gunakan untuk jawaban yang lebih personal.
+    66→  Namun jika memori bertentangan dengan DATA CONTEXT, prioritaskan DATA CONTEXT (data DB lebih akurat).
+    67→
+    68→⚠️ LARANGAN KETAT UNTUK ACRONYM/SINGKATAN:
+    69→- JANGAN PERNAH mengarang atau menebak kepanjangan singkatan yang TIDAK ada di daftar istilah di atas
+    70→- RTP = Rumah Tangga Perikanan (BUKAN "Rencana Tanggap Pengelolaan" atau apapun lainnya)
+    71→- KUSUKA = Kartu Identitas Usaha Perikanan (BUKAN singkatan lain)
+    72→- Jika Anda tidak yakin tentang kepanjangan suatu singkatan, JANGAN menebak — cukup gunakan singkatannya saja tanpa kepanjangan
+    73→- Melanggar aturan ini = menyebarkan informasi SALAH kepada pengguna
+    74→
+    75→VERIFIKASI WAJIB sebelum menjawab pertanyaan data:
+    76→1. Cari angka yang diminta di DATA CONTEXT
+    77→2. Jika angka DITEMUKAN → gunakan angka tersebut persis (jangan bulatkan, jangan ubah)
+    78→3. Jika angka TIDAK DITEMUKAN → katakan "Data tidak tersedia" — JANGAN tebak atau estimasi
+    79→4. JANGAN pernah menghitung/menjumlahkan angka yang tidak ada di DATA CONTEXT
+    80→5. Jika ragu, prioritaskan kejujuran: "Saya tidak menemukan data tersebut dalam konteks yang tersedia"`;
+    81→
+    82→/**
+    83→ * Classify the user's question type to determine what data to include.
+    84→ *
+    85→ * IMPORTANT: 'specific' questions load verbose targeted results (all member names),
+    86→ * which makes the prompt very large. Counting/summary questions like "berapa jumlah
+    87→ * kelompok" should be 'stats' or 'general' so the AI answers from compact summaries
+    88→ * in the data context, not from the full member listings.
+    89→ */
+    90→function classifyQuestion(message: string): 'specific' | 'personnel' | 'stats' | 'general' | 'comparison' {
+    91→  const lower = message.toLowerCase();
+    92→
+    93→  // ============================================================
+    94→  // Counting/summary questions → 'stats' (NOT 'specific'!)
+    95→  // These can be answered from the compact data context summaries.
+    96→  // Loading targeted results for these just wastes tokens and causes failures.
+    97→  // ============================================================
+    98→  const countSummaryPatterns = [
+    99→    /berapa\s+(jumlah\s+)?kelompok/i,     // "berapa kelompok", "berapa jumlah kelompok"
+   100→    /berapa\s+(jumlah\s+)?(rtp|pembudidaya)/i,
+   101→    /berapa\s+(jumlah\s+)?kusuka/i,       // "berapa kusuka", "berapa jumlah kusuka"
+   102→    /total\s+(kelompok|rtp|pembudidaya|kusuka)/i,
+   103→    /jumlah\s+(kelompok|rtp|pembudidaya|kusuka)/i,
+   104→    /jumlah\s+anggota/i,                   // "jumlah anggota" = counting, not listing
+   105→  ];
+   106→  if (countSummaryPatterns.some(p => p.test(lower))) return 'stats';
+   107→
+   108→  // ============================================================
+   109→  // Personnel/pegawai questions → 'personnel' (NOT 'specific'!)
+   110→  // These are about org structure, not fishery data.
+   111→  // Using compact context + KB focus keeps prompt small and avoids Groq 413.
+   112→  // ============================================================
+   113→  const personnelPatterns = [
+   114→    /jabatan/i, /pegawai/i, /karyawan/i, /staff/i, /staf/i,
+   115→    /pangkat/i, /golongan/i, /unit\s+kerja/i,
+   116→    /kepala\s+(dinas|bidang|seksi|sub)/i, /kabid/i, /kasubid/i, /kasi/i,
+   117→    /eselon/i, /nip/i,
+   118→    // Person-name patterns: "siapa hasto", "apa jabatan X", "nama Arifin"
+   119→    /siapa\s+[A-Z]/i, /jabatan\s+[A-Z]/i,
+   120→    // Personnel listing patterns: "siapa saja pegawai", "daftar pegawai"
+   121→    /siapa\s+saja\s+(pegawai|karyawan|staf|dinas)/i,
+   122→    /daftar\s+(pegawai|karyawan|staf|dinas)/i,
+   123→    /sebutkan\s+(pegawai|karyawan|staf|dinas)/i,
+   124→    /tampilkan\s+(pegawai|karyawan|staf|dinas)/i,
+   125→  ];
+   126→  // Also check for person names (capitalized multi-word entities)
+   127→  const hasPersonName = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b/.test(message);
+   128→  // Check if question is about org structure even without person name
+   129→  const isOrgQuestion = /kepala\s+(dinas|bidang|seksi|sub|dpa)|struktur\s+organisasi/i.test(lower);
+   130→  // Check if question mentions personnel-related words with listing intent
+   131→  const isPersonnelListing = /pegawai|karyawan|staf|dinas|jabatan|golongan|pangkat/i.test(lower) &&
+   132→    /siapa\s+saja|daftar|sebutkan|tampilkan|semua|seluruh|nama.*nama/i.test(lower);
+   133→  if (personnelPatterns.some(p => p.test(lower)) || isOrgQuestion || isPersonnelListing ||
+   134→      (hasPersonName && /jabatan|pegawai|staf|golongan|pangkat|dinas|bidang/i.test(lower))) {
+   135→    return 'personnel';
+   136→  }
+   137→
+   138→  // Specific group/farmer questions — these need individual member details
+   139→  const specificPatterns = [
+   140→    /anggota\s+kelompok/i, /pembudidaya\s+\w+/i,
+   141→    /siapa\s+saja/i, /daftar\s+anggota/i, /nama\s+kelompok/i,
+   142→    /semua\s+kelompok/i, /seluruh\s+kelompok/i,
+   143→    /tampilkan\s+semua/i, /tampilkan\s+seluruh/i, /daftar\s+kelompok/i,
+   144→    // NOTE: /siapa\s+saja/ is here as a fallback — it's checked AFTER
+   145→    // the personnel patterns, so "siapa saja pegawai" will match personnel first
+   146→    /kelompok\s+(pembenih|pembenihan|pembesaran)/i,
+   147→    // NOTE: Removed standalone /pembenih|pembenihan|pembesaran/i — too broad.
+   148→    // It matched ANY mention of pembesaran, even in counting questions like
+   149→    // "berapa produksi pembesaran" which should be 'stats'.
+   150→    /nama\s+anggota/i, /anggota\s+dari/i,
+   151→    // "kelompok [nama]" — specific group by name (e.g. "kelompok kawan sejati")
+   152→    // Must come AFTER /kelompok\s+(pembenih|pembenihan|pembesaran)/i so business types match first
+   153→    // Exclude common function words: "di", "yang", "ini", "itu", "dari", "ke", "ada", "apa"
+   154→    /kelompok\s+(?!di\b|yang\b|ini\b|itu\b|dari\b|ke\b|ada\b|apa\b|dengan\b|untuk\b|pada\b|semua\b|seluruh\b)\w+/i,
+   155→    // "berapa orang/anggota" + specific group name context
+   156→    // e.g. "kelompok kawan sejati mempunyai anggota berapa orang"
+   157→    /berapa\s+(orang|anggota|member)/i,
+   158→    // KUSUKA-specific patterns
+   159→    /kusuka/i, /kartu\s+usaha/i, /registrasi/i, /pendaftaran/i,
+   160→    /perorangan/i, /pembenih\s+perorangan/i, /nama\s+pembudidaya/i,
+   161→    /alamat\s+pembudidaya/i,
+   162→    /status\s+kusuka/i, /draf\s+kusuka/i, /valid\s+kusuka/i,
+   163→    // "bidang" alone (without personnel context) is a sector question
+   164→    /bidang/i,
+   165→    /nama\s+\w+/i,  // "nama Roni" pattern — still specific for fishery names
+   166→  ];
+   167→  if (specificPatterns.some(p => p.test(lower))) return 'specific';
+   168→
+   169→  // Comparison questions — multi-year or multi-region comparisons
+   170→  const comparisonPatterns = [
+   171→    /bandingkan/i, /perbandingan/i, /perbedaan/i, /compare/i,
+   172→    /vs\.?/i, /\d{4}\s*(vs|dengan|dan|terhadap)\s*\d{4}/i,
+   173→    /\d{4}\s*-\s*\d{4}/,  // "2024-2025" range
+   174→  ];
+   175→  if (comparisonPatterns.some(p => p.test(lower))) return 'comparison';
+   176→
+   177→  // Stats/production/trend questions (but NOT kelompok listing questions)
+   178→  const statsPatterns = [
+   179→    /produksi/i, /tren/i, /statistik/i,
+   180→    /kecamatan.*tinggi/i, /kecamatan.*rendah/i, /perbandingan/i,
+   181→    /rtp/i, /cpib/i, /cbib/i, /pencapaian/i, /target/i,
+   182→    /naik/i, /turun/i, /kenaikan/i, /penurunan/i, /pertumbuhan/i,
+   183→    /jumlah\s+(pembudidaya|rtp|produksi)/i, /total\s+(pembudidaya|rtp|produksi)/i,
+   184→  ];
+   185→  if (statsPatterns.some(p => p.test(lower))) return 'stats';
+   186→
+   187→  return 'general';
+   188→}
+   189→
+   190→/**
+   191→ * Extract potential search keywords from the user's message.
+   192→ * Includes person names as multi-word entities.
+   193→ */
+   194→function extractSearchTerms(message: string): string[] {
+   195→  const terms: string[] = [];
+   196→
+   197→  // Skip business type queries — they're handled by the data context breakdown
+   198→  const isBizTypeQuery = /kelompok\s+(pembenih|pembenihan|pembesaran)/i.test(message) ||
+   199→    /^(berapa\s+)?(jumlah\s+)?(kelompok\s+)?(pembenih|pembenihan|pembesaran)/i.test(message);
+   200→  if (isBizTypeQuery) {
+   201→    // For business type queries, no search terms needed — data context has the breakdown
+   202→    return [];
+   203→  }
+   204→
+   205→  // Extract multi-word entities (person names like "Roni Irama")
+   206→  const entityPattern = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b/g;
+   207→  let entityMatch;
+   208→  while ((entityMatch = entityPattern.exec(message)) !== null) {
+   209→    const entity = entityMatch[1].trim();
+   210→    if (entity.length > 3) {
+   211→      terms.push(entity);
+   212→    }
+   213→  }
+   214→
+   215→  const patterns = [
+   216→    /anggota\s+kelompok\s+([^\?,\.\!]+)/i,
+   217→    /kelompok\s+([^\?,\.\!]+)/i,
+   218→    /pembudidaya\s+([^\?,\.\!]+)/i,
+   219→    /kelompok\s+(\w+(?:\s+\w+)*)/i,
+   220→    /grup\s+([^\?,\.\!]+)/i,
+   221→    /["']([^"']+)["']/,
+   222→    /jabatan\s+([^\?,\.\!]+)/i,
+   223→    /nama\s+([^\?,\.\!]+)/i,
+   224→    /pegawai\s+([^\?,\.\!]+)/i,
+   225→  ];
+   226→
+   227→  for (const pattern of patterns) {
+   228→    const match = message.match(pattern);
+   229→    if (match?.[1] && match[1].trim().length > 2) {
+   230→      terms.push(match[1].trim());
+   231→    }
+   232→  }
+   233→
+   234→  // Proper nouns (capitalized words not in common set)
+   235→  const commonWords = new Set([
+   236→    'berapa', 'jumlah', 'anggota', 'kelompok', 'pembudidaya', 'siapa',
+   237→    'saja', 'apa', 'dimana', 'kapan', 'bagaimana', 'mengapa', 'yang',
+   238→    'di', 'ke', 'dari', 'dengan', 'untuk', 'pada', 'adalah', 'ini',
+   239→    'itu', 'dan', 'atau', 'tetapi', 'karena', 'jika', 'kalau', 'bisa',
+   240→    'ada', 'tidak', 'sudah', 'belum', 'akan', 'dapat', 'harus', 'perlu',
+   241→    'semua', 'setiap', 'lain', 'lainnya', 'total', 'data', 'produksi',
+   242→    'tahun', 'kecamatan', 'desa', 'ikan', 'jenis', 'usaha', 'rtp',
+   243→    'kusuka', 'cpib', 'cbib', 'halo', 'hai', 'hello', 'hi', 'tolong',
+   244→    'bantu', 'jelaskan', 'sebutkan', 'daftar', 'informasi', 'tentang',
+   245→    'kabupaten', 'mempawah', 'dinas', 'perikanan', 'budidaya',
+   246→    'seluruh', 'tampilkan', 'sebutkan',
+   247→    'pembenih', 'pembenihan', 'pembesaran',  // handled specially, not as search terms
+   248→    'registrasi', 'pendaftaran', 'perorangan', 'kartu',  // KUSUKA keywords, not search terms
+   249→    'jabatan', 'pegawai', 'karyawan', 'staff', 'staf',  // question context, not search terms
+   250→    'pangkat', 'golongan', 'unit', 'bidang',  // question context
+   251→  ]);
+   252→
+   253→  const words = message.split(/\s+/);
+   254→  for (const word of words) {
+   255→    const clean = word.replace(/[^\w]/g, '');
+   256→    if (clean.length > 2 && clean[0] === clean[0].toUpperCase() && !commonWords.has(clean.toLowerCase())) {
+   257→      terms.push(clean);
+   258→    }
+   259→  }
+   260→
+   261→  return [...new Set(terms)];
+   262→}
+   263→
+   264→/**
+   265→ * Fallback kecamatan names — used only if DB query fails.
+   266→ * NOTE: "Weda Selatan" is NOT in Mempawah (it's in Halmahera!)
+   267→ * and has been removed. The DB-driven list is the source of truth.
+   268→ */
+   269→const FALLBACK_KECAMATAN = [
+   270→  'Siantan', 'Mempawah Hilir', 'Mempawah Hulu', 'Segedong',
+   271→  'Salo', 'Toho', 'Lubuk Bandung', 'Batu Ampar',
+   272→  'Terentang',
+   273→];
+   274→
+   275→/**
+   276→ * Fallback fish type names — used only if DB query fails.
+   277→ */
+   278→const FALLBACK_FISH_TYPES = [
+   279→  'Nila', 'Lele', 'Mas', 'Patin', 'Gabus', 'Bawal',
+   280→  'Kerapu', 'Udang', 'Bandeng', 'Pari', 'Belanak',
+   281→  'Kakap', 'Napol', 'Barramundi',
+   282→];
+   283→
+   284→/**
+   285→ * In-memory cache for dynamic lists from DB, with 5-minute TTL.
+   286→ * Avoids hitting the database on every request while still
+   287→ * staying up-to-date when new kecamatan/fish types are added.
+   288→ */
+   289→interface CachedList {
+   290→  values: string[];
+   291→  updatedAt: number;
+   292→}
+   293→const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+   294→let kecamatanCache: CachedList | null = null;
+   295→let fishTypeCache: CachedList | null = null;
+   296→let yearsCache: CachedList | null = null;
+   297→
+   298→/**
+   299→ * Get distinct kecamatan names from the database.
+   300→ * Results are cached in memory for 5 minutes.
+   301→ * Falls back to FALLBACK_KECAMATAN if the DB query fails.
+   302→ */
+   303→async function getDynamicKecamatanList(): Promise<string[]> {
+   304→  if (kecamatanCache && Date.now() - kecamatanCache.updatedAt < CACHE_TTL_MS) {
+   305→    return kecamatanCache.values;
+   306→  }
+   307→  try {
+   308→    const result = await db.fishFarm.findMany({
+   309→      select: { kecamatan: true },
+   310→      distinct: ['kecamatan'],
+   311→      orderBy: { kecamatan: 'asc' },
+   312→    });
+   313→    const values = result.map(r => r.kecamatan).filter(Boolean);
+   314→    if (values.length > 0) {
+   315→      kecamatanCache = { values, updatedAt: Date.now() };
+   316→      console.log(`[parseQuestionContext] Loaded ${values.length} kecamatan from DB:`, values.join(', '));
+   317→      return values;
+   318→    }
+   319→  } catch (err) {
+   320→    console.error('[parseQuestionContext] DB query for kecamatan failed, using fallback:', err);
+   321→  }
+   322→  return FALLBACK_KECAMATAN;
+   323→}
+   324→
+   325→/**
+   326→ * Get distinct fish type names from the database.
+   327→ * Results are cached in memory for 5 minutes.
+   328→ * Falls back to FALLBACK_FISH_TYPES if the DB query fails.
+   329→ */
+   330→async function getDynamicFishTypeList(): Promise<string[]> {
+   331→  if (fishTypeCache && Date.now() - fishTypeCache.updatedAt < CACHE_TTL_MS) {
+   332→    return fishTypeCache.values;
+   333→  }
+   334→  try {
+   335→    const result = await db.fishFarm.findMany({
+   336→      select: { fishType: true },
+   337→      distinct: ['fishType'],
+   338→      orderBy: { fishType: 'asc' },
+   339→    });
+   340→    const values = result.map(r => r.fishType).filter(Boolean);
+   341→    if (values.length > 0) {
+   342→      fishTypeCache = { values, updatedAt: Date.now() };
+   343→      console.log(`[parseQuestionContext] Loaded ${values.length} fish types from DB:`, values.join(', '));
+   344→      return values;
+   345→    }
+   346→  } catch (err) {
+   347→    console.error('[parseQuestionContext] DB query for fish types failed, using fallback:', err);
+   348→  }
+   349→  return FALLBACK_FISH_TYPES;
+   350→}
+   351→
+   352→/**
+   353→ * Get available years from the database.
+   354→ * Returns distinct years sorted descending.
+   355→ * Results are cached in memory for 5 minutes.
+   356→ */
+   357→async function getAvailableYears(): Promise<number[]> {
+   358→  if (yearsCache && Date.now() - yearsCache.updatedAt < CACHE_TTL_MS) {
+   359→    return yearsCache.values.map(Number);
+   360→  }
+   361→  try {
+   362→    const result = await db.fishFarm.findMany({
+   363→      select: { year: true },
+   364→      distinct: ['year'],
+   365→      orderBy: { year: 'desc' },
+   366→    });
+   367→    const values = result.map(r => r.year).filter((y): y is number => typeof y === 'number');
+   368→    if (values.length > 0) {
+   369→      yearsCache = { values: values.map(String), updatedAt: Date.now() };
+   370→      console.log(`[getAvailableYears] Loaded ${values.length} years from DB:`, values.join(', '));
+   371→      return values;
+   372→    }
+   373→  } catch {
+   374→    // fall through
+   375→  }
+   376→  return [];
+   377→}
+   378→
+   379→/**
+   380→ * Parsed question context — what the user is asking about,
+   381→ * extracted from the natural language question itself
+   382→ * (independent of UI filter state).
+   383→ */
+   384→interface QuestionContext {
+   385→  years: number[];
+   386→  kecamatan: string[];
+   387→  businessType: string[];
+   388→  fishType: string[];
+   389→  desa: string[];
+   390→  isComparison: boolean;
+   391→}
+   392→
+   393→/**
+   394→ * Parse the user's question to extract contextual information
+   395→ * like years, kecamatan, fish types, etc.
+   396→ * This is used to override UI filters so the AI fetches
+   397→ * the right data regardless of what the UI shows.
+   398→ *
+   399→ * Uses dynamic lists from the database (cached for 5 min)
+   400→ * to avoid hardcoding kecamatan/fish types that may be wrong
+   401→ * (e.g. "Weda Selatan" which is in Halmahera, not Mempawah).
+   402→ */
+   403→async function parseQuestionContext(message: string): Promise<QuestionContext> {
+   404→  const ctx: QuestionContext = {
+   405→    years: [],
+   406→    kecamatan: [],
+   407→    businessType: [],
+   408→    fishType: [],
+   409→    desa: [],
+   410→    isComparison: false,
+   411→  };
+   412→  const lower = message.toLowerCase();
+   413→  const currentYear = new Date().getFullYear();
+   414→
+   415→  // ===== Parse years =====
+   416→  // "tahun 2025", "data 2024", "tahun 2024 dan 2025"
+   417→  const explicitYearPattern = /(?:tahun|data|tahun\s+ini|tahun\s+lalu|tahun\s+kemarin)?\s*(\d{4})(?:\s*(?:dan|,|&)?\s*(\d{4}))*/gi;
+   418→  const explicitYears = new Set<number>();
+   419→  let yearMatch: RegExpExecArray | null;
+   420→  while ((yearMatch = explicitYearPattern.exec(lower)) !== null) {
+   421→    for (let i = 1; i < yearMatch.length; i++) {
+   422→      if (yearMatch[i]) {
+   423→        const y = parseInt(yearMatch[i], 10);
+   424→        if (y >= 2020 && y <= currentYear + 1) {
+   425→          explicitYears.add(y);
+   426→        }
+   427→      }
+   428→    }
+   429→  }
+   430→
+   431→  // "2024-2026" range pattern
+   432→  const rangePattern = /(\d{4})\s*-\s*(\d{4})/;
+   433→  const rangeMatch = lower.match(rangePattern);
+   434→  if (rangeMatch) {
+   435→    const startY = parseInt(rangeMatch[1], 10);
+   436→    const endY = parseInt(rangeMatch[2], 10);
+   437→    if (startY < endY && endY - startY <= 10) {
+   438→      for (let y = startY; y <= endY; y++) {
+   439→        explicitYears.add(y);
+   440→      }
+   441→    }
+   442→  }
+   443→
+   444→  // Relative year patterns
+   445→  if (/tahun\s+lalu|tahun\s+kemarin/i.test(lower)) {
+   446→    explicitYears.add(currentYear - 1);
+   447→  }
+   448→  if (/tahun\s+ini|tahun\s+sekarang|tahun\s+berjalan/i.test(lower)) {
+   449→    explicitYears.add(currentYear);
+   450→  }
+   451→
+   452→  // "N tahun terakhir" pattern
+   453→  const nYearPattern = /(\d+)\s+tahun\s+terakhir/i;
+   454→  const nYearMatch = lower.match(nYearPattern);
+   455→  if (nYearMatch) {
+   456→    const n = parseInt(nYearMatch[1], 10);
+   457→    if (n >= 1 && n <= 10) {
+   458→      for (let i = 0; i < n; i++) {
+   459→        explicitYears.add(currentYear - i);
+   460→      }
+   461→    }
+   462→  }
+   463→
+   464→  // "bandingkan 2024 vs 2025" / "perbandingan 2024 2025"
+   465→  const vsPattern = /(\d{4})\s*(?:vs|dengan|dan|terhadap)\s*(\d{4})/i;
+   466→  const vsMatch = lower.match(vsPattern);
+   467→  if (vsMatch) {
+   468→    const y1 = parseInt(vsMatch[1], 10);
+   469→    const y2 = parseInt(vsMatch[2], 10);
+   470→    if (y1 >= 2020 && y1 <= currentYear + 1) explicitYears.add(y1);
+   471→    if (y2 >= 2020 && y2 <= currentYear + 1) explicitYears.add(y2);
+   472→    ctx.isComparison = true;
+   473→  }
+   474→
+   475→  // Check comparison keywords
+   476→  if (/bandingkan|perbandingan|perbedaan|compare/i.test(lower)) {
+   477→    ctx.isComparison = true;
+   478→  }
+   479→
+   480→  ctx.years = [...explicitYears].sort((a, b) => a - b);
+   481→
+   482→  // ===== Parse kecamatan =====
+   483→  const dynamicKecamatan = await getDynamicKecamatanList();
+   484→  for (const kec of dynamicKecamatan) {
+   485→    if (lower.includes(kec.toLowerCase())) {
+   486→      ctx.kecamatan.push(kec);
+   487→    }
+   488→  }
+   489→  // Fuzzy match: also check partial kecamatan names in the question
+   490→  // Build partial patterns dynamically from DB kecamatan names
+   491→  const kecPartialPatterns: Record<string, string[]> = {};
+   492→  for (const kec of dynamicKecamatan) {
+   493→    const patterns = [kec.toLowerCase()];
+   494→    // For multi-word kecamatan, add the last word as a partial pattern
+   495→    const parts = kec.split(' ');
+   496→    if (parts.length > 1) {
+   497→      for (const part of parts) {
+   498→        if (part.length > 3) patterns.push(part.toLowerCase());
+   499→      }
+   500→    }
+   501→    kecPartialPatterns[kec] = patterns;
+   502→  }
+   503→  for (const [kec, patterns] of Object.entries(kecPartialPatterns)) {
+   504→    if (ctx.kecamatan.includes(kec)) continue; // already matched
+   505→    for (const p of patterns) {
+   506→      if (lower.includes(p) && p.length > 3) { // avoid matching very short partials like 'hulu'
+   507→        ctx.kecamatan.push(kec);
+   508→        break;
+   509→      }
+   510→    }
+   511→  }
+   512→
+   513→  // ===== Parse business type =====
+   514→  if (/pembenihan|pembenih/i.test(lower)) {
+   515→    ctx.businessType.push('Pembenihan');
+   516→  }
+   517→  if (/pembesaran/i.test(lower)) {
+   518→    ctx.businessType.push('Pembesaran');
+   519→  }
+   520→
+   521→  // ===== Parse fish type =====
+   522→  const dynamicFishTypes = await getDynamicFishTypeList();
+   523→  for (const fish of dynamicFishTypes) {
+   524→    if (lower.includes(fish.toLowerCase())) {
+   525→      ctx.fishType.push(fish);
+   526→    }
+   527→  }
+   528→
+   529→  // ===== Parse desa (capitalized words that might be desa names) =====
+   530→  const skipWords = new Set([
+   531→    ...dynamicKecamatan.map(k => k.toLowerCase()),
+   532→    'mempawah', 'kabupaten', 'dinas', 'perikanan', 'budidaya',
+   533→    'kelompok', 'pembudidaya', 'anggota', 'jumlah', 'berapa',
+   534→    'data', 'tahun', 'desa', 'kecamatan', 'ikan', 'jenis',
+   535→    'usaha', 'rtp', 'kusuka', 'produksi', 'pembesaran', 'pembenihan',
+   536→    ...dynamicFishTypes.map(f => f.toLowerCase()),
+   537→  ]);
+   538→  const words = message.split(/\s+/);
+   539→  for (const word of words) {
+   540→    const clean = word.replace(/[^\w]/g, '');
+   541→    if (clean.length > 2 && clean[0] === clean[0].toUpperCase() && !skipWords.has(clean.toLowerCase())) {
+   542→      ctx.desa.push(clean);
+   543→    }
+   544→  }
+   545→
+   546→  return ctx;
+   547→}
+   548→
+   549→/**
+   550→ * Resolve effective filters by merging question context with UI filters.
+   551→ * Question context takes PRIORITY over UI filters.
+   552→ * If user mentions "tahun 2025" → use 2025, regardless of UI filter.
+   553→ * If user doesn't mention any year → fall back to UI filter, then latest 2 years from DB.
+   554→ */
+   555→async function resolveEffectiveFilters(
+   556→  questionCtx: QuestionContext,
+   557→  uiFilters: {
+   558→    years: string[];
+   559→    kecamatan: string[];
+   560→    desa: string[];
+   561→    fishType: string[];
+   562→    containerType: string[];
+   563→    businessType: string[];
+   564→  }
+   565→): Promise<{
+   566→  years: string[];
+   567→  kecamatan: string[];
+   568→  desa: string[];
+   569→  fishType: string[];
+   570→  containerType: string[];
+   571→  businessType: string[];
+   572→}> {
+   573→  let resolvedYears: string[];
+   574→
+   575→  if (questionCtx.years.length > 0) {
+   576→    // Question context has years → use them
+   577→    resolvedYears = questionCtx.years.map(String);
+   578→  } else if (uiFilters.years.length > 0) {
+   579→    // UI filter has years → use them
+   580→    resolvedYears = uiFilters.years;
+   581→  } else {
+   582→    // Neither has years → use latest 2 years from database
+   583→    // This prevents defaulting to just current year which may have incomplete data
+   584→    const availableYears = await getAvailableYears();
+   585→    if (availableYears.length > 0) {
+   586→      resolvedYears = availableYears.slice(0, 2).map(String);
+   587→    } else {
+   588→      // Fallback to current year if DB query fails
+   589→      resolvedYears = [String(new Date().getFullYear())];
+   590→    }
+   591→  }
+   592→
+   593→  const resolved = {
+   594→    years: resolvedYears,
+   595→    // Kecamatan: question context > UI filter
+   596→    kecamatan: questionCtx.kecamatan.length > 0
+   597→      ? questionCtx.kecamatan
+   598→      : uiFilters.kecamatan,
+   599→    // Desa: question context > UI filter
+   600→    desa: questionCtx.desa.length > 0
+   601→      ? questionCtx.desa
+   602→      : uiFilters.desa,
+   603→    // Fish type: question context > UI filter
+   604→    fishType: questionCtx.fishType.length > 0
+   605→      ? questionCtx.fishType
+   606→      : uiFilters.fishType,
+   607→    // Container type: only from UI filter (rarely mentioned in questions)
+   608→    containerType: uiFilters.containerType,
+   609→    // Business type: question context > UI filter
+   610→    businessType: questionCtx.businessType.length > 0
+   611→      ? questionCtx.businessType
+   612→      : uiFilters.businessType,
+   613→  };
+   614→
+   615→  return resolved;
+   616→}
+   617→
+   618→/**
+   619→ * Build a human-readable description of the auto-detected question context,
+   620→ * to include in the data context header so the AI knows what scope was fetched.
+   621→ */
+   622→function buildContextHeader(questionCtx: QuestionContext): string {
+   623→  const parts: string[] = [];
+   624→  if (questionCtx.years.length > 0) {
+   625→    parts.push(`Tahun=${questionCtx.years.join(',')}`);
+   626→  }
+   627→  if (questionCtx.kecamatan.length > 0) {
+   628→    parts.push(`Kecamatan=${questionCtx.kecamatan.join(',')}`);
+   629→  }
+   630→  if (questionCtx.businessType.length > 0) {
+   631→    parts.push(`JenisUsaha=${questionCtx.businessType.join(',')}`);
+   632→  }
+   633→  if (questionCtx.fishType.length > 0) {
+   634→    parts.push(`JenisIkan=${questionCtx.fishType.join(',')}`);
+   635→  }
+   636→  if (questionCtx.desa.length > 0) {
+   637→    parts.push(`Desa=${questionCtx.desa.join(',')}`);
+   638→  }
+   639→  if (questionCtx.isComparison) {
+   640→    parts.push('Mode=Perbandingan');
+   641→  }
+   642→  return parts.length > 0
+   643→    ? `Konteks pertanyaan terdeteksi: ${parts.join(', ')}`
+   644→    : '';
+   645→}
+   646→
+   647→/**
+   648→ * Fetch KUSUKA registration data context — summary of all registrations.
+   649→ * Provides aggregate statistics for AI to answer KUSUKA-related questions.
+   650→ */
+   651→async function fetchKusukaDataContext(): Promise<string> {
+   652→  try {
+   653→    const registrations = await db.kusukaRegistration.findMany();
+   654→
+   655→    if (registrations.length === 0) {
+   656→      return '\n=== DATA KUSUKA (Registrasi Perorangan) ===\nTidak ada data registrasi KUSUKA.';
+   657→    }
+   658→
+   659→    const total = registrations.length;
+   660→
+   661→    // Count per status
+   662→    const statusCount = new Map<string, number>();
+   663→    for (const r of registrations) {
+   664→      const status = r.statusKusuka || '-';
+   665→      statusCount.set(status, (statusCount.get(status) || 0) + 1);
+   666→    }
+   667→    const statusLines = [...statusCount.entries()]
+   668→      .sort(([, a], [, b]) => b - a)
+   669→      .map(([s, c]) => `${s}: ${c}`)
+   670→      .join(', ');
+   671→
+   672→    // Count per kecamatan
+   673→    const kecCount = new Map<string, number>();
+   674→    for (const r of registrations) {
+   675→      const kec = r.kecamatan || '-';
+   676→      kecCount.set(kec, (kecCount.get(kec) || 0) + 1);
+   677→    }
+   678→    const kecLines = [...kecCount.entries()]
+   679→      .sort(([, a], [, b]) => b - a)
+   680→      .map(([k, c]) => `${k}: ${c}`)
+   681→      .join(', ');
+   682→
+   683→    // Count per profesi utama
+   684→    const profesiCount = new Map<string, number>();
+   685→    for (const r of registrations) {
+   686→      const p = r.profesiUtama || '-';
+   687→      profesiCount.set(p, (profesiCount.get(p) || 0) + 1);
+   688→    }
+   689→    const profesiLines = [...profesiCount.entries()]
+   690→      .sort(([, a], [, b]) => b - a)
+   691→      .map(([p, c]) => `${p}: ${c}`)
+   692→      .join(', ');
+   693→
+   694→    // Count per bentuk usaha
+   695→    const bentukCount = new Map<string, number>();
+   696→    for (const r of registrations) {
+   697→      const b = r.bentukUsaha || '-';
+   698→      bentukCount.set(b, (bentukCount.get(b) || 0) + 1);
+   699→    }
+   700→    const bentukLines = [...bentukCount.entries()]
+   701→      .sort(([, a], [, b]) => b - a)
+   702→      .map(([b, c]) => `${b}: ${c}`)
+   703→      .join(', ');
+   704→
+   705→    // Count with valid KUSUKA card number (16 digits)
+   706→    const validKusukaCard = registrations.filter(r => /^\d{16}$/.test((r.noKusuka || '').trim())).length;
+   707→
+   708→    // Count with kelompok vs without kelompok (independent)
+   709→    const withKelompok = registrations.filter(r => r.namaKelompok && r.namaKelompok.trim() !== '').length;
+   710→    const withoutKelompok = total - withKelompok;
+   711→
+   712→    // Count per desa (grouped by kecamatan)
+   713→    const desaCount = new Map<string, Map<string, number>>(); // kecamatan -> desa -> count
+   714→    for (const r of registrations) {
+   715→      const kec = r.kecamatan || '-';
+   716→      const desa = r.kelDesa || '-';
+   717→      if (!desaCount.has(kec)) desaCount.set(kec, new Map());
+   718→      const desaMap = desaCount.get(kec)!;
+   719→      desaMap.set(desa, (desaMap.get(desa) || 0) + 1);
+   720→    }
+   721→    const desaLines = [...desaCount.entries()]
+   722→      .sort(([a], [b]) => a.localeCompare(b))
+   723→      .map(([kec, desas]) => {
+   724→        const desaDetail = [...desas.entries()]
+   725→          .sort(([, a], [, b]) => b - a)
+   726→          .map(([desa, count]) => `${desa}:${count}`)
+   727→          .join(', ');
+   728→        return `${kec} → ${desaDetail}`;
+   729→      })
+   730→      .join('\n');
+   731→
+   732→    // List unique kelompok with member counts
+   733→    const kelompokMap = new Map<string, number>();
+   734→    for (const r of registrations) {
+   735→      if (r.namaKelompok && r.namaKelompok.trim()) {
+   736→        const k = r.namaKelompok.trim();
+   737→        kelompokMap.set(k, (kelompokMap.get(k) || 0) + 1);
+   738→      }
+   739→    }
+   740→    const kelompokLines = [...kelompokMap.entries()]
+   741→      .sort(([, a], [, b]) => b - a)
+   742→      .slice(0, 30) // Limit to top 30 kelompok to keep compact
+   743→      .map(([k, c]) => `${k} (${c})`)
+   744→      .join(', ');
+   745→    const kelompokExtra = kelompokMap.size > 30 ? ` ...dan ${kelompokMap.size - 30} lagi` : '';
+   746→
+   747→    const dataContext = `\n=== DATA KUSUKA (Registrasi Perorangan) ===
+   748→Total registran: ${total}
+   749→Per status: ${statusLines}
+   750→Per kecamatan: ${kecLines}
+   751→Per profesi utama: ${profesiLines}
+   752→Per bentuk usaha: ${bentukLines}
+   753→No.KUSUKA valid (16 digit): ${validKusukaCard}
+   754→Dengan kelompok: ${withKelompok}, Mandiri (tanpa kelompok): ${withoutKelompok}
+   755→Kelompok (${kelompokMap.size}): ${kelompokLines}${kelompokExtra}
+   756→
+   757→Per desa (kecamatan → desa:jumlah):
+   758→${desaLines}`;
+   759→
+   760→    return dataContext;
+   761→  } catch (error) {
+   762→    console.error('Failed to fetch KUSUKA data context:', error);
+   763→    return '\n=== DATA KUSUKA ===\nGagal memuat data KUSUKA.';
+   764→  }
+   765→}
+   766→
+   767→/**
+   768→ * Fetch targeted KUSUKA registration results based on search terms.
+   769→ * Returns full details for matching registrants.
+   770→ */
+   771→async function fetchKusukaTargetedResults(searchTerms: string[], questionType: string): Promise<string> {
+   772→  try {
+   773→    const registrations = await db.kusukaRegistration.findMany();
+   774→
+   775→    if (registrations.length === 0) {
+   776→      return '';
+   777→    }
+   778→
+   779→    // If no search terms but it's a specific KUSUKA question, return summary listing
+   780→    if (searchTerms.length === 0) {
+   781→      if (questionType === 'specific') {
+   782→        // Return a compact listing of all registrants (name, kec, status)
+   783→        const lines = registrations
+   784→          .sort((a, b) => a.nama.localeCompare(b.nama))
+   785→          .slice(0, 50) // Limit to keep prompt manageable
+   786→          .map((r, i) => `${i + 1}. ${r.nama} | Kec:${r.kecamatan} | Desa:${r.kelDesa} | ${r.bentukUsaha} | ${r.profesiUtama} | Status:${r.statusKusuka}`)
+   787→          .join('\n');
+   788→        const extra = registrations.length > 50 ? `\n...dan ${registrations.length - 50} registran lainnya` : '';
+   789→        return `\n=== DAFTAR REGISTRAN KUSUKA (${registrations.length} orang) ===\n${lines}${extra}`;
+   790→      }
+   791→      return '';
+   792→    }
+   793→
+   794→    // Search for matching registrants
+   795→    const found: string[] = [];
+   796→    const matchedIds = new Set<string>();
+   797→
+   798→    for (const term of searchTerms) {
+   799→      const q = term.toLowerCase();
+   800→
+   801→      for (const r of registrations) {
+   802→        if (matchedIds.has(r.id)) continue;
+   803→
+   804→        if (
+   805→          (r.nama && r.nama.toLowerCase().includes(q)) ||
+   806→          (r.kecamatan && r.kecamatan.toLowerCase().includes(q)) ||
+   807→          (r.kelDesa && r.kelDesa.toLowerCase().includes(q)) ||
+   808→          (r.namaKelompok && r.namaKelompok.toLowerCase().includes(q)) ||
+   809→          (r.noKusuka && r.noKusuka.toLowerCase().includes(q))
+   810→        ) {
+   811→          matchedIds.add(r.id);
+   812→          // Return full details for matched registrants
+   813→          const kelStr = r.namaKelompok ? `Kel:${r.namaKelompok}` : 'Mandiri';
+   814→          const noKusukaStr = r.noKusuka ? `No.KUSUKA:${r.noKusuka}` : 'No.KUSUKA:-';
+   815→          found.push(`${r.nama} | Kec:${r.kecamatan} | Desa:${r.kelDesa} | ${kelStr} | ${r.bentukUsaha} | ${r.profesiUtama} | ${noKusukaStr} | Alamat:${r.alamat || '-'} | Status:${r.statusKusuka}`);
+   816→        }
+   817→      }
+   818→    }
+   819→
+   820→    if (found.length === 0) {
+   821→      return `\nHASIL PENCARIAN KUSUKA: Tidak ditemukan untuk "${searchTerms.join(', ')}". Coba periksa ejaan.`;
+   822→    }
+   823→
+   824→    return `\n=== HASIL PENCARIAN KUSUKA (${found.length} ditemukan) ===\n${found.join('\n')}`;
+   825→  } catch (error) {
+   826→    console.error('Failed to fetch KUSUKA targeted results:', error);
+   827→    return '';
+   828→  }
+   829→}
+   830→
+   831→/**
+   832→ * Fetch COMPACT data context — summary only, no individual group details.
+   833→ * Used for 'general' questions (greetings, non-data questions) to keep prompt small.
+   834→ * The AI can still answer basic questions like "what data do you have?"
+   835→ */
+   836→async function fetchCompactDataContext(year?: number): Promise<{
+   837→  dataContext: string;
+   838→  totalGroups: number;
+   839→}> {
+   840→  try {
+   841→    let targetYear = year;
+   842→    if (!targetYear) {
+   843→      const availableYears = await getAvailableYears();
+   844→      targetYear = availableYears.length > 0 ? availableYears[0] : new Date().getFullYear();
+   845→    }
+   846→    const records = await db.fishFarm.findMany({ where: { year: targetYear } });
+   847→
+   848→    if (records.length === 0) {
+   849→      return {
+   850→        dataContext: '\n=== DATA CONTEXT (Ringkasan) ===\nBelum ada data tahun ini.',
+   851→        totalGroups: 0,
+   852→      };
+   853→    }
+   854→
+   855→    // Quick counts
+   856→    const groupKeys = new Set<string>();
+   857→    const kecSet = new Set<string>();
+   858→    const fishSet = new Set<string>();
+   859→    const bizSet = new Set<string>();
+   860→    let totalFarmers = 0;
+   861→
+   862→    records.forEach(r => {
+   863→      if (r.groupName?.trim()) groupKeys.add(`${r.groupName.trim().toLowerCase()}|${r.kecamatan}`);
+   864→      kecSet.add(r.kecamatan);
+   865→      fishSet.add(r.fishType);
+   866→      bizSet.add(r.businessType);
+   867→      totalFarmers += r.farmerCount;
+   868→    });
+   869→
+   870→    return {
+   871→      dataContext: `\n=== DATA CONTEXT (Ringkasan) ===
+   872→Total kelompok: ${groupKeys.size}
+   873→Total pembudidaya: ${totalFarmers}
+   874→Kecamatan: ${[...kecSet].sort().join(', ')}
+   875→Jenis ikan: ${[...fishSet].sort().join(', ')}
+   876→Jenis usaha: ${[...bizSet].sort().join(', ')}
+   877→Tahun data: ${targetYear}
+   878→
+   879→CATATAN: Ini ringkasan saja. Untuk data detail kelompok/anggota, tanyakan secara spesifik.`,
+   880→      totalGroups: groupKeys.size,
+   881→    };
+   882→  } catch (error) {
+   883→    console.error('Failed to fetch compact data context:', error);
+   884→    return {
+   885→      dataContext: '\n=== DATA ===\nGagal memuat data.',
+   886→      totalGroups: 0,
+   887→    };
+   888→  }
+   889→}
+   890→
+   891→/**
+   892→ * Fetch STATS data context — summaries + business breakdown, NO full group list.
+   893→ * Used for counting/summary questions like "berapa jumlah kelompok?" or "berapa kusuka?"
+   894→ * Includes business type breakdown and per-kecamatan counts, but NOT the verbose
+   895→ * individual group listing (which causes Groq 413 errors).
+   896→ */
+   897→async function fetchStatsDataContext(filters: {
+   898→  years: string[];
+   899→  kecamatan: string[];
+   900→  desa: string[];
+   901→  fishType: string[];
+   902→  containerType: string[];
+   903→  businessType: string[];
+   904→}): Promise<{
+   905→  dataContext: string;
+   906→  totalGroups: number;
+   907→  totalFarmers: number;
+   908→  pembenihanCount: number;
+   909→  pembesaranCount: number;
+   910→}> {
+   911→  try {
+   912→    const where: Record<string, unknown> = {};
+   913→    if (filters.years.length > 0) {
+   914→      where.year = { in: filters.years.map(Number).filter(n => !isNaN(n)) };
+   915→    } else {
+   916→      // Default to latest available year from database instead of current year
+   917→      const availableYears = await getAvailableYears();
+   918→      where.year = availableYears.length > 0 ? availableYears[0] : new Date().getFullYear();
+   919→    }
+   920→    if (filters.kecamatan.length > 0) where.kecamatan = { in: filters.kecamatan };
+   921→    if (filters.desa.length > 0) where.desa = { in: filters.desa };
+   922→    if (filters.fishType.length > 0) where.fishType = { in: filters.fishType };
+   923→    if (filters.businessType.length > 0) where.businessType = { in: filters.businessType };
+   924→
+   925→    const records = await db.fishFarm.findMany({ where });
+   926→
+   927→    if (records.length === 0) {
+   928→      return {
+   929→        dataContext: '\n=== DATA ===\nTidak ada data untuk filter yang dipilih.',
+   930→        totalGroups: 0, totalFarmers: 0, pembenihanCount: 0, pembesaranCount: 0,
+   931→      };
+   932→    }
+   933→
+   934→    // Build group data for counting (but NOT for listing)
+   935→    const groupMap = new Map<string, {
+   936→      name: string; kec: string;
+   937→      businessTypes: Set<string>; memberCount: number; rtpCount: number;
+   938→    }>();
+   939→    const allFarmerLatest = new Map<string, typeof records[0]>();
+   940→    const sortedDesc = [...records].sort((a, b) => b.year - a.year);
+   941→
+   942→    records.forEach(r => {
+   943→      if (!r.groupName?.trim()) return;
+   944→      const key = `${r.groupName.trim().toLowerCase()}|${r.kecamatan}`;
+   945→      if (!groupMap.has(key)) {
+   946→        groupMap.set(key, { name: r.groupName.trim(), kec: r.kecamatan, businessTypes: new Set(), memberCount: 0, rtpCount: 0 });
+   947→      }
+   948→      groupMap.get(key)!.businessTypes.add(r.businessType);
+   949→
+   950→      const fid = r.farmerId || generateFarmerId({
+   951→        farmerName: r.farmerName || '', groupName: r.groupName || '',
+   952→        kecamatan: r.kecamatan || '', desa: r.desa || '',
+   953→      });
+   954→      if (!allFarmerLatest.has(fid)) {
+   955→        allFarmerLatest.set(fid, r);
+   956→        groupMap.get(key)!.memberCount += r.farmerCount;
+   957→        groupMap.get(key)!.rtpCount += r.rtpCount;
+   958→      }
+   959→    });
+   960→
+   961→    const kecList = [...new Set(records.map(r => r.kecamatan))].sort();
+   962→    const desaByKec = new Map<string, Set<string>>();
+   963→    records.forEach(r => {
+   964→      if (!desaByKec.has(r.kecamatan)) desaByKec.set(r.kecamatan, new Set());
+   965→      desaByKec.get(r.kecamatan)!.add(r.desa);
+   966→    });
+   967→
+   968→    const fishTypeList = [...new Set(records.map(r => r.fishType))].sort();
+   969→    const businessTypeList = [...new Set(records.map(r => r.businessType))].sort();
+   970→    const containerTypeList = [...new Set(records.map(r => r.containerType))].sort();
+   971→
+   972→    // Business type breakdown
+   973→    let pembesaranOnly = 0, pembenihanOnly = 0, bothBiz = 0;
+   974→    for (const group of groupMap.values()) {
+   975→      const hasPembesaran = group.businessTypes.has('Pembesaran');
+   976→      const hasPembenihan = group.businessTypes.has('Pembenihan');
+   977→      if (hasPembesaran && hasPembenihan) bothBiz++;
+   978→      else if (hasPembesaran) pembesaranOnly++;
+   979→      else if (hasPembenihan) pembenihanOnly++;
+   980→    }
+   981→    const pembenihanCount = pembenihanOnly + bothBiz;
+   982→    const pembesaranCount = pembesaranOnly + bothBiz;
+   983→
+   984→    const totalGroups = groupMap.size;
+   985→    const totalFarmers = allFarmerLatest.size;
+   986→
+   987→    // Per-kecamatan group count (use groupMap for unique groups, NOT raw records)
+   988→    const kecGroupCounts = new Map<string, Set<string>>();
+   989→    for (const [key, group] of groupMap) {
+   990→      const kec = group.kec;
+   991→      if (!kecGroupCounts.has(kec)) kecGroupCounts.set(kec, new Set());
+   992→      kecGroupCounts.get(kec)!.add(key);
+   993→    }
+   994→
+   995→    const kecDesaLines = [...desaByKec.entries()]
+   996→      .sort(([a], [b]) => a.localeCompare(b))
+   997→      .map(([kec, desas]) => `${kec} (${[...desas].sort().join(', ')})`)
+   998→      .join(', ');
+   999→
+  1000→    // Per-kecamatan group listing with member counts (compact format)
+  1001→    // So AI can answer specific group questions like "kelompok kawan sejati berapa anggota?"
+  1002→    const kecGroupDetailLines = [...groupMap.entries()]
+  1003→      .sort(([a], [b]) => a[0].localeCompare(b[0]))
+  1004→      .map(([key, group]) => {
+  1005→        const bizStr = [...group.businessTypes].sort().join('/');
+  1006→        return `${group.name} (Kec:${group.kecamatan}) ${group.memberCount}org {${bizStr}}`;
+  1007→      });
+  1008→    // Limit to keep context manageable (max 200 groups)
+  1009→    const groupDetailStr = kecGroupDetailLines.length > 200
+  1010→      ? kecGroupDetailLines.slice(0, 200).join(', ') + ` ...dan ${kecGroupDetailLines.length - 200} lagi`
+  1011→      : kecGroupDetailLines.join(', ');
+  1012→
+  1013→    const dataContext = `\n=== DATA CONTEXT (WAJIB: gunakan HANYA data ini, jangan mengarang) ===
+  1014→Total kelompok: ${totalGroups}
+  1015→Total pembudidaya: ${totalFarmers}
+  1016→
+  1017→RINGKASAN JENIS USAHA:
+  1018→- Kelompok Pembesaran saja: ${pembesaranOnly}
+  1019→- Kelompok Pembenihan saja: ${pembenihanOnly}
+  1020→- Kelompok Pembesaran+Pembenihan: ${bothBiz}
+  1021→- Total kelompok Pembesaran (termasuk campuran): ${pembesaranCount}
+  1022→- Total kelompok Pembenihan (termasuk campuran): ${pembenihanCount}
+  1023→
+  1024→Kecamatan (${kecList.length}): ${kecList.join(', ')}
+  1025→Desa per kecamatan: ${kecDesaLines}
+  1026→Jenis ikan: ${fishTypeList.join(', ')}
+  1027→Jenis usaha: ${businessTypeList.join(', ')}
+  1028→Wadah budidaya: ${containerTypeList.join(', ')}
+  1029→
+  1030→Kelompok per kecamatan: ${[...kecGroupCounts.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([kec, keys]) => `${kec} (${keys.size})`).join(', ')}
+  1031→
+  1032→DAFTAR KELOMPOK (${totalGroups} kelompok — nama | kecamatan | jumlah anggota | jenis usaha):
+  1033→${groupDetailStr}
+  1034→
+  1035→CATATAN: Untuk daftar nama kelompok atau anggota, tanyakan secara spesifik.`;
+  1036→
+  1037→    return { dataContext, totalGroups, totalFarmers, pembenihanCount, pembesaranCount };
+  1038→  } catch (error) {
+  1039→    console.error('Failed to fetch stats data context:', error);
+  1040→    return {
+  1041→      dataContext: '\n=== DATA ===\nGagal memuat data.',
+  1042→      totalGroups: 0, totalFarmers: 0, pembenihanCount: 0, pembesaranCount: 0,
+  1043→    };
+  1044→  }
+  1045→}
+  1046→
+  1047→/**
+  1048→ * Fetch comprehensive data context — includes ALL groups with full details.
+  1049→ * No artificial limit on group count so AI can answer "berapa total" and
+  1050→ * "tampilkan semua" accurately.
+  1051→ */
+  1052→async function fetchFullDataContext(filters: {
+  1053→  years: string[];
+  1054→  kecamatan: string[];
+  1055→  desa: string[];
+  1056→  fishType: string[];
+  1057→  containerType: string[];
+  1058→  businessType: string[];
+  1059→}): Promise<{
+  1060→  dataContext: string;
+  1061→  kecamatanList: string[];
+  1062→  totalGroups: number;
+  1063→  totalFarmers: number;
+  1064→  pembenihanCount: number;
+  1065→  pembesaranCount: number;
+  1066→}> {
+  1067→  try {
+  1068→    const where: Record<string, unknown> = {};
+  1069→
+  1070→    if (filters.years.length > 0) {
+  1071→      where.year = { in: filters.years.map(Number).filter(n => !isNaN(n)) };
+  1072→    } else {
+  1073→      // Default to latest available year from database instead of current year
+  1074→      const availableYears = await getAvailableYears();
+  1075→      where.year = availableYears.length > 0 ? availableYears[0] : new Date().getFullYear();
+  1076→    }
+  1077→
+  1078→    if (filters.kecamatan.length > 0) where.kecamatan = { in: filters.kecamatan };
+  1079→    if (filters.desa.length > 0) where.desa = { in: filters.desa };
+  1080→    if (filters.fishType.length > 0) where.fishType = { in: filters.fishType };
+  1081→    if (filters.businessType.length > 0) where.businessType = { in: filters.businessType };
+  1082→
+  1083→    const records = await db.fishFarm.findMany({ where });
+  1084→
+  1085→    if (records.length === 0) {
+  1086→      return {
+  1087→        dataContext: '\n=== DATA ===\nTidak ada data untuk filter yang dipilih.',
+  1088→        kecamatanList: [],
+  1089→        totalGroups: 0,
+  1090→        totalFarmers: 0,
+  1091→        pembenihanCount: 0,
+  1092→        pembesaranCount: 0,
+  1093→      };
+  1094→    }
+  1095→
+  1096→    // Build comprehensive group data
+  1097→    // IMPORTANT: Grouping key is groupName + kecamatan ONLY (not desa).
+  1098→    // "Desa" is the farmer's residential address, NOT the group's address.
+  1099→    // A single kelompok can have members living in multiple desa.
+  1100→    const groupMap = new Map<string, {
+  1101→      name: string; kec: string; desaList: Set<string>;
+  1102→      fishTypes: Set<string>; businessTypes: Set<string>;
+  1103→      memberCount: number; rtpCount: number; kusukaCount: number;
+  1104→    }>();
+  1105→    const farmerLatestByGroup = new Map<string, Map<string, typeof records[0]>>();
+  1106→    const sortedDesc = [...records].sort((a, b) => b.year - a.year);
+  1107→
+  1108→    // Also build all-farmer latest map for total farmer count
+  1109→    const allFarmerLatest = new Map<string, typeof records[0]>();
+  1110→
+  1111→    records.forEach(r => {
+  1112→      if (!r.groupName?.trim()) return;
+  1113→      // Group by name + kecamatan — desa is farmer's address, not group's
+  1114→      const key = `${r.groupName.trim().toLowerCase()}|${r.kecamatan}`;
+  1115→      if (!groupMap.has(key)) {
+  1116→        groupMap.set(key, {
+  1117→          name: r.groupName.trim(), kec: r.kecamatan, desaList: new Set(),
+  1118→          fishTypes: new Set(), businessTypes: new Set(),
+  1119→          memberCount: 0, rtpCount: 0, kusukaCount: 0,
+  1120→        });
+  1121→      }
+  1122→      groupMap.get(key)!.desaList.add(r.desa);
+  1123→      groupMap.get(key)!.fishTypes.add(r.fishType);
+  1124→      groupMap.get(key)!.businessTypes.add(r.businessType);
+  1125→
+  1126→      if (!farmerLatestByGroup.has(key)) farmerLatestByGroup.set(key, new Map());
+  1127→      const fid = r.farmerId || generateFarmerId({
+  1128→        farmerName: r.farmerName || '', groupName: r.groupName || '',
+  1129→        kecamatan: r.kecamatan || '', desa: r.desa || '',
+  1130→      });
+  1131→      if (!farmerLatestByGroup.get(key)!.has(fid)) {
+  1132→        farmerLatestByGroup.get(key)!.set(fid, r);
+  1133→      }
+  1134→      if (!allFarmerLatest.has(fid)) {
+  1135→        allFarmerLatest.set(fid, r);
+  1136→      }
+  1137→    });
+  1138→
+  1139→    // Calculate member/rtp/kusuka counts per group
+  1140→    for (const [key, group] of groupMap) {
+  1141→      const farmerMap = farmerLatestByGroup.get(key);
+  1142→      if (farmerMap) {
+  1143→        let mc = 0, rc = 0, kc = 0;
+  1144→        for (const r of farmerMap.values()) {
+  1145→          mc += r.farmerCount;
+  1146→          rc += r.rtpCount;
+  1147→          if (/^\d{16}$/.test(String(r.kusuka || '').trim())) kc++;
+  1148→        }
+  1149→        group.memberCount = mc;
+  1150→        group.rtpCount = rc;
+  1151→        group.kusukaCount = kc;
+  1152→      }
+  1153→    }
+  1154→
+  1155→    // Derive kecamatan list from actual data
+  1156→    const kecList = [...new Set(records.map(r => r.kecamatan))].sort();
+  1157→    const desaByKec = new Map<string, Set<string>>();
+  1158→    records.forEach(r => {
+  1159→      if (!desaByKec.has(r.kecamatan)) desaByKec.set(r.kecamatan, new Set());
+  1160→      desaByKec.get(r.kecamatan)!.add(r.desa);
+  1161→    });
+  1162→
+  1163→    const fishTypeList = [...new Set(records.map(r => r.fishType))].sort();
+  1164→    const businessTypeList = [...new Set(records.map(r => r.businessType))].sort();
+  1165→    const containerTypeList = [...new Set(records.map(r => r.containerType))].sort();
+  1166→
+  1167→    // Business type breakdown
+  1168→    let pembesaranOnly = 0, pembenihanOnly = 0, bothBiz = 0;
+  1169→    for (const group of groupMap.values()) {
+  1170→      const hasPembesaran = group.businessTypes.has('Pembesaran');
+  1171→      const hasPembenihan = group.businessTypes.has('Pembenihan');
+  1172→      if (hasPembesaran && hasPembenihan) bothBiz++;
+  1173→      else if (hasPembesaran) pembesaranOnly++;
+  1174→      else if (hasPembenihan) pembenihanOnly++;
+  1175→    }
+  1176→
+  1177→    // Build COMPLETE numbered group list — so AI knows exact count
+  1178→    // Sort: primary sort by kecamatan, secondary by name for consistency
+  1179→    const sortedGroups = Array.from(groupMap.values())
+  1180→      .sort((a, b) => {
+  1181→        const kecDiff = a.kec.localeCompare(b.kec);
+  1182→        if (kecDiff !== 0) return kecDiff;
+  1183→        return a.name.localeCompare(b.name);
+  1184→      });
+  1185→
+  1186→    // Numbered format — show kecamatan, desa, businessType per group
+  1187→    // Member names are kept separate and included in targeted search only
+  1188→    const groupLines = sortedGroups.map((g, i) => {
+  1189→      const desaStr = [...g.desaList].sort().join(', ');
+  1190→      const bizStr = [...g.businessTypes].sort().join('/');
+  1191→      return `${i + 1}. ${g.name} (Kec:${g.kec}, Desa:${desaStr}) ${g.memberCount}org [${[...g.fishTypes].join(',')}] {${bizStr}}`;
+  1192→    });
+  1193→
+  1194→    const totalGroups = groupMap.size;
+  1195→    const totalFarmers = allFarmerLatest.size;
+  1196→
+  1197→    // Build kecamatan → desa mapping
+  1198→    const kecDesaLines: string[] = [];
+  1199→    for (const [kec, desas] of desaByKec) {
+  1200→      kecDesaLines.push(`${kec}: ${[...desas].sort().join(', ')}`);
+  1201→    }
+  1202→
+  1203→    // Build kelompok per business type lists
+  1204→    const pembenihanGroups = sortedGroups.filter(g => g.businessTypes.has('Pembenihan'));
+  1205→    const pembesaranGroups = sortedGroups.filter(g => g.businessTypes.has('Pembesaran'));
+  1206→    const pembenihanList = pembenihanGroups.map((g, i) => `${i + 1}. ${g.name} (Kec:${g.kec})`).join('\n');
+  1207→    const pembesaranList = pembesaranGroups.map((g, i) => `${i + 1}. ${g.name} (Kec:${g.kec})`).join('\n');
+  1208→
+  1209→    const dataContext = `\n=== DATA CONTEXT (WAJIB: gunakan HANYA data ini, jangan mengarang) ===
+  1210→Total kelompok: ${totalGroups}
+  1211→Total pembudidaya: ${totalFarmers}
+  1212→
+  1213→RINGKASAN JENIS USAHA:
+  1214→- Kelompok Pembesaran saja: ${pembesaranOnly}
+  1215→- Kelompok Pembenihan saja: ${pembenihanOnly}
+  1216→- Kelompok Pembesaran+Pembenihan: ${bothBiz}
+  1217→- Total kelompok Pembesaran (termasuk campuran): ${pembesaranGroups.length}
+  1218→- Total kelompok Pembenihan (termasuk campuran): ${pembenihanGroups.length}
+  1219→
+  1220→DAFTAR KELOMPOK PEMBENIHAN (${pembenihanGroups.length} kelompok):
+  1221→${pembenihanList}
+  1222→
+  1223→DAFTAR KELOMPOK PEMBESARAN (${pembesaranGroups.length} kelompok):
+  1224→${pembesaranList}
+  1225→
+  1226→Kecamatan (${kecList.length}): ${kecList.join(', ')}
+  1227→Desa per kecamatan:
+  1228→${kecDesaLines.join('\n')}
+  1229→Jenis ikan: ${fishTypeList.join(', ')}
+  1230→Jenis usaha: ${businessTypeList.join(', ')}
+  1231→Wadah budidaya: ${containerTypeList.join(', ')}
+  1232→
+  1233→DAFTAR KELOMPOK LENGKAP (${totalGroups} kelompok — nomor | nama | kec | desa anggota | jumlah anggota | ikan | jenis usaha):
+  1234→${groupLines.join('\n')}
+  1235→
+  1236→CATATAN: Untuk daftar nama anggota kelompok, lihat HASIL PENCARIAN SPESIFIK di bawah.`;
+  1237→
+  1238→    return { dataContext, kecamatanList: kecList, totalGroups, totalFarmers, pembenihanCount: pembenihanGroups.length, pembesaranCount: pembesaranGroups.length };
+  1239→  } catch (error) {
+  1240→    console.error('Failed to fetch data context:', error);
+  1241→    return {
+  1242→      dataContext: '\n=== DATA ===\nGagal memuat data. Jawab berdasarkan pengetahuan umum saja.',
+  1243→      kecamatanList: [],
+  1244→      totalGroups: 0,
+  1245→      totalFarmers: 0,
+  1246→      pembenihanCount: 0,
+  1247→      pembesaranCount: 0,
+  1248→    };
+  1249→  }
+  1250→}
+  1251→
+  1252→/**
+  1253→ * Fetch targeted search results with FULL member details.
+  1254→ * Returns all matching groups and their members.
+  1255→ * If searchTerms is empty but we have a question about groups, returns all groups with members.
+  1256→ */
+  1257→async function fetchTargetedResults(searchTerms: string[], questionType: string, filters?: {
+  1258→  years: string[];
+  1259→  kecamatan: string[];
+  1260→  desa: string[];
+  1261→  fishType: string[];
+  1262→  containerType: string[];
+  1263→  businessType: string[];
+  1264→}): Promise<string> {
+  1265→  try {
+  1266→    const where: Record<string, unknown> = {};
+  1267→    // Use resolved filters if provided, otherwise fall back to latest available year
+  1268→    if (filters && filters.years.length > 0) {
+  1269→      where.year = { in: filters.years.map(Number).filter(n => !isNaN(n)) };
+  1270→    } else {
+  1271→      const availableYears = await getAvailableYears();
+  1272→      where.year = availableYears.length > 0 ? availableYears[0] : new Date().getFullYear();
+  1273→    }
+  1274→    if (filters?.kecamatan.length) where.kecamatan = { in: filters.kecamatan };
+  1275→    if (filters?.desa.length) where.desa = { in: filters.desa };
+  1276→    if (filters?.fishType.length) where.fishType = { in: filters.fishType };
+  1277→    if (filters?.businessType.length) where.businessType = { in: filters.businessType };
+  1278→
+  1279→    const records = await db.fishFarm.findMany({ where });
+  1280→
+  1281→    const groupMap = new Map<string, {
+  1282→      name: string; kecamatan: string; desaList: Set<string>;
+  1283→      fishTypes: Set<string>; businessTypes: Set<string>;
+  1284→      memberCount: number; rtpCount: number;
+  1285→    }>();
+  1286→    const farmerLatestByGroup = new Map<string, Map<string, typeof records[0]>>();
+  1287→    const sortedDesc = [...records].sort((a, b) => b.year - a.year);
+  1288→
+  1289→    records.forEach(r => {
+  1290→      if (!r.groupName?.trim()) return;
+  1291→      const key = `${r.groupName.trim().toLowerCase()}|${r.kecamatan}`;
+  1292→      if (!groupMap.has(key)) {
+  1293→        groupMap.set(key, {
+  1294→          name: r.groupName.trim(), kecamatan: r.kecamatan, desaList: new Set(),
+  1295→          fishTypes: new Set(), businessTypes: new Set(),
+  1296→          memberCount: 0, rtpCount: 0,
+  1297→        });
+  1298→      }
+  1299→      groupMap.get(key)!.desaList.add(r.desa);
+  1300→      groupMap.get(key)!.fishTypes.add(r.fishType);
+  1301→      groupMap.get(key)!.businessTypes.add(r.businessType);
+  1302→
+  1303→      if (!farmerLatestByGroup.has(key)) farmerLatestByGroup.set(key, new Map());
+  1304→      const fid = r.farmerId || generateFarmerId({
+  1305→        farmerName: r.farmerName || '', groupName: r.groupName || '',
+  1306→        kecamatan: r.kecamatan || '', desa: r.desa || '',
+  1307→      });
+  1308→      if (!farmerLatestByGroup.get(key)!.has(fid)) {
+  1309→        farmerLatestByGroup.get(key)!.set(fid, r);
+  1310→      }
+  1311→    });
+  1312→
+  1313→    // Calculate member counts
+  1314→    for (const [key, group] of groupMap) {
+  1315→      const farmerMap = farmerLatestByGroup.get(key);
+  1316→      if (farmerMap) {
+  1317→        let mc = 0, rc = 0;
+  1318→        for (const r of farmerMap.values()) {
+  1319→          mc += r.farmerCount;
+  1320→          rc += r.rtpCount;
+  1321→        }
+  1322→        group.memberCount = mc;
+  1323→        group.rtpCount = rc;
+  1324→      }
+  1325→    }
+  1326→
+  1327→    // Build helper to format group with members
+  1328→    const formatGroupWithMembers = (key: string, group: typeof groupMap extends Map<string, infer V> ? V : never): string => {
+  1329→      const groupFarmers = farmerLatestByGroup.get(key);
+  1330→      const memberNames: string[] = [];
+  1331→      if (groupFarmers) {
+  1332→        for (const r of groupFarmers.values()) {
+  1333→          memberNames.push(`${r.farmerName} (${r.fishType}/${r.businessType}, Desa: ${r.desa})`);
+  1334→        }
+  1335→      }
+  1336→      const desaStr = [...group.desaList].sort().join(', ');
+  1337→      return `Kelompok: ${group.name} | Kec: ${group.kecamatan} | Desa anggota: ${desaStr} | Anggota: ${group.memberCount} | RTP: ${group.rtpCount} | Ikan: ${[...group.fishTypes].join(',')} | Usaha: ${[...group.businessTypes].join(',')}\n  Daftar anggota: ${memberNames.join('; ')}`;
+  1338→    };
+  1339→
+  1340→    // If no search terms but it's a specific question, include ALL groups with members
+  1341→    if (searchTerms.length === 0) {
+  1342→      if (questionType === 'specific') {
+  1343→        // Include all groups with their member names
+  1344→        const allGroupLines = Array.from(groupMap.entries())
+  1345→          .sort(([,a], [,b]) => {
+  1346→            const kecDiff = a.kecamatan.localeCompare(b.kecamatan);
+  1347→            if (kecDiff !== 0) return kecDiff;
+  1348→            return a.name.localeCompare(b.name);
+  1349→          })
+  1350→          .map(([key, group]) => formatGroupWithMembers(key, group));
+  1351→        return '\n=== DATA ANGGOTA KELOMPOK (semua kelompok dengan daftar anggota) ===\n' + allGroupLines.join('\n');
+  1352→      }
+  1353→      return '';
+  1354→    }
+  1355→
+  1356→    // Search for matching groups — FULL details with ALL members
+  1357→    const foundGroups: string[] = [];
+  1358→    const foundFarmers: string[] = [];
+  1359→    const matchedGroupKeys = new Set<string>();
+  1360→
+  1361→    for (const term of searchTerms) {
+  1362→      const q = term.toLowerCase();
+  1363→
+  1364→      for (const [key, group] of groupMap) {
+  1365→        if (
+  1366→          group.name.toLowerCase().includes(q) ||
+  1367→          group.kecamatan.toLowerCase().includes(q) ||
+  1368→          [...group.desaList].some(d => d.toLowerCase().includes(q)) ||
+  1369→          [...group.fishTypes].some(f => f.toLowerCase().includes(q)) ||
+  1370→          [...group.businessTypes].some(b => b.toLowerCase().includes(q)) ||
+  1371→          (q === 'pembenih' && [...group.businessTypes].some(b => b.toLowerCase() === 'pembenihan'))
+  1372→        ) {
+  1373→          if (matchedGroupKeys.has(key)) continue;
+  1374→          matchedGroupKeys.add(key);
+  1375→          foundGroups.push(formatGroupWithMembers(key, group));
+  1376→        }
+  1377→      }
+  1378→
+  1379→      // Search farmers by name
+  1380→      const allFarmerLatest = new Map<string, typeof records[0]>();
+  1381→      for (const r of sortedDesc) {
+  1382→        const fid = r.farmerId || generateFarmerId({
+  1383→          farmerName: r.farmerName || '', groupName: r.groupName || '',
+  1384→          kecamatan: r.kecamatan || '', desa: r.desa || '',
+  1385→        });
+  1386→        if (!allFarmerLatest.has(fid)) allFarmerLatest.set(fid, r);
+  1387→      }
+  1388→
+  1389→      for (const r of allFarmerLatest.values()) {
+  1390→        if (
+  1391→          (r.farmerName?.toLowerCase().includes(q)) ||
+  1392→          (r.kecamatan?.toLowerCase().includes(q)) ||
+  1393→          (r.desa?.toLowerCase().includes(q))
+  1394→        ) {
+  1395→          foundFarmers.push(
+  1396→            `${r.farmerName} | Kel: ${r.groupName} | Kec: ${r.kecamatan} | ${r.fishType}/${r.businessType}`
+  1397→          );
+  1398→        }
+  1399→      }
+  1400→    }
+  1401→
+  1402→    if (foundGroups.length === 0 && foundFarmers.length === 0) {
+  1403→      return `\nHASIL PENCARIAN: Tidak ditemukan untuk "${searchTerms.join(', ')}". Coba periksa ejaan.`;
+  1404→    }
+  1405→
+  1406→    let result = '\n=== HASIL PENCARIAN SPESIFIK ===';
+  1407→    if (foundGroups.length > 0) {
+  1408→      result += '\nKelompok ditemukan:\n' + foundGroups.join('\n');
+  1409→    }
+  1410→    if (foundFarmers.length > 0) {
+  1411→      result += '\nPembudidaya ditemukan:\n' + foundFarmers.slice(0, 50).join('\n');
+  1412→    }
+  1413→    return result;
+  1414→  } catch (error) {
+  1415→    console.error('Failed to fetch targeted results:', error);
+  1416→    return '';
+  1417→  }
+  1418→}
+  1419→
+  1420→/**
+  1421→ * Fetch multi-year comparison context for side-by-side data.
+  1422→ * Generates per-year summary (groups, farmers, production) for each year
+  1423→ * in the resolved filters. Keeps it compact to avoid token overflow.
+  1424→ */
+  1425→async function fetchMultiYearComparisonContext(resolvedFilters: {
+  1426→  years: string[];
+  1427→  kecamatan: string[];
+  1428→  desa: string[];
+  1429→  fishType: string[];
+  1430→  containerType: string[];
+  1431→  businessType: string[];
+  1432→}): Promise<string> {
+  1433→  try {
+  1434→    let years: number[];
+  1435→    if (resolvedFilters.years.length > 0) {
+  1436→      years = resolvedFilters.years.map(Number).filter(n => !isNaN(n));
+  1437→    } else {
+  1438→      // Default to latest 2 years from database instead of current year
+  1439→      const availableYears = await getAvailableYears();
+  1440→      years = availableYears.length >= 2
+  1441→        ? availableYears.slice(0, 2)
+  1442→        : availableYears.length === 1
+  1443→          ? [availableYears[0], availableYears[0] - 1]
+  1444→          : [new Date().getFullYear()];
+  1445→    }
+  1446→
+  1447→    if (years.length < 2) {
+  1448→      // Need at least 2 years for comparison; add previous year
+  1449→      years.unshift(years[0] - 1);
+  1450→    }
+  1451→
+  1452→    const lines: string[] = ['\n=== DATA PERBANDINGAN MULTI-TAHUN (LANGSUNG DARI DATABASE) ==='];
+  1453→    lines.push('⚠️ PENTING: Data di bawah adalah data RESMI dari database. Gunakan ANGKA PERSIS seperti yang tercantum — JANGAN mengarang, membulatkan, atau mengubah satuan.');
+  1454→    lines.push('⚠️ JANGAN gunakan kategori yang TIDAK ADA di bawah (misalnya "Produksi Laut", "Produksi Air Tawar"). Kategori yang ada HANYA: Produksi Pembesaran (Kg) dan Produksi Pembenihan (Ekor).');
+  1455→    lines.push('⚠️ Jika data untuk suatu tahun TIDAK ADA di bawah, katakan "Data tahun tersebut tidak tersedia" — JANGAN membuat angka palsu.');
+  1456→
+  1457→    // Collect per-year data for comparison table
+  1458→    interface YearData {
+  1459→      year: number;
+  1460→      hasData: boolean;
+  1461→      totalGroups: number;
+  1462→      totalFarmers: number;
+  1463→      totalRtp: number;
+  1464→      totalPembesaranProd: number;
+  1465→      totalPembenihanProd: number;
+  1466→      pembesaranOnly: number;
+  1467→      pembenihanOnly: number;
+  1468→      bothBiz: number;
+  1469→      totalKusuka: number;
+  1470→      kecSummary: string;
+  1471→      fishTypeSummary: string;
+  1472→    }
+  1473→    const yearDataList: YearData[] = [];
+  1474→
+  1475→    for (const year of years) {
+  1476→      const where: Record<string, unknown> = { year };
+  1477→      if (resolvedFilters.kecamatan.length > 0) where.kecamatan = { in: resolvedFilters.kecamatan };
+  1478→      if (resolvedFilters.desa.length > 0) where.desa = { in: resolvedFilters.desa };
+  1479→      if (resolvedFilters.fishType.length > 0) where.fishType = { in: resolvedFilters.fishType };
+  1480→      if (resolvedFilters.businessType.length > 0) where.businessType = { in: resolvedFilters.businessType };
+  1481→
+  1482→      const records = await db.fishFarm.findMany({ where });
+  1483→
+  1484→      if (records.length === 0) {
+  1485→        lines.push(`\n--- Tahun ${year}: ⛔ TIDAK ADA DATA di database untuk tahun ini. JANGAN membuat angka palsu untuk tahun ini. ---`);
+  1486→        yearDataList.push({
+  1487→          year, hasData: false, totalGroups: 0, totalFarmers: 0, totalRtp: 0,
+  1488→          totalPembesaranProd: 0, totalPembenihanProd: 0,
+  1489→          pembesaranOnly: 0, pembenihanOnly: 0, bothBiz: 0, totalKusuka: 0,
+  1490→          kecSummary: '', fishTypeSummary: '',
+  1491→        });
+  1492→        continue;
+  1493→      }
+  1494→
+  1495→      lines.push(`\n--- Tahun ${year}: Data ditemukan (${records.length} record) ---`);
+  1496→
+  1497→      // Build group data
+  1498→      const groupMap = new Map<string, { businessTypes: Set<string>; memberCount: number; rtpCount: number; }>();
+  1499→      const allFarmerLatest = new Map<string, typeof records[0]>();
+  1500→      const sortedDesc = [...records].sort((a, b) => b.year - a.year);
+  1501→
+  1502→      let totalPembesaranProd = 0;
+  1503→      let totalPembenihanProd = 0;
+  1504→
+  1505→      // Per fish type production
+  1506→      const fishTypeProd = new Map<string, { pembesaran: number; pembenihan: number }>();
+  1507→
+  1508→      records.forEach(r => {
+  1509→        if (!r.groupName?.trim()) return;
+  1510→        const key = `${r.groupName.trim().toLowerCase()}|${r.kecamatan}`;
+  1511→        if (!groupMap.has(key)) {
+  1512→          groupMap.set(key, { businessTypes: new Set(), memberCount: 0, rtpCount: 0 });
+  1513→        }
+  1514→        groupMap.get(key)!.businessTypes.add(r.businessType);
+  1515→
+  1516→        const fid = r.farmerId || generateFarmerId({
+  1517→          farmerName: r.farmerName || '', groupName: r.groupName || '',
+  1518→          kecamatan: r.kecamatan || '', desa: r.desa || '',
+  1519→        });
+  1520→        if (!allFarmerLatest.has(fid)) {
+  1521→          allFarmerLatest.set(fid, r);
+  1522→          groupMap.get(key)!.memberCount += r.farmerCount;
+  1523→          groupMap.get(key)!.rtpCount += r.rtpCount;
+  1524→        }
+  1525→
+  1526→        // Sum production
+  1527→        if (r.businessType === 'Pembesaran') {
+  1528→          totalPembesaranProd += (r.productionQty || 0);
+  1529→          // Track per fish type
+  1530→          const ft = r.fishType || 'Lainnya';
+  1531→          if (!fishTypeProd.has(ft)) fishTypeProd.set(ft, { pembesaran: 0, pembenihan: 0 });
+  1532→          fishTypeProd.get(ft)!.pembesaran += (r.productionQty || 0);
+  1533→        } else if (r.businessType === 'Pembenihan') {
+  1534→          totalPembenihanProd += (r.productionQty || 0);
+  1535→          const ft = r.fishType || 'Lainnya';
+  1536→          if (!fishTypeProd.has(ft)) fishTypeProd.set(ft, { pembesaran: 0, pembenihan: 0 });
+  1537→          fishTypeProd.get(ft)!.pembenihan += (r.productionQty || 0);
+  1538→        }
+  1539→      });
+  1540→
+  1541→      // Business type breakdown
+  1542→      let pembesaranOnly = 0, pembenihanOnly = 0, bothBiz = 0;
+  1543→      for (const group of groupMap.values()) {
+  1544→        const hasPembesaran = group.businessTypes.has('Pembesaran');
+  1545→        const hasPembenihan = group.businessTypes.has('Pembenihan');
+  1546→        if (hasPembesaran && hasPembenihan) bothBiz++;
+  1547→        else if (hasPembesaran) pembesaranOnly++;
+  1548→        else if (hasPembenihan) pembenihanOnly++;
+  1549→      }
+  1550→
+  1551→      // Count KUSUKA
+  1552→      const totalKusuka = allFarmerLatest.values()
+  1553→        ? [...allFarmerLatest.values()].filter(r => /^\d{16}$/.test(String(r.kusuka || '').trim())).length
+  1554→        : 0;
+  1555→
+  1556→      // Per-kecamatan summary
+  1557→      const kecGroupCounts = new Map<string, number>();
+  1558→      const kecFarmerCounts = new Map<string, number>();
+  1559→      for (const r of records) {
+  1560→        if (!r.groupName?.trim()) continue;
+  1561→        kecGroupCounts.set(r.kecamatan, (kecGroupCounts.get(r.kecamatan) || 0) + 1);
+  1562→      }
+  1563→      for (const r of allFarmerLatest.values()) {
+  1564→        kecFarmerCounts.set(r.kecamatan, (kecFarmerCounts.get(r.kecamatan) || 0) + r.farmerCount);
+  1565→      }
+  1566→      const kecSummary = [...kecGroupCounts.entries()]
+  1567→        .sort(([a], [b]) => a.localeCompare(b))
+  1568→        .map(([kec, count]) => `${kec}(${count}kel, ${kecFarmerCounts.get(kec) || 0}org)`)
+  1569→        .join(', ');
+  1570→
+  1571→      // Fish type summary
+  1572→      const fishTypeSummary = [...fishTypeProd.entries()]
+  1573→        .sort(([a], [b]) => a.localeCompare(b))
+  1574→        .map(([ft, prod]) => `${ft}: Pembesaran=${prod.pembesaran.toLocaleString('id-ID')}Kg, Pembenihan=${prod.pembenihan.toLocaleString('id-ID')}Ekor`)
+  1575→        .join('; ');
+  1576→
+  1577→      lines.push(`\n--- Tahun ${year} ---`);
+  1578→      lines.push(`Kelompok: ${groupMap.size} (Pembesaran:${pembesaranOnly}, Pembenihan:${pembenihanOnly}, Campuran:${bothBiz})`);
+  1579→      lines.push(`Pembudidaya: ${allFarmerLatest.size}, RTP: ${records.reduce((sum, r) => sum + r.rtpCount, 0)}, KUSUKA valid: ${totalKusuka}`);
+  1580→      lines.push(`Produksi Pembesaran: ${totalPembesaranProd.toLocaleString('id-ID')} Kg`);
+  1581→      lines.push(`Produksi Pembenihan: ${totalPembenihanProd.toLocaleString('id-ID')} Ekor`);
+  1582→      if (fishTypeSummary) lines.push(`Per jenis ikan: ${fishTypeSummary}`);
+  1583→      if (kecSummary) lines.push(`Per kecamatan: ${kecSummary}`);
+  1584→
+  1585→      yearDataList.push({
+  1586→        year, hasData: true,
+  1587→        totalGroups: groupMap.size,
+  1588→        totalFarmers: allFarmerLatest.size,
+  1589→        totalRtp: records.reduce((sum, r) => sum + r.rtpCount, 0),
+  1590→        totalPembesaranProd,
+  1591→        totalPembenihanProd,
+  1592→        pembesaranOnly,
+  1593→        pembenihanOnly,
+  1594→        bothBiz,
+  1595→        totalKusuka,
+  1596→        kecSummary,
+  1597→        fishTypeSummary,
+  1598→      });
+  1599→    }
+  1600→
+  1601→    // ============================================================
+  1602→    // CRITICAL FIX: Add SIDE-BY-SIDE COMPARISON TABLE with real
+  1603→    // calculated numbers so the AI doesn't have to compute or guess.
+  1604→    // This prevents hallucination — the AI just reads the table.
+  1605→    // ============================================================
+  1606→    if (yearDataList.filter(y => y.hasData).length >= 2) {
+  1607→      lines.push('\n--- TABEL PERBANDINGAN (angka resmi dari database) ---');
+  1608→      const header = 'Indikator';
+  1609→      const yearHeaders = yearDataList.map(y => `Tahun ${y.year}`).join(' | ');
+  1610→      lines.push(`${header} | ${yearHeaders}`);
+  1611→      lines.push('--- | ' + yearDataList.map(() => '---').join(' | '));
+  1612→
+  1613→      // Row helper
+  1614→      const row = (label: string, values: string[]) => `${label} | ${values.join(' | ')}`;
+  1615→      // Change helper
+  1616→      const change = (old: number, nw: number): string => {
+  1617→        if (old === 0 && nw === 0) return '-';
+  1618→        if (old === 0) return 'N/A (divisi nol)';
+  1619→        const pct = ((nw - old) / old * 100).toFixed(1);
+  1620→        const sign = Number(pct) >= 0 ? '+' : '';
+  1621→        return `${sign}${pct}%`;
+  1622→      };
+  1623→
+  1624→      lines.push(row('Jumlah Kelompok', yearDataList.map(y => y.hasData ? String(y.totalGroups) : 'N/A')));
+  1625→      lines.push(row('Pembudidaya', yearDataList.map(y => y.hasData ? String(y.totalFarmers) : 'N/A')));
+  1626→      lines.push(row('RTP', yearDataList.map(y => y.hasData ? String(y.totalRtp) : 'N/A')));
+  1627→      lines.push(row('KUSUKA valid', yearDataList.map(y => y.hasData ? String(y.totalKusuka) : 'N/A')));
+  1628→      lines.push(row('Produksi Pembesaran (Kg)', yearDataList.map(y => y.hasData ? y.totalPembesaranProd.toLocaleString('id-ID') : 'N/A')));
+  1629→      lines.push(row('Produksi Pembenihan (Ekor)', yearDataList.map(y => y.hasData ? y.totalPembenihanProd.toLocaleString('id-ID') : 'N/A')));
+  1630→
+  1631→      // Add percentage changes between consecutive years
+  1632→      if (yearDataList.length === 2 && yearDataList[0].hasData && yearDataList[1].hasData) {
+  1633→        const y1 = yearDataList[0];
+  1634→        const y2 = yearDataList[1];
+  1635→        lines.push('');
+  1636→        lines.push(`--- PERUBAHAN ${y1.year} → ${y2.year} (dihitung dari angka di atas) ---`);
+  1637→        lines.push(`Jumlah Kelompok: ${y1.totalGroups} → ${y2.totalGroups} (${change(y1.totalGroups, y2.totalGroups)})`);
+  1638→        lines.push(`Pembudidaya: ${y1.totalFarmers} → ${y2.totalFarmers} (${change(y1.totalFarmers, y2.totalFarmers)})`);
+  1639→        lines.push(`RTP: ${y1.totalRtp} → ${y2.totalRtp} (${change(y1.totalRtp, y2.totalRtp)})`);
+  1640→        lines.push(`Produksi Pembesaran: ${y1.totalPembesaranProd.toLocaleString('id-ID')} → ${y2.totalPembesaranProd.toLocaleString('id-ID')} Kg (${change(y1.totalPembesaranProd, y2.totalPembesaranProd)})`);
+  1641→        lines.push(`Produksi Pembenihan: ${y1.totalPembenihanProd.toLocaleString('id-ID')} → ${y2.totalPembenihanProd.toLocaleString('id-ID')} Ekor (${change(y1.totalPembenihanProd, y2.totalPembenihanProd)})`);
+  1642→      }
+  1643→    } else if (yearDataList.filter(y => y.hasData).length === 1) {
+  1644→      const withData = yearDataList.find(y => y.hasData)!;
+  1645→      const withoutData = yearDataList.find(y => !y.hasData);
+  1646→      lines.push('\n--- CATATAN PENTING ---');
+  1647→      lines.push(`Data hanya tersedia untuk tahun ${withData.year}. Tahun ${withoutData?.year || 'lainnya'} TIDAK ADA DATA di database.`);
+  1648→      lines.push('JANGAN membuat angka palsu untuk tahun yang tidak ada datanya. Katakan "Data tidak tersedia" untuk tahun tersebut.');
+  1649→    }
+  1650→
+  1651→    return lines.join('\n');
+  1652→  } catch (error) {
+  1653→    console.error('Failed to fetch multi-year comparison context:', error);
+  1654→    return '\n=== DATA PERBANDINGAN ===\nGagal memuat data perbandingan. Katakan "Maaf, gagal memuat data perbandingan" dan JANGAN mengarang angka.';
+  1655→  }
+  1656→}
+  1657→
+  1658→/**
+  1659→ * Build compact stats summary from the client-side stats context.
+  1660→ */
+  1661→function buildCompactStats(statsContext?: Record<string, unknown>): string {
+  1662→  if (!statsContext || Object.keys(statsContext).length === 0) return '';
+  1663→
+  1664→  const s = statsContext;
+  1665→  const lines: string[] = ['\n=== STATISTIK ==='];
+  1666→
+  1667→  if (s.periodLabel) lines.push(`Periode: ${s.periodLabel}`);
+  1668→  if (s.currentYear) lines.push(`Tahun: ${s.currentYear}`);
+  1669→
+  1670→  if (s.pembesaranProduction !== undefined) {
+  1671→    lines.push(`Produksi Pembesaran: ${Number(s.pembesaranProduction).toLocaleString('id-ID')} Kg`);
+  1672→  }
+  1673→  if (s.pembenihanProduction !== undefined) {
+  1674→    lines.push(`Produksi Pembenihan: ${Number(s.pembenihanProduction).toLocaleString('id-ID')} Ekor`);
+  1675→  }
+  1676→  if (s.totalRtp !== undefined) lines.push(`Total RTP: ${Number(s.totalRtp).toLocaleString('id-ID')}`);
+  1677→  if (s.totalFarmer !== undefined) lines.push(`Total Pembudidaya: ${Number(s.totalFarmer).toLocaleString('id-ID')}`);
+  1678→  if (s.totalGroup !== undefined) lines.push(`Total Kelompok: ${Number(s.totalGroup).toLocaleString('id-ID')}`);
+  1679→  if (s.totalKusuka !== undefined) lines.push(`Total KUSUKA: ${Number(s.totalKusuka).toLocaleString('id-ID')}`);
+  1680→
+  1681→  // Production by fish type (compact)
+  1682→  if (s.productionByFishType && typeof s.productionByFishType === 'object') {
+  1683→    const fishData = s.productionByFishType as Record<string, number>;
+  1684→    lines.push('Per jenis ikan: ' + Object.entries(fishData)
+  1685→      .map(([k, v]) => `${k}: ${Number(v).toLocaleString('id-ID')}`)
+  1686→      .join(', '));
+  1687→  }
+  1688→
+  1689→  // Production by kecamatan (compact)
+  1690→  if (s.productionByKecamatan && typeof s.productionByKecamatan === 'object') {
+  1691→    const kecData = s.productionByKecamatan as Record<string, number>;
+  1692→    lines.push('Per kecamatan: ' + Object.entries(kecData)
+  1693→      .sort(([,a],[,b]) => Number(b) - Number(a))
+  1694→      .slice(0, 5)
+  1695→      .map(([k, v]) => `${k}: ${Number(v).toLocaleString('id-ID')}`)
+  1696→      .join(', '));
+  1697→  }
+  1698→
+  1699→  // 5-year trend (compact)
+  1700→  if (s.trend5Year && Array.isArray(s.trend5Year)) {
+  1701→    const trend = s.trend5Year as Array<Record<string, unknown>>;
+  1702→    if (trend.length > 0) {
+  1703→      lines.push('Tren 5 tahun: ' + trend.map((t: Record<string, unknown>) =>
+  1704→        `${t.year}: ${Number(t.pembesaranProduction || 0).toLocaleString('id-ID')}Kg`
+  1705→      ).join(', '));
+  1706→    }
+  1707→  }
+  1708→
+  1709→  // Target vs realisasi (compact)
+  1710→  if (s.targetVsRealisasiPembesaran && typeof s.targetVsRealisasiPembesaran === 'object') {
+  1711→    const targets = s.targetVsRealisasiPembesaran as Record<string, unknown>;
+  1712→    const targetLines = Object.entries(targets).slice(0, 5).map(([k, v]) => {
+  1713→      const d = v as Record<string, unknown>;
+  1714→      return `${k}: target=${Number(d.target || 0).toLocaleString('id-ID')} realisasi=${Number(d.realisasi || 0).toLocaleString('id-ID')}`;
+  1715→    });
+  1716→    if (targetLines.length > 0) {
+  1717→      lines.push('Target vs Realisasi: ' + targetLines.join('; '));
+  1718→    }
+  1719→  }
+  1720→
+  1721→  // Active filters
+  1722→  if (s.activeFilters && typeof s.activeFilters === 'object') {
+  1723→    const af = s.activeFilters as Record<string, unknown>;
+  1724→    const filterStr = Object.entries(af)
+  1725→      .filter(([, v]) => v && v !== 'Semua tahun' && v !== 'Semua kecamatan' && v !== 'Semua desa' && v !== 'Semua jenis ikan' && v !== 'Semua wadah' && v !== 'Semua jenis usaha')
+  1726→      .map(([k, v]) => `${k}=${v}`)
+  1727→      .join(', ');
+  1728→    if (filterStr) lines.push(`Filter aktif: ${filterStr}`);
+  1729→  }
+  1730→
+  1731→  return lines.join('\n');
+  1732→}
+  1733→
+  1734→export async function POST(request: NextRequest) {
+  1735→  try {
+  1736→    await ensureTablesExist();
+  1737→    const body = await request.json();
+  1738→    const {
+  1739→      message,
+  1740→      messages = [],
+  1741→      statsContext,
+  1742→      filters,
+  1743→    } = body as {
+  1744→      message?: string;
+  1745→      messages?: Array<{ role: 'user' | 'assistant'; content: string }>;
+  1746→      statsContext?: Record<string, unknown>;
+  1747→      filters?: {
+  1748→        years: string[];
+  1749→        kecamatan: string[];
+  1750→        desa: string[];
+  1751→        fishType: string[];
+  1752→        containerType: string[];
+  1753→        businessType: string[];
+  1754→      };
+  1755→      sessionId?: string;
+  1756→    };
+  1757→
+  1758→    if (!message || typeof message !== 'string') {
+  1759→      return NextResponse.json(
+  1760→        { error: 'Message is required and must be a string' },
+  1761→        { status: 400 }
+  1762→      );
+  1763→    }
+  1764→
+  1765→    // Get session ID for memory persistence (default to 'default')
+  1766→    const sessionId = body.sessionId || 'default';
+  1767→
+  1768→    // Handle memory clear command
+  1769→    if (/^(hapus|bersihkan|reset)\s*(semua)?\s*(memori|ingatan|memories)/i.test(message)) {
+  1770→      const count = await clearMemories(sessionId);
+  1771→      return NextResponse.json({
+  1772→        success: true,
+  1773→        response: `✅ ${count} memori telah dihapus. Saya akan memulai dari awal lagi.`,
+  1774→        model: 'system',
+  1775→        provider: 'memory',
+  1776→      });
+  1777→    }
+  1778→
+  1779→    // Classify question type for smart context
+  1780→    // Also consider conversation context for follow-up questions
+  1781→    let questionType = classifyQuestion(message);
+  1782→    const searchTerms = extractSearchTerms(message);
+  1783→
+  1784→    // ============================================================
+  1785→    // FOLLOW-UP QUESTION DETECTION
+  1786→    // If the current question is short/ambiguous (like "siapa saja"),
+  1787→    // check conversation history to determine if it's a follow-up
+  1788→    // to a personnel question.
+  1789→    // ============================================================
+  1790→    if (questionType === 'specific' || questionType === 'general') {
+  1791→      const recentUserMessages = (messages as Array<{ role: string; content: string }>)
+  1792→        ?.filter(m => m.role === 'user')
+  1793→        ?.slice(-3) || [];
+  1794→      const recentAssistantMessages = (messages as Array<{ role: string; content: string }>)
+  1795→        ?.filter(m => m.role === 'assistant')
+  1796→        ?.slice(-3) || [];
+  1797→      const allRecent = [...recentUserMessages, ...recentAssistantMessages]
+  1798→        .map(m => m.content?.toLowerCase() || '')
+  1799→        .join(' ');
+  1800→
+  1801→      // If recent conversation mentions pegawai/organisasi and current question is
+  1802→      // a listing/follow-up, upgrade to personnel type
+  1803→      const isFollowUpToListing = /siapa\s+saja|sebutkan|daftar|tampilkan|nama.*nama/i.test(message);
+  1804→      const recentMentionsPersonnel = /pegawai|karyawan|staf|jabatan|dinas|golongan|pangkat|eselon|bidang|kepala/i.test(allRecent);
+  1805→
+  1806→      if (isFollowUpToListing && recentMentionsPersonnel && questionType !== 'personnel') {
+  1807→        console.log(`[AI Chat] Upgrading question type from '${questionType}' to 'personnel' (follow-up detected)`);
+  1808→        questionType = 'personnel';
+  1809→      }
+  1810→    }
+  1811→
+  1812→    // ============================================================
+  1813→    // QUESTION CONTEXT AWARENESS: Parse the user's question to
+  1814→    // extract contextual info (years, kecamatan, fish type, etc.)
+  1815→    // This overrides UI filters so the AI fetches the right data
+  1816→    // regardless of what the UI currently shows.
+  1817→    // ============================================================
+  1818→    const questionCtx = await parseQuestionContext(message);
+  1819→    const defaultFilters = {
+  1820→      years: [], kecamatan: [], desa: [], fishType: [],
+  1821→      containerType: [], businessType: [],
+  1822→    };
+  1823→    const resolvedFilters = await resolveEffectiveFilters(questionCtx, filters || defaultFilters);
+  1824→
+  1825→    // If question context detected a comparison but classifyQuestion didn't catch it,
+  1826→    // upgrade the question type to 'comparison'
+  1827→    const effectiveQuestionType: 'specific' | 'personnel' | 'stats' | 'general' | 'comparison' =
+  1828→      (questionCtx.isComparison && questionType !== 'specific' && questionType !== 'personnel') ? 'comparison' : questionType;
+  1829→
+  1830→    // Build context header to let the AI know what scope was auto-detected
+  1831→    const contextHeader = buildContextHeader(questionCtx);
+  1832→
+  1833→    // Add available years info so AI knows what data exists in the database
+  1834→    const availableYears = await getAvailableYears();
+  1835→    const availableYearsInfo = availableYears.length > 0
+  1836→      ? `\n\nTahun data tersedia di database: ${availableYears.join(', ')}`
+  1837→      : '';
+  1838→
+  1839→    // ============================================================
+  1840→    // Build system prompt — SMART context loading based on question type
+  1841→    // ============================================================
+  1842→    // Dynamic prompt size limit based on question type
+  1843→    // Personnel questions need MORE space to fit all KB data (employee listings)
+  1844→    // Z.AI / Gemini can handle larger prompts; Groq will be skipped if too large
+  1845→    const MAX_PROMPT_CHARS = effectiveQuestionType === 'personnel' ? 30000 : 25000; // Personnel needs more space for all KB data
+  1846→    const TRUNCATION_NOTE = '\n\n[Data dipangkas karena terlalu panjang. Untuk detail lengkap, tanya secara spesifik.]';
+  1847→
+  1848→    // Base prompt + memory (always included)
+  1849→    let systemPrompt = BASE_SYSTEM_PROMPT + availableYearsInfo;
+  1850→
+  1851→    // Add question context header if any context was auto-detected
+  1852→    if (contextHeader) {
+  1853→      systemPrompt += '\n\n' + contextHeader;
+  1854→    }
+  1855→
+  1856→    // 🧠 MEMORY: Retrieve relevant memories and inject into system prompt
+  1857→    const memories = await retrieveMemories(sessionId, message);
+  1858→    const memoryContext = formatMemoriesForPrompt(memories);
+  1859→    if (memoryContext) {
+  1860→      systemPrompt += memoryContext;
+  1861→    }
+  1862→
+  1863→    // SMART DATA CONTEXT LOADING:
+  1864→    // - 'general': Only compact summaries (~500 chars) — keeps prompt tiny
+  1865→    // - 'stats': Summary + business type breakdown + kecamatan list (~2K chars)
+  1866→    // - 'specific': Full data context + targeted results — largest, but still limited
+  1867→    // - 'comparison': Multi-year comparison context
+  1868→    // - 'personnel': Compact context + KB focus (pegawai/jabatan questions)
+  1869→    let totalGroups = 0;
+  1870→    if (effectiveQuestionType === 'comparison') {
+  1871→      // For comparison questions, load multi-year comparison context
+  1872→      const comparisonContext = await fetchMultiYearComparisonContext(resolvedFilters);
+  1873→      systemPrompt += comparisonContext;
+  1874→      // Also add KUSUKA data for context
+  1875→      const kusukaContext = await fetchKusukaDataContext();
+  1876→      systemPrompt += kusukaContext;
+  1877→      totalGroups = 0; // comparison spans multiple years
+  1878→    } else if (effectiveQuestionType === 'personnel') {
+  1879→      // For personnel/pegawai questions, use COMPACT context — no fishery data needed
+  1880→      // The relevant data is in the Knowledge Base, not in fishery production stats
+  1881→      const resolvedYear = resolvedFilters.years.length > 0
+  1882→        ? parseInt(resolvedFilters.years[0], 10)
+  1883→        : undefined;
+  1884→      const compactContext = await fetchCompactDataContext(resolvedYear);
+  1885→      systemPrompt += compactContext.dataContext;
+  1886→      totalGroups = compactContext.totalGroups;
+  1887→      // Add hint for AI to focus on KB data
+  1888→      systemPrompt += '\n\n⚠️ Pertanyaan ini tentang pegawai/organisasi. Data utama ada di BASIS PENGETAHUAN — gunakan sebagai sumber UTAMA.';
+  1889→    } else if (effectiveQuestionType === 'general') {
+  1890→      // For general/greeting questions, only include compact summary stats
+  1891→      // Use resolved year from question context if available
+  1892→      const resolvedYear = resolvedFilters.years.length > 0
+  1893→        ? parseInt(resolvedFilters.years[0], 10)
+  1894→        : undefined;
+  1895→      const compactContext = await fetchCompactDataContext(resolvedYear);
+  1896→      systemPrompt += compactContext.dataContext;
+  1897→      totalGroups = compactContext.totalGroups;
+  1898→    } else if (effectiveQuestionType === 'stats') {
+  1899→      // For stats/counting questions, include summaries + business breakdown
+  1900→      // but NOT the full group list (which is 10K+ chars and causes Groq 413 errors)
+  1901→      // Use resolved filters (which may override years/kecamatan from question)
+  1902→      const statsResult = await fetchStatsDataContext(resolvedFilters);
+  1903→      systemPrompt += statsResult.dataContext;
+  1904→      totalGroups = statsResult.totalGroups;
+  1905→    } else {
+  1906→      // For specific questions, load full data context
+  1907→      // Use resolved filters (which may override years/kecamatan from question)
+  1908→      const fullContext = await fetchFullDataContext(resolvedFilters);
+  1909→      systemPrompt += fullContext.dataContext;
+  1910→      totalGroups = fullContext.totalGroups;
+  1911→    }
+  1912→
+  1913→    // Add KUSUKA data context for stats and specific questions only
+  1914→    // (general/greeting questions don't need KUSUKA details, comparison already includes it)
+  1915→    // Personnel questions also don't need KUSUKA details
+  1916→    if (effectiveQuestionType !== 'general' && effectiveQuestionType !== 'comparison' && effectiveQuestionType !== 'personnel') {
+  1917→      const kusukaContext = await fetchKusukaDataContext();
+  1918→      systemPrompt += kusukaContext;
+  1919→    }
+  1920→
+  1921→    // Add stats context (compact) for stats/general questions
+  1922→    let statsSection = '';
+  1923→    if (effectiveQuestionType === 'stats' || effectiveQuestionType === 'general') {
+  1924→      statsSection = buildCompactStats(statsContext);
+  1925→      systemPrompt += statsSection;
+  1926→    }
+  1927→
+  1928→    // Knowledge Base context - inject summary of available documents
+  1929→    const kbContext = await getKnowledgeBaseContext();
+  1930→    if (kbContext) {
+  1931→      systemPrompt += kbContext;
+  1932→      systemPrompt += `\nKETENTUAN BASIS PENGETAHUAN:
+  1933→- Jika pertanyaan user berkaitan dengan dokumen di Basis Pengetahuan, WAJIB cari informasi di sana TERLEBIH DAHULU.
+  1934→- Data dari Basis Pengetahuan adalah sumber UTAMA untuk pertanyaan tentang pegawai, dokumen internal, atau data yang diupload.
+  1935→- JANGAN mengarang informasi jika data ada di BASIS PENGETAHUAN — baca dengan teliti.
+  1936→- Jika menemukan nama orang di BASIS PENGETAHUAN, sebutkan detailnya (jabatan, unit, dll) sesuai data yang ada.
+  1937→- PRIORITAS SUMBER DATA:
+  1938→  * Untuk pertanyaan tentang PEGAWAI/DOKUMEN INTERNAL: BASIS PENGETAHUAN > DATA CONTEXT > DATA KUSUKA
+  1939→  * Untuk pertanyaan tentang DATA KUSUKA perorangan (detail nama, alamat, no kartu): BASIS PENGETAHUAN > DATA KUSUKA > DATA CONTEXT
+  1940→  * Untuk pertanyaan tentang ANGKA/JUMLAH KUSUKA (berapa, total, per desa/kecamatan): DATA KUSUKA > BASIS PENGETAHUAN > DATA CONTEXT
+  1941→  * Jika BASIS PENGETAHUAN dan DATA KUSUKA memberikan angka yang BERBEDA untuk jumlah/penghitungan, GUNAKAN angka dari DATA KUSUKA (karena itu diambil langsung dari database terbaru)
+  1942→  * Jika BASIS PENGETAHUAN memiliki detail yang TIDAK ada di DATA KUSUKA (nama spesifik, detail alamat), gunakan data dari BASIS PENGETAHUAN
+  1943→\n`;
+  1944→    }
+  1945→
+  1946→    // Search Knowledge Base for relevant content
+  1947→    // Use MORE results for personnel/KUSUKA questions (KB may have raw data)
+  1948→    const isKusukaQuestion = /kusuka|kartu\s+usaha|registrasi/i.test(message);
+  1949→    const isPersonnelQuestion = effectiveQuestionType === 'personnel';
+  1950→    // For personnel questions, use MUCH higher limits to capture ALL employee data.
+  1951→    // Previous limits (20/15) caused AI to undercount (e.g., 20 instead of 28)
+  1952→    // because document diversity limit cut off chunks from the same document.
+  1953→    const kbMaxResults = isPersonnelQuestion ? 50 : isKusukaQuestion ? 12 : 8;
+  1954→    const kbMaxPerDoc = isPersonnelQuestion ? 50 : isKusukaQuestion ? 5 : 3;
+  1955→    let kbSearchResults: string[] = [];
+  1956→    let totalPegawaiCount = 0; // Definitive pegawai count from countUniquePegawai()
+  1957→    try {
+  1958→      // ============================================================
+  1959→      // PERSONNEL QUESTIONS: Use getAllPegawaiChunks() as PRIMARY source
+  1960→      // This ensures we get ALL chunks from pegawai documents, not just
+  1961→      // keyword-matched ones. Keyword search often misses chunks that
+  1962→      // don't contain "pegawai" but have employee data (numbered lists).
+  1963→      // ============================================================
+  1964→      if (isPersonnelQuestion) {
+  1965→        // Step 1: Get ALL chunks from pegawai-related documents (most reliable)
+  1966→        const allPegawaiChunks = await getAllPegawaiChunks();
+  1967→        if (allPegawaiChunks.length > 0) {
+  1968→          kbSearchResults = allPegawaiChunks;
+  1969→          console.log(`[AI Chat] Personnel: using getAllPegawaiChunks() → ${allPegawaiChunks.length} chunks`);
+  1970→        } else {
+  1971→          // Fallback: do keyword-based search if getAllPegawaiChunks returns empty
+  1972→          console.log('[AI Chat] Personnel: getAllPegawaiChunks() returned empty, falling back to keyword search');
+  1973→          kbSearchResults = await searchKnowledgeBase(message, 50, 50);
+  1974→          // Also try broad searches
+  1975→          const broadSearchTerms = ['pegawai dinas', 'data pegawai', 'struktur organisasi', 'daftar pegawai'];
+  1976→          for (const term of broadSearchTerms) {
+  1977→            const broadResults = await searchKnowledgeBase(term, 10, 15);
+  1978→            const existingContents = new Set(kbSearchResults.map(r => r.substring(0, 100)));
+  1979→            for (const result of broadResults) {
+  1980→              if (!existingContents.has(result.substring(0, 100))) {
+  1981→                kbSearchResults.push(result);
+  1982→              }
+  1983→            }
+  1984→          }
+  1985→          console.log(`[AI Chat] Personnel: keyword fallback → ${kbSearchResults.length} results`);
+  1986→        }
+  1987→
+  1988→        // Step 2: Get accurate pegawai count
+  1989→        try {
+  1990→          totalPegawaiCount = await countUniquePegawai();
+  1991→          console.log(`[AI Chat] Personnel: countUniquePegawai() → ${totalPegawaiCount}`);
+  1992→        } catch (countErr) {
+  1993→          console.error('[AI Chat] Personnel: countUniquePegawai() error:', countErr);
+  1994→        }
+  1995→
+  1996→        // Step 3: Also do keyword search for specific names mentioned in the question
+  1997→        // (e.g., "jabatan Hasto Priyarso" → search for "Hasto Priyarso")
+  1998→        if (searchTerms.length > 0) {
+  1999→          const entitySearchQuery = searchTerms.join(' ');
+  2000→          const entityResults = await searchKnowledgeBase(entitySearchQuery, 15, 50);
+
+[showing lines 1-2000 of 2276; use offset=2001 with limit to continue reading]
