@@ -47,7 +47,7 @@ local-*
 *.log
 dev.log
 dev.out.log
-test
+/test
 prompt
 
 server.log
@@ -67,3 +67,4 @@ agent-ctx/
 src_new/
 worklog.md
 db/custom.db
+tool-results/

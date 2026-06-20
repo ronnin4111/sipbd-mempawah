@@ -109,7 +109,8 @@ export function SmartNarrator() {
   };
 
   const isApiKeyError = errorInfo?.detail?.includes('API Key belum dikonfigurasi') ||
-    errorInfo?.detail?.includes('🔑');
+    errorInfo?.detail?.includes('🔑') ||
+    errorInfo?.error?.includes('Z.AI tidak tersedia');
 
   return (
     <div
@@ -141,7 +142,7 @@ export function SmartNarrator() {
       </div>
 
       {/* Type selector */}
-      <div className="px-4 py-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
+      <div className="px-4 py-3 grid grid-cols-2 sm:grid-cols-4 gap-2 relative z-10">
         {NARRATION_OPTIONS.map((opt) => {
           const Icon = opt.icon;
           const isActive = activeType === opt.type;

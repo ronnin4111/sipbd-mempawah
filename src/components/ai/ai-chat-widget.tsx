@@ -13,11 +13,13 @@ interface Message {
 }
 
 interface AIConfig {
+  zai: { available: boolean; model: string; note?: string };
   gemini: { configured: boolean; source: string; model: string; keyHint: string | null };
   groq: { configured: boolean; source: string; model: string; keyHint: string | null };
 }
 
 interface AITestResult {
+  zai: { available: boolean; testResult: string; latencyMs: number; error: string | null; model?: string };
   gemini: { keyFound: boolean; keySource: string; keyHint: string | null; testResult: string; latencyMs: number; error: string | null };
   groq: { keyFound: boolean; keySource: string; keyHint: string | null; testResult: string; latencyMs: number; error: string | null };
   dbConnection: { ok: boolean; error: string | null };
@@ -147,6 +149,7 @@ export function AIChatWidget() {
         setTestResult(data.results);
       } else {
         setTestResult({
+          zai: { available: false, testResult: 'failed', latencyMs: 0, error: 'Failed to fetch test results' },
           gemini: { keyFound: false, keySource: 'none', keyHint: null, testResult: 'failed', latencyMs: 0, error: 'Failed to fetch test results' },
           groq: { keyFound: false, keySource: 'none', keyHint: null, testResult: 'failed', latencyMs: 0, error: 'Failed to fetch test results' },
           dbConnection: { ok: false, error: 'Test endpoint failed' },
@@ -155,6 +158,7 @@ export function AIChatWidget() {
       }
     } catch (err) {
       setTestResult({
+        zai: { available: false, testResult: 'failed', latencyMs: 0, error: 'Network error' },
         gemini: { keyFound: false, keySource: 'none', keyHint: null, testResult: 'failed', latencyMs: 0, error: 'Network error' },
         groq: { keyFound: false, keySource: 'none', keyHint: null, testResult: 'failed', latencyMs: 0, error: 'Network error' },
         dbConnection: { ok: false, error: 'Network error' },
@@ -299,7 +303,7 @@ export function AIChatWidget() {
     setMessages([]);
   };
 
-  // Check if any AI provider is available (Z.AI is always available in sandbox)
+  // Check if any AI provider is available
   const isAIConfigured = aiConfig?.zai?.available || aiConfig?.gemini?.configured || aiConfig?.groq?.configured;
 
   // Format message content with simple markdown-like rendering
@@ -404,7 +408,7 @@ export function AIChatWidget() {
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-bold text-white">Asisten AI Perikanan</div>
                 <div className="text-[10px] text-cyan-100">
-                  SIPBD · Mempawah {!isAIConfigured && '· ⚠️ API Key belum diatur'}
+                  SIPBD · Mempawah · {isAIConfigured ? '✅ AI Aktif' : '⚠️ Belum diatur'}
                 </div>
               </div>
               <button
@@ -553,7 +557,7 @@ export function AIChatWidget() {
                     {/* Test Connection Section */}
                     <div className="border-t pt-3" style={{ borderColor: 'var(--border)' }}>
                       <div className="flex items-center gap-2 mb-2">
-                        {testResult?.gemini?.testResult === 'success' || testResult?.groq?.testResult === 'success' ? (
+                        {testResult?.zai?.testResult === 'success' || testResult?.gemini?.testResult === 'success' || testResult?.groq?.testResult === 'success' ? (
                           <Wifi className="h-3.5 w-3.5 text-green-500" />
                         ) : testResult ? (
                           <WifiOff className="h-3.5 w-3.5 text-red-500" />
@@ -581,6 +585,25 @@ export function AIChatWidget() {
                       {/* Test Results */}
                       {testResult && (
                         <div className="mt-2 space-y-1.5 text-[10px]">
+                          {/* Summary */}
+                          {'summary' in testResult && testResult.summary && (
+                            <div className="px-2 py-1.5 rounded bg-cyan-50 text-cyan-700 font-medium">
+                              {testResult.summary}
+                            </div>
+                          )}
+
+                          {/* Z.AI Result */}
+                          {'zai' in testResult && testResult.zai && (
+                            <div className={`px-2 py-1 rounded ${testResult.zai.testResult === 'success' ? 'bg-green-50 text-green-700' : testResult.zai.available ? 'bg-red-50 text-red-700' : 'bg-gray-50 text-gray-500'}`}>
+                              {testResult.zai.testResult === 'success'
+                                ? `✅ Z.AI OK${testResult.zai.model ? ` (${testResult.zai.model})` : ''} — ${testResult.zai.latencyMs}ms`
+                                : testResult.zai.available
+                                  ? `❌ Z.AI GAGAL — ${testResult.zai.error?.substring(0, 150) || 'Unknown error'}`
+                                  : '⏸ Z.AI tidak tersedia (set ZAI_BASE_URL + ZAI_API_KEY)'
+                              }
+                            </div>
+                          )}
+
                           {/* DB Connection */}
                           <div className={`px-2 py-1 rounded ${testResult.dbConnection?.ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
                             {testResult.dbConnection?.ok ? '✅ Database: Terhubung' : `❌ Database: ${testResult.dbConnection?.error || 'Gagal'}`}
@@ -633,9 +656,14 @@ export function AIChatWidget() {
                     Tanyakan tentang data perikanan budidaya, kelompok, pembudidaya, dan produksi di Kab. Mempawah
                   </p>
 
+                  {isAIConfigured && (
+                    <div className="mt-3 p-2 rounded-lg bg-green-50 border border-green-200 text-green-700 text-[10px]">
+                      ✅ AI aktif — {aiConfig?.zai?.available ? 'Z.AI (primary)' : aiConfig?.gemini?.configured ? 'Gemini' : 'Groq'}
+                    </div>
+                  )}
                   {!isAIConfigured && (
                     <div className="mt-3 p-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-[10px]">
-                      ⚠️ Tidak ada provider AI tersedia. Klik ⚙️ di atas untuk mengatur API key (Gemini/Groq) sebagai fallback.
+                      ⚠️ Provider AI belum tersedia. Klik ⚙️ di atas untuk mengatur API key (Gemini/Groq) sebagai fallback.
                     </div>
                   )}
 
