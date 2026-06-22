@@ -253,3 +253,26 @@ Stage Summary:
 - ALTER TABLE statements handle migrations for existing databases missing newer columns
 - 27 API route files updated to call ensureTablesExist() before every database operation
 - /api/init-db now reports status of all 12 tables for debugging
+---
+Task ID: 1
+Agent: Main Agent
+Task: Fix Narasi Cerdas and Asisten AI features on Vercel production
+
+Work Log:
+- Investigated AI API routes (/api/ai/chat, /api/ai/narrate) and SDK code (ai-sdk.ts)
+- Discovered root cause: Z.AI sandbox credentials (apiKey "Z.ai") only work with internal API (internal-api.z.ai), not public API (api.z.ai)
+- On Vercel, ZAI_BASE_URL=https://api.z.ai/api/v1 with sandbox key returns HTTP 200 but {"code": 1000, "msg": "Authentication Failed"} with no choices array
+- callZAI() was returning {success: true, content: ""} because no error was thrown, causing narrate/chat to show fallback messages
+- Fixed callZAI() to: (1) detect API error responses (code 1000, success: false), (2) treat empty content as failure so fallback chain works
+- Fixed TypeScript error with ZAI private constructor using type assertion
+- Pushed fix to GitHub (commit 544f92a) which triggered Vercel redeployment
+- Set TURSO_DATABASE_URL and DATABASE_URL in Vercel env vars
+- Verified both AI features work on production: Narasi Cerdas generates narrations, Asisten AI responds to chat
+- Both features now use Groq as provider (fallback from Z.AI) since Z.AI sandbox creds don't work on Vercel
+
+Stage Summary:
+- Both AI features (Narasi Cerdas and Asisten AI) are now working on production
+- Z.AI fails on Vercel (sandbox credentials), but fallback chain properly falls through to Groq
+- Agent Browser verification confirmed: Narasi Cerdas generates data-driven narrations, Asisten AI responds contextually
+- Note: Turso auth token is expired (expired 2026-06-05), user may need to regenerate for DB features
+- Note: For Z.AI to work on Vercel, user needs a real API key from https://chat.z.ai → Settings → API Keys
