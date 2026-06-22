@@ -214,7 +214,11 @@ async function callZAI(options: UnifiedAIOptions): Promise<UnifiedAIResult> {
     let zai;
     if (config) {
       // Use resolved config (from env vars or file)
-      zai = new ZAI(config);
+      // Note: ZAI constructor is private in TypeScript types but accessible in JS runtime
+      // This is needed because ZAI.create() only reads from file system, not env vars
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ZAIConstructor = ZAI as any;
+      zai = new ZAIConstructor(config);
       console.log(`[AI SDK] Z.AI initialized with config: baseUrl=${config.baseUrl.substring(0, 30)}...`);
     } else {
       // Try SDK auto-discovery as last resort
@@ -247,7 +251,39 @@ async function callZAI(options: UnifiedAIOptions): Promise<UnifiedAIResult> {
       thinking: { type: 'disabled' },
     });
 
+    // Check for API-level error responses (e.g., Authentication Failed)
+    // Z.AI public API may return HTTP 200 with {"code": 1000, "msg": "Authentication Failed", "success": false}
+    if (completion && typeof completion === 'object' && !completion.choices) {
+      const apiError = completion as Record<string, unknown>;
+      const code = apiError.code;
+      const msg = apiError.msg || apiError.message || '';
+      if (code || apiError.success === false) {
+        const errorDetail = `Z.AI API error (code=${code}): ${msg}`;
+        console.warn('[AI SDK] Z.AI API returned error:', errorDetail);
+        return {
+          success: false,
+          content: '',
+          error: code === 1000
+            ? `Z.AI API key tidak valid (Authentication Failed). Untuk production, gunakan API key dari https://chat.z.ai → Settings → API Keys. Sandbox key "Z.ai" hanya berlaku di environment sandbox.`
+            : errorDetail,
+          provider: 'z-ai',
+        };
+      }
+    }
+
     const content = completion.choices?.[0]?.message?.content || '';
+
+    // If content is empty, treat as failure so fallback chain kicks in
+    if (!content || !content.trim()) {
+      console.warn('[AI SDK] Z.AI returned empty content — treating as failure for fallback');
+      return {
+        success: false,
+        content: '',
+        error: 'Z.AI mengembalikan respons kosong. Fallback ke provider lain.',
+        provider: 'z-ai',
+      };
+    }
+
     return {
       success: true,
       content,
