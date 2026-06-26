@@ -134,6 +134,8 @@ export function DisagregasiSection() {
 
   // Bulk adjust input
   const [bulkAdjustValue, setBulkAdjustValue] = useState('');
+  const [adjustMode, setAdjustMode] = useState<'semua' | 'kecamatan' | 'desa' | 'kelompok' | 'ikan' | 'wadah'>('semua');
+  const [adjustTarget, setAdjustTarget] = useState('');
 
   // New farmer inline form
   const [showNewFarmer, setShowNewFarmer] = useState(false);
@@ -368,6 +370,23 @@ export function DisagregasiSection() {
     [totalQtyNum, recalculate],
   );
 
+  // Derive unique values for adjust-by targets from current farmers
+  const adjustTargets = useMemo(() => {
+    const keys = new Map<string, string>();
+    for (const f of farmers) {
+      let key = '';
+      switch (adjustMode) {
+        case 'kecamatan': key = f.kecamatan; break;
+        case 'desa': key = f.desa; break;
+        case 'kelompok': key = f.groupName; break;
+        case 'ikan': key = f.fishType; break;
+        case 'wadah': key = f.containerType; break;
+      }
+      if (key && !keys.has(key)) keys.set(key, key);
+    }
+    return Array.from(keys.keys()).sort();
+  }, [farmers, adjustMode]);
+
   const handleBulkAdjust = useCallback(() => {
     const pct = parseFloat(bulkAdjustValue) || 0;
     if (pct === 0) return;
@@ -375,12 +394,24 @@ export function DisagregasiSection() {
       const updated = prev.map((f) => {
         // Only adjust farmers that have reference history
         if (f.referenceQty === 0 && !f.isNew) return f;
+        // If adjust by specific dimension, check match
+        if (adjustMode !== 'semua') {
+          let keyValue = '';
+          switch (adjustMode) {
+            case 'kecamatan': keyValue = f.kecamatan; break;
+            case 'desa': keyValue = f.desa; break;
+            case 'kelompok': keyValue = f.groupName; break;
+            case 'ikan': keyValue = f.fishType; break;
+            case 'wadah': keyValue = f.containerType; break;
+          }
+          if (adjustTarget && keyValue !== adjustTarget) return f;
+        }
         return { ...f, adjustmentPct: f.adjustmentPct + pct };
       });
       return recalculate(updated, totalQtyNum);
     });
     setBulkAdjustValue('');
-  }, [bulkAdjustValue, totalQtyNum, recalculate]);
+  }, [bulkAdjustValue, totalQtyNum, recalculate, adjustMode, adjustTarget]);
 
   const handleDistributeEvenly = useCallback(() => {
     setFarmers((prev) => {
@@ -408,6 +439,8 @@ export function DisagregasiSection() {
       return recalculate(updated, totalQtyNum);
     });
     setBulkAdjustValue('');
+    setAdjustMode('semua');
+    setAdjustTarget('');
   }, [totalQtyNum, recalculate]);
 
   const handleAddNewFarmer = useCallback(() => {
@@ -1137,51 +1170,125 @@ export function DisagregasiSection() {
         </div>
 
         {/* Bulk adjustment + action buttons */}
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-muted-foreground mr-1">Adjust semua:</span>
-          <div className="flex items-center gap-1.5">
-            <Input
-              type="number"
-              value={bulkAdjustValue}
-              onChange={(e) => setBulkAdjustValue(e.target.value)}
-              placeholder="0"
-              className="h-7 w-20 text-xs text-center"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleBulkAdjust();
-              }}
-            />
-            <span className="text-xs text-muted-foreground">%</span>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs gap-1"
-              onClick={handleBulkAdjust}
-              disabled={!bulkAdjustValue || parseFloat(bulkAdjustValue) === 0}
-            >
-              Terapkan
-            </Button>
+        <div className="space-y-2.5 p-3 rounded-xl border border-cyan-500/10" style={{ background: 'rgba(6,182,212,0.03)' }}>
+          {/* Row 1: Adjust Mode Selector */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted-foreground font-medium">Adjust by:</span>
+            <div className="flex flex-wrap gap-1">
+              {[
+                { value: 'semua', label: 'Semua' },
+                { value: 'kecamatan', label: 'Kecamatan' },
+                { value: 'desa', label: 'Desa' },
+                { value: 'kelompok', label: 'Kelompok' },
+                { value: 'ikan', label: 'Jenis Ikan' },
+                { value: 'wadah', label: 'Jenis Wadah' },
+              ].map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => {
+                    setAdjustMode(opt.value as typeof adjustMode);
+                    setAdjustTarget('');
+                  }}
+                  className={`h-7 px-2.5 rounded-md text-[11px] font-medium transition-all border ${
+                    adjustMode === opt.value
+                      ? 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30 shadow-sm'
+                      : 'text-muted-foreground border-border hover:border-cyan-500/20 hover:text-foreground'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="flex items-center gap-1.5 ml-auto">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs gap-1"
-              onClick={handleDistributeEvenly}
-              title="Bagi rata ke semua pembudidaya"
-            >
-              <Scale className="h-3 w-3" />
-              Bagi Rata
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs gap-1"
-              onClick={handleResetDistribution}
-            >
-              <RotateCcw className="h-3 w-3" />
-              Reset
-            </Button>
+
+          {/* Row 2: Target selector (only when not "semua") + Input + Apply */}
+          <div className="flex flex-wrap items-center gap-2">
+            {adjustMode !== 'semua' && (
+              <Select
+                value={adjustTarget}
+                onValueChange={setAdjustTarget}
+              >
+                <SelectTrigger className="h-7 w-44 text-xs">
+                  <SelectValue placeholder={`Pilih ${adjustMode === 'kecamatan' ? 'Kecamatan' : adjustMode === 'desa' ? 'Desa' : adjustMode === 'kelompok' ? 'Kelompok' : adjustMode === 'ikan' ? 'Jenis Ikan' : 'Jenis Wadah'}...`} />
+                </SelectTrigger>
+                <SelectContent>
+                  {adjustTargets.map((t) => (
+                    <SelectItem key={t} value={t} className="text-xs">
+                      {t}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <div className="flex items-center gap-1.5">
+              <Input
+                type="number"
+                value={bulkAdjustValue}
+                onChange={(e) => setBulkAdjustValue(e.target.value)}
+                placeholder="0"
+                className="h-7 w-20 text-xs text-center"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleBulkAdjust();
+                }}
+              />
+              <span className="text-xs text-muted-foreground">%</span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs gap-1"
+                onClick={handleBulkAdjust}
+                disabled={
+                  !bulkAdjustValue ||
+                  parseFloat(bulkAdjustValue) === 0 ||
+                  (adjustMode !== 'semua' && !adjustTarget)
+                }
+              >
+                Terapkan
+              </Button>
+            </div>
+            <div className="flex items-center gap-1.5 ml-auto">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs gap-1"
+                onClick={handleDistributeEvenly}
+                title="Bagi rata ke semua pembudidaya"
+              >
+                <Scale className="h-3 w-3" />
+                Bagi Rata
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs gap-1"
+                onClick={handleResetDistribution}
+              >
+                <RotateCcw className="h-3 w-3" />
+                Reset
+              </Button>
+            </div>
           </div>
+
+          {/* Info text when adjust-by is selected */}
+          {adjustMode !== 'semua' && (
+            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+              <Info className="h-3 w-3 shrink-0" />
+              {adjustTarget ? (
+                <span>
+                  Adjustment akan diterapkan hanya ke pembudidaya dengan{' '}
+                  <strong className="text-foreground">
+                    {adjustMode === 'kecamatan' ? 'Kecamatan' : adjustMode === 'desa' ? 'Desa' : adjustMode === 'kelompok' ? 'Kelompok' : adjustMode === 'ikan' ? 'Jenis Ikan' : 'Jenis Wadah'}: {adjustTarget}
+                  </strong>
+                  {' '}({farmers.filter((f) => {
+                    const kv = adjustMode === 'kecamatan' ? f.kecamatan : adjustMode === 'desa' ? f.desa : adjustMode === 'kelompok' ? f.groupName : adjustMode === 'ikan' ? f.fishType : f.containerType;
+                    return kv === adjustTarget;
+                  }).length} pembudidaya)
+                </span>
+              ) : (
+                <span>Pilih {adjustMode === 'kecamatan' ? 'kecamatan' : adjustMode === 'desa' ? 'desa' : adjustMode === 'kelompok' ? 'kelompok' : adjustMode === 'ikan' ? 'jenis ikan' : 'jenis wadah'} yang ingin di-adjust</span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Distribution table */}
@@ -1197,7 +1304,10 @@ export function DisagregasiSection() {
                   <TableHead className="w-10 text-center text-xs">No</TableHead>
                   <TableHead className="text-xs">Nama</TableHead>
                   <TableHead className="text-xs hidden sm:table-cell">Kelompok</TableHead>
+                  <TableHead className="text-xs hidden md:table-cell">Kecamatan</TableHead>
                   <TableHead className="text-xs hidden md:table-cell">Desa</TableHead>
+                  <TableHead className="text-xs hidden lg:table-cell">Ikan</TableHead>
+                  <TableHead className="text-xs hidden lg:table-cell">Wadah</TableHead>
                   <TableHead className="text-xs text-right">Riwayat</TableHead>
                   <TableHead className="text-xs text-right">Proporsi</TableHead>
                   <TableHead className="text-xs text-center w-28">Alokasi</TableHead>
@@ -1209,10 +1319,18 @@ export function DisagregasiSection() {
               <TableBody>
                 {farmers.map((f, i) => {
                   const canAdjust = f.referenceQty > 0 || f.isNew;
+                  // Check if this row is highlighted by current adjust-by selection
+                  const isAdjustTarget = adjustMode !== 'semua' && adjustTarget && (() => {
+                    const kv = adjustMode === 'kecamatan' ? f.kecamatan : adjustMode === 'desa' ? f.desa : adjustMode === 'kelompok' ? f.groupName : adjustMode === 'ikan' ? f.fishType : f.containerType;
+                    return kv === adjustTarget;
+                  })();
                   return (
-                    <TableRow key={i}>
+                    <TableRow key={i} className={isAdjustTarget ? 'bg-cyan-500/5' : ''}>
                       <TableCell className="text-center text-xs text-muted-foreground">
-                        {i + 1}
+                        <div className="flex items-center justify-center gap-1">
+                          {isAdjustTarget && <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 shrink-0" />}
+                          {i + 1}
+                        </div>
                       </TableCell>
                       <TableCell className="text-xs font-medium">
                         <div className="flex items-center gap-1.5">
@@ -1235,7 +1353,16 @@ export function DisagregasiSection() {
                         {f.groupName || '-'}
                       </TableCell>
                       <TableCell className="text-xs hidden md:table-cell text-muted-foreground">
+                        {f.kecamatan || '-'}
+                      </TableCell>
+                      <TableCell className="text-xs hidden md:table-cell text-muted-foreground">
                         {f.desa}
+                      </TableCell>
+                      <TableCell className="text-xs hidden lg:table-cell text-muted-foreground">
+                        {f.fishType || '-'}
+                      </TableCell>
+                      <TableCell className="text-xs hidden lg:table-cell text-muted-foreground">
+                        {f.containerType || '-'}
                       </TableCell>
                       <TableCell className="text-xs text-right text-muted-foreground">
                         {f.referenceQty > 0 ? fmtNum(f.referenceQty) : '-'}
