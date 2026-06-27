@@ -311,8 +311,15 @@ export function ImportDialog({ open, onOpenChange }: ImportDialogProps) {
       const res = await fetch('/api/fish-farms/import-file', {
         method: 'POST',
         body: formData,
+        signal: AbortSignal.timeout(120_000), // 2 minute timeout for large files
       });
-      const result = await res.json();
+
+      if (res.status === 504) {
+        toast.error('Server timeout — file terlalu besar atau server sibuk. Coba file yang lebih kecil atau coba lagi nanti.');
+        return;
+      }
+
+      const result = await res.json().catch(() => ({ error: 'Server tidak merespons. Coba lagi dalam beberapa detik.' }));
 
       if (res.ok) {
         setImportResult({

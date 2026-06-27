@@ -168,34 +168,30 @@ export async function POST(request: NextRequest) {
       });
       deletedCount = r.count;
     } else {
-      // Delete records matching composite keys (year+kecamatan+desa+fishType+containerType+businessType)
-      const compositeKeys = new Map<string, Record<string, unknown>>();
+      // Delete records matching composite keys — batch by year for fewer queries
+      const yearKecMap = new Map<string, { year: number; kecamatan: string }>();
       for (const record of formattedRecords) {
-        const key = `${record.year}|${record.kecamatan}|${record.desa}|${record.fishType}|${record.containerType}|${record.businessType}`;
-        if (!compositeKeys.has(key)) {
-          compositeKeys.set(key, record);
+        const key = `${record.year}|${record.kecamatan}`;
+        if (!yearKecMap.has(key)) {
+          yearKecMap.set(key, { year: Number(record.year), kecamatan: String(record.kecamatan) });
         }
       }
-      for (const record of compositeKeys.values()) {
+      // Batch delete per year+kecamatan combo (much fewer queries than per composite key)
+      for (const { year, kecamatan } of yearKecMap.values()) {
         const result = await db.fishFarm.deleteMany({
-          where: {
-            year: Number(record.year),
-            kecamatan: String(record.kecamatan),
-            desa: String(record.desa),
-            fishType: String(record.fishType),
-            containerType: String(record.containerType),
-            businessType: String(record.businessType),
-          },
+          where: { year, kecamatan },
         });
         deletedCount += result.count;
       }
     }
 
-    // Insert in tiny batches for stability
+    // Insert in larger batches for performance (100 per batch)
     let count = 0;
-    for (let i = 0; i < formattedRecords.length; i += 5) {
-      await db.fishFarm.createMany({ data: formattedRecords.slice(i, i + 5) as any });
-      count += Math.min(5, formattedRecords.length - i);
+    const BATCH_SIZE = 100;
+    for (let i = 0; i < formattedRecords.length; i += BATCH_SIZE) {
+      const batch = formattedRecords.slice(i, i + BATCH_SIZE);
+      await db.fishFarm.createMany({ data: batch as any });
+      count += batch.length;
     }
 
     const autoFilledInfo: string[] = [];

@@ -2,6 +2,12 @@
   "functions": {
     "src/app/api/knowledge-base/upload/route.ts": {
       "maxDuration": 60
+    },
+    "src/app/api/fish-farms/import-file/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/analyze/upload/route.ts": {
+      "maxDuration": 60
     }
   }
 }

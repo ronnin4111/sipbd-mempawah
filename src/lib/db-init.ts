@@ -322,28 +322,50 @@ export async function ensureTablesExist(): Promise<void> {
   if (!initPromise) {
     initPromise = (async () => {
       try {
-        // Create tables (idempotent)
-        for (const sql of CREATE_TABLES_SQL) {
-          await db.$executeRawUnsafe(sql);
+        // Create tables in parallel groups (group by dependencies)
+        // Group 1: Tables with no FK dependencies (can run in parallel)
+        const group1 = CREATE_TABLES_SQL.filter(sql => {
+          const upper = sql.toUpperCase();
+          return upper.includes('CREATE TABLE') && !upper.includes('FOREIGN KEY');
+        });
+        // Group 2: CREATE INDEX + ALTER TABLE (depends on tables existing)
+        const indexes = CREATE_TABLES_SQL.filter(sql => sql.toUpperCase().includes('CREATE INDEX'));
+        // Group 3: Tables with FK dependencies
+        const withFk = CREATE_TABLES_SQL.filter(sql => {
+          const upper = sql.toUpperCase();
+          return upper.includes('CREATE TABLE') && upper.includes('FOREIGN KEY');
+        });
+
+        // Phase 1: Create standalone tables in parallel (batches of 5)
+        for (let i = 0; i < group1.length; i += 5) {
+          await Promise.all(group1.slice(i, i + 5).map(sql => db.$executeRawUnsafe(sql).catch(() => {})));
         }
 
-        // Try to add new columns (will fail silently if column already exists)
-        for (const sql of ALTER_TABLES_SQL) {
-          try {
-            await db.$executeRawUnsafe(sql);
-          } catch {
-            // Column already exists — expected for existing databases
-          }
+        // Phase 2: Create tables with FK dependencies in parallel
+        for (let i = 0; i < withFk.length; i += 5) {
+          await Promise.all(withFk.slice(i, i + 5).map(sql => db.$executeRawUnsafe(sql).catch(() => {})));
         }
+
+        // Phase 3: Create indexes in parallel (batches of 10)
+        for (let i = 0; i < indexes.length; i += 10) {
+          await Promise.all(indexes.slice(i, i + 10).map(sql => db.$executeRawUnsafe(sql).catch(() => {})));
+        }
+
+        // Phase 4: Try to add new columns (will fail silently if column already exists)
+        await Promise.all(ALTER_TABLES_SQL.map(sql =>
+          db.$executeRawUnsafe(sql).catch(() => {})
+        ));
 
         // Initialize default passwords if not set
         try {
-          const adminPwd = await db.$executeRawUnsafe(
-            `INSERT OR IGNORE INTO AppSetting (key, value, updatedAt) VALUES ('password_admin', 'sipbd2024', CURRENT_TIMESTAMP)`
-          );
-          const exportPwd = await db.$executeRawUnsafe(
-            `INSERT OR IGNORE INTO AppSetting (key, value, updatedAt) VALUES ('password_export', 'sipbd2024', CURRENT_TIMESTAMP)`
-          );
+          await Promise.all([
+            db.$executeRawUnsafe(
+              `INSERT OR IGNORE INTO AppSetting (key, value, updatedAt) VALUES ('password_admin', 'sipbd2024', CURRENT_TIMESTAMP)`
+            ),
+            db.$executeRawUnsafe(
+              `INSERT OR IGNORE INTO AppSetting (key, value, updatedAt) VALUES ('password_export', 'sipbd2024', CURRENT_TIMESTAMP)`
+            ),
+          ]);
           console.log('[db-init] 🔑 Default passwords initialized in database');
         } catch (pwdErr) {
           console.warn('[db-init] ⚠️ Could not initialize default passwords:', pwdErr);
