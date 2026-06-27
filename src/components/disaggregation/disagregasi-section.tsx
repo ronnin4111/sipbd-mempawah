@@ -51,6 +51,7 @@ import {
   CONTAINER_TYPES,
 } from '@/lib/constants';
 import { PasswordSettings } from './password-settings';
+import { BalanceEditor, FarmerForBalance } from './balance-editor';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -145,6 +146,9 @@ export function DisagregasiSection() {
     desa: '',
     allocatedQty: '',
   });
+
+  // Step 2 — Balance Editor
+  const [showBalanceEditor, setShowBalanceEditor] = useState(false);
 
   // Step 3 — Save
   const [savePassword, setSavePassword] = useState('');
@@ -442,6 +446,51 @@ export function DisagregasiSection() {
     setAdjustMode('semua');
     setAdjustTarget('');
   }, [totalQtyNum, recalculate]);
+
+  // Apply balance editor results to farmer table
+  const handleApplyBalance = useCallback((allocations: { farmerId: string; finalQty: number }[]) => {
+    setFarmers((prev) => {
+      const allocMap = new Map(allocations.map((a) => [a.farmerId, a.finalQty]));
+      const updated = prev.map((f) => {
+        const newQty = allocMap.get(f.farmerId);
+        if (newQty !== undefined) {
+          return {
+            ...f,
+            finalQty: newQty,
+            allocatedQty: newQty,
+            adjustmentPct: 0,
+            proportion: totalQtyNum > 0 ? newQty / totalQtyNum : 0,
+          };
+        }
+        return f;
+      });
+      return updated;
+    });
+    toast.success('Nilai dari Balance Editor diterapkan ke tabel');
+  }, [totalQtyNum]);
+
+  // Farmers data for BalanceEditor
+  const balanceEditorFarmers = useMemo<FarmerForBalance[]>(
+    () => farmers.map((f) => ({
+      farmerId: f.farmerId,
+      farmerName: f.farmerName,
+      groupName: f.groupName,
+      desa: f.desa,
+      kecamatan: f.kecamatan,
+      fishType: f.fishType,
+      containerType: f.containerType,
+      referenceQty: f.referenceQty,
+      proportion: f.proportion,
+      allocatedQty: f.allocatedQty,
+      finalQty: f.finalQty,
+    })),
+    [farmers],
+  );
+
+  const balanceFormKey = useMemo(
+    () => `balance-${form.year}-${form.triwulan}-${form.kecamatan.join('+')}-${form.businessType}`,
+    [form],
+  );
 
   const handleAddNewFarmer = useCallback(() => {
     if (!newFarmer.farmerName.trim() || !newFarmer.desa || !newFarmer.allocatedQty) {
@@ -1146,7 +1195,21 @@ export function DisagregasiSection() {
           }}
         >
           <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Balance</span>
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground">Balance</span>
+              <button
+                onClick={() => setShowBalanceEditor(!showBalanceEditor)}
+                className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium transition-all"
+                style={{
+                  background: showBalanceEditor ? 'rgba(6,182,212,0.15)' : 'rgba(6,182,212,0.08)',
+                  color: '#06B6D4',
+                  border: '1px solid rgba(6,182,212,0.2)',
+                }}
+              >
+                <Scale className="h-3 w-3" />
+                {showBalanceEditor ? 'Tutup Hierarki' : 'Hierarki Balance'}
+              </button>
+            </div>
             <span className="font-semibold" style={{ color: Math.abs(balanceDiff) < 0.01 ? '#22C55E' : '#EAB308' }}>
               {fmtNum(totalFinalQty)} / {fmtNum(totalQtyNum)} {unitLabel}
               {Math.abs(balanceDiff) >= 0.01 && (
@@ -1168,6 +1231,26 @@ export function DisagregasiSection() {
             }}
           />
         </div>
+
+        {/* Balance Editor (Hierarchical) */}
+        <AnimatePresence>
+          {showBalanceEditor && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <BalanceEditor
+                farmers={balanceEditorFarmers}
+                totalQty={totalQtyNum}
+                unitLabel={unitLabel}
+                formKey={balanceFormKey}
+                onApply={handleApplyBalance}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Bulk adjustment + action buttons */}
         <div className="space-y-2.5 p-3 rounded-xl border border-cyan-500/10" style={{ background: 'rgba(6,182,212,0.03)' }}>
