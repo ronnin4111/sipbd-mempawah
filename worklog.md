@@ -300,3 +300,24 @@ Stage Summary:
 - Modified files: `src/components/disaggregation/disagregasi-section.tsx` (added import + TriwulanOverview integration)
 - Feature complete: Users can now see Q1-Q4 and Semester 1/2 status at a glance
 - Clicking a Q card pre-fills the triwulan dropdown for quick data entry
+
+---
+Task ID: 1
+Agent: Main Agent
+Task: Fix useEffect is not defined error in Disagregasi → Upload Excel tab
+
+Work Log:
+- User reported: "Admin → Login → Disagregasi → Tab Upload Excel: useEffect is not defined"
+- Pulled latest code from origin/main (6 new commits from previous session were not in local)
+- Found root cause: `disagregasi-section.tsx` line 3 imported only `useState, useCallback, useMemo` but line 1929 used `useEffect()`
+- The `useEffect` call was in the "Upload Excel" tab section (fetchExistingUploads callback + useEffect to trigger it)
+- Fixed by adding `useEffect` to the import: `import { useState, useCallback, useMemo, useEffect } from 'react'`
+- Verified fix locally with Agent Browser: navigated Admin → Login → Disagregasi → Upload Excel tab renders correctly with no errors
+- Verified all other disaggregation components have correct useEffect imports
+- Pushed fix to GitHub (commit 69164cf) — will auto-deploy to Vercel
+
+Stage Summary:
+- Root cause: Missing `useEffect` import in `disagregasi-section.tsx`
+- Fix: Added `useEffect` to the React import statement
+- Upload Excel tab now renders correctly without `ReferenceError: useEffect is not defined`
+- Deployed to Vercel via GitHub push
