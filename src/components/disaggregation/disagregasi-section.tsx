@@ -52,6 +52,7 @@ import {
 } from '@/lib/constants';
 import { PasswordSettings } from './password-settings';
 import { BalanceEditor, FarmerForBalance } from './balance-editor';
+import { TriwulanOverview } from './triwulan-overview';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -962,6 +963,26 @@ export function DisagregasiSection() {
   function renderStep1() {
     return (
       <div className="space-y-4">
+        {/* Triwulan Overview Panel */}
+        {form.year && parseInt(form.year) >= 2000 && parseInt(form.year) <= 2100 && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="rounded-xl p-4"
+            style={{
+              background: 'rgba(6,182,212,0.03)',
+              border: '1px solid rgba(6,182,212,0.1)',
+            }}
+          >
+            <TriwulanOverview
+              year={form.year}
+              selectedTriwulan={form.triwulan}
+              onTriwulanSelect={(tw) => setForm((p) => ({ ...p, triwulan: tw }))}
+            />
+          </motion.div>
+        )}
+
         <div
           className="rounded-xl p-4 sm:p-5 space-y-4"
           style={{

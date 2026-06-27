@@ -276,3 +276,27 @@ Stage Summary:
 - Agent Browser verification confirmed: Narasi Cerdas generates data-driven narrations, Asisten AI responds contextually
 - Note: Turso auth token is expired (expired 2026-06-05), user may need to regenerate for DB features
 - Note: For Z.AI to work on Vercel, user needs a real API key from https://chat.z.ai → Settings → API Keys
+
+---
+Task ID: 1
+Agent: Main Agent
+Task: Add Triwulan & Semester Overview Panel to Disagregasi Section
+
+Work Log:
+- Created API endpoint `/api/disagregasi/triwulan-status/route.ts` that fetches batch status per triwulan (Q1-Q4) and computes semester aggregates (S1=Q1+Q2, S2=Q3+Q4)
+- Created `TriwulanOverview` component (`src/components/disaggregation/triwulan-overview.tsx`) with:
+  - Triwulan view: 4 color-coded cards (Q1 green, Q2 cyan, Q3 amber, Q4 purple) showing data status, total qty, farmer count
+  - Semester view: 2 cards (S1, S2) with aggregated stats and per-triwulan comparison bars
+  - Year summary bar with progress indicator (X/4 triwulan complete)
+  - Toggle between Triwulan/Semester views
+  - Expandable details showing business types, kecamatan, fish types, container types
+  - Click on Q card auto-selects triwulan in the form below
+- Integrated TriwulanOverview into `disagregasi-section.tsx` above the Step 1 form
+- Verified with agent browser: desktop and mobile layouts work, no errors
+- API returns correct data structure with proper grouping by triwulan
+
+Stage Summary:
+- New files: `src/app/api/disagregasi/triwulan-status/route.ts`, `src/components/disaggregation/triwulan-overview.tsx`
+- Modified files: `src/components/disaggregation/disagregasi-section.tsx` (added import + TriwulanOverview integration)
+- Feature complete: Users can now see Q1-Q4 and Semester 1/2 status at a glance
+- Clicking a Q card pre-fills the triwulan dropdown for quick data entry
