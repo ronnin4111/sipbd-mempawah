@@ -232,6 +232,68 @@ const CREATE_TABLES_SQL = [
     createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
+
+  // AnalyzeUpload — stores metadata for uploaded Excel analysis data
+  `CREATE TABLE IF NOT EXISTS AnalyzeUpload (
+    id TEXT PRIMARY KEY NOT NULL,
+    year INTEGER NOT NULL,
+    semester INTEGER NOT NULL DEFAULT 0,
+    fileName TEXT NOT NULL,
+    fileSize INTEGER NOT NULL DEFAULT 0,
+    businessType TEXT NOT NULL DEFAULT 'Pembesaran',
+    uploadedBy TEXT NOT NULL DEFAULT 'admin',
+    createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`,
+
+  // AnalyzeRow — individual data rows from uploaded Excel
+  `CREATE TABLE IF NOT EXISTS AnalyzeRow (
+    id TEXT PRIMARY KEY NOT NULL,
+    uploadId TEXT NOT NULL,
+    bulan TEXT NOT NULL,
+    bulanNum INTEGER NOT NULL DEFAULT 1,
+    tw INTEGER NOT NULL DEFAULT 1,
+    semester INTEGER NOT NULL DEFAULT 1,
+    jenisWadah TEXT NOT NULL,
+    komoditas TEXT NOT NULL,
+    produksiTon REAL NOT NULL DEFAULT 0,
+    produksiKg REAL NOT NULL DEFAULT 0,
+    produktifitas REAL NOT NULL DEFAULT 0,
+    luasLahan REAL NOT NULL DEFAULT 0,
+    hargaRpKg REAL NOT NULL DEFAULT 0,
+    nilaiRp REAL NOT NULL DEFAULT 0,
+    fcr REAL NOT NULL DEFAULT 0,
+    pakanKg REAL NOT NULL DEFAULT 0,
+    size REAL NOT NULL DEFAULT 0,
+    sr REAL NOT NULL DEFAULT 0,
+    agregatBenih REAL NOT NULL DEFAULT 0,
+    createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (uploadId) REFERENCES AnalyzeUpload(id) ON DELETE CASCADE
+  )`,
+
+  // AnalyzePopulasi — population data per wadah from uploaded Excel
+  `CREATE TABLE IF NOT EXISTS AnalyzePopulasi (
+    id TEXT PRIMARY KEY NOT NULL,
+    uploadId TEXT NOT NULL,
+    jenisWadah TEXT NOT NULL,
+    jumlahRtp INTEGER NOT NULL DEFAULT 0,
+    jumlahPembudidaya INTEGER NOT NULL DEFAULT 0,
+    luasLahan REAL NOT NULL DEFAULT 0,
+    createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (uploadId) REFERENCES AnalyzeUpload(id) ON DELETE CASCADE
+  )`,
+
+  // Indexes for AnalyzeRow
+  `CREATE INDEX IF NOT EXISTS idx_analyze_row_uploadId ON AnalyzeRow(uploadId)`,
+  `CREATE INDEX IF NOT EXISTS idx_analyze_row_tw ON AnalyzeRow(tw)`,
+  `CREATE INDEX IF NOT EXISTS idx_analyze_row_semester ON AnalyzeRow(semester)`,
+  `CREATE INDEX IF NOT EXISTS idx_analyze_row_komoditas ON AnalyzeRow(komoditas)`,
+  `CREATE INDEX IF NOT EXISTS idx_analyze_row_jenisWadah ON AnalyzeRow(jenisWadah)`,
+  `CREATE INDEX IF NOT EXISTS idx_analyze_row_bulanNum ON AnalyzeRow(bulanNum)`,
+  `CREATE INDEX IF NOT EXISTS idx_analyze_upload_year ON AnalyzeUpload(year)`,
+  `CREATE INDEX IF NOT EXISTS idx_analyze_upload_semester ON AnalyzeUpload(semester)`,
+  `CREATE INDEX IF NOT EXISTS idx_analyze_populasi_uploadId ON AnalyzePopulasi(uploadId)`,
+  `CREATE INDEX IF NOT EXISTS idx_analyze_populasi_jenisWadah ON AnalyzePopulasi(jenisWadah)`,
 ];
 
 const ALTER_TABLES_SQL = [

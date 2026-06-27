@@ -19,6 +19,8 @@ import {
   ArrowLeft,
   Info,
   KeyRound,
+  Upload,
+  FileUp,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -115,7 +117,7 @@ export function DisagregasiSection() {
   const [step, setStep] = useState(0); // 0 = password gate, 1 = input, 2 = distribution, 3 = save
   const [passwordInput, setPasswordInput] = useState('');
   const [passwordError, setPasswordError] = useState('');
-  const [adminTab, setAdminTab] = useState<'disagregasi' | 'password'>('disagregasi');
+  const [adminTab, setAdminTab] = useState<'disagregasi' | 'upload' | 'password'>('disagregasi');
 
   // Step 1 — Aggregate input
   const [form, setForm] = useState<AgregatForm>({
@@ -871,6 +873,20 @@ export function DisagregasiSection() {
           Disagregasi
         </button>
         <button
+          onClick={() => setAdminTab('upload')}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all flex-1 justify-center"
+          style={{
+            background: adminTab === 'upload'
+              ? 'linear-gradient(135deg, #06B6D4, #0891B2)'
+              : 'transparent',
+            color: adminTab === 'upload' ? 'white' : 'var(--muted-foreground)',
+            boxShadow: adminTab === 'upload' ? '0 2px 8px rgba(6,182,212,0.3)' : 'none',
+          }}
+        >
+          <FileUp className="h-3.5 w-3.5" />
+          Upload Excel
+        </button>
+        <button
           onClick={() => setAdminTab('password')}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all flex-1 justify-center"
           style={{
@@ -882,13 +898,15 @@ export function DisagregasiSection() {
           }}
         >
           <KeyRound className="h-3.5 w-3.5" />
-          Pengaturan Password
+          Password
         </button>
       </div>
 
       {/* Tab content */}
       {adminTab === 'password' ? (
         <PasswordSettings />
+      ) : adminTab === 'upload' ? (
+        <UploadExcelSection />
       ) : (
         <>
           {/* Step indicators */}
@@ -1862,6 +1880,269 @@ export function DisagregasiSection() {
             </Button>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  // ─── Upload Excel Section ──────────────────────────────────────────────
+
+  function UploadExcelSection() {
+    const [uploadFile, setUploadFile] = useState<File | null>(null);
+    const [uploadPassword, setUploadPassword] = useState('');
+    const [uploading, setUploading] = useState(false);
+    const [uploadResult, setUploadResult] = useState<{ success: boolean; message: string } | null>(null);
+    const [existingUploads, setExistingUploads] = useState<{ year: number; fileName: string; rows: number; createdAt: string }[]>([]);
+    const [loadingUploads, setLoadingUploads] = useState(false);
+
+    const fetchExistingUploads = useCallback(async () => {
+      setLoadingUploads(true);
+      try {
+        const res = await fetch('/api/analyze/dashboard?year=0');
+        if (res.ok) {
+          const data = await res.json();
+          // Get available years and fetch details for each
+          const years: number[] = data.availableYears || [];
+          const uploads: { year: number; fileName: string; rows: number; createdAt: string }[] = [];
+          for (const y of years) {
+            const yr = await fetch(`/api/analyze/dashboard?year=${y}`);
+            if (yr.ok) {
+              const yd = await yr.json();
+              if (yd.hasData) {
+                uploads.push({
+                  year: y,
+                  fileName: yd.source === 'upload' ? 'Excel Upload' : 'Disagregasi DB',
+                  rows: yd.summary?.totalRtp || 0,
+                  createdAt: new Date().toISOString(),
+                });
+              }
+            }
+          }
+          setExistingUploads(uploads);
+        }
+      } catch {
+        // Silently fail
+      } finally {
+        setLoadingUploads(false);
+      }
+    }, []);
+
+    useEffect(() => {
+      fetchExistingUploads();
+    }, [fetchExistingUploads]);
+
+    const handleUpload = useCallback(async () => {
+      if (!uploadFile) {
+        toast.error('Pilih file Excel terlebih dahulu');
+        return;
+      }
+      if (!uploadPassword.trim()) {
+        toast.error('Masukkan sandi admin untuk konfirmasi');
+        return;
+      }
+
+      setUploading(true);
+      setUploadResult(null);
+      try {
+        const formData = new FormData();
+        formData.append('file', uploadFile);
+        formData.append('password', uploadPassword);
+
+        const res = await fetch('/api/analyze/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+          setUploadResult({ success: true, message: `Berhasil! ${data.rowCount} baris data + ${data.populasiCount} data populasi untuk tahun ${data.year}` });
+          toast.success(`Upload berhasil — tahun ${data.year}`);
+          setUploadFile(null);
+          setUploadPassword('');
+          fetchExistingUploads();
+        } else {
+          setUploadResult({ success: false, message: data.error || 'Gagal mengunggah file' });
+          toast.error(data.error || 'Gagal mengunggah');
+        }
+      } catch {
+        setUploadResult({ success: false, message: 'Gagal terhubung ke server' });
+        toast.error('Gagal terhubung ke server');
+      } finally {
+        setUploading(false);
+      }
+    }, [uploadFile, uploadPassword, fetchExistingUploads]);
+
+    return (
+      <div className="space-y-4">
+        {/* Upload form */}
+        <div
+          className="rounded-xl p-4 sm:p-5 space-y-4"
+          style={{
+            background: 'rgba(6,182,212,0.04)',
+            border: '1px solid rgba(6,182,212,0.12)',
+          }}
+        >
+          <div className="flex items-center gap-2 mb-2">
+            <div
+              className="w-8 h-8 rounded-lg flex items-center justify-center"
+              style={{
+                background: 'linear-gradient(135deg, #06B6D4, #0891B2)',
+                boxShadow: '0 4px 12px rgba(6,182,212,0.3)',
+              }}
+            >
+              <FileUp className="h-4 w-4 text-white" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold">Upload Data Analisis</h3>
+              <p className="text-[10px] text-muted-foreground">
+                Upload file Excel SIPBD untuk dashboard analisis dinamis
+              </p>
+            </div>
+          </div>
+
+          {/* File input */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">File Excel (.xlsx)</Label>
+            <div
+              className="relative rounded-lg p-4 text-center cursor-pointer transition-all hover:border-cyan-500/30"
+              style={{
+                border: '2px dashed rgba(6,182,212,0.2)',
+                background: 'rgba(6,182,212,0.02)',
+              }}
+              onClick={() => document.getElementById('excel-upload-input')?.click()}
+            >
+              <Upload className="h-8 w-8 mx-auto mb-2" style={{ color: '#06B6D4', opacity: 0.6 }} />
+              {uploadFile ? (
+                <div>
+                  <p className="text-xs font-medium">{uploadFile.name}</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {(uploadFile.size / 1024).toFixed(1)} KB
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <p className="text-xs font-medium">Klik untuk memilih file</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    Format: SIPBD Excel (.xlsx) — berisi sheet &quot;Database&quot; dan &quot;Data Populasi&quot;
+                  </p>
+                </div>
+              )}
+              <input
+                id="excel-upload-input"
+                type="file"
+                accept=".xlsx,.xls"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) setUploadFile(file);
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Password */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium flex items-center gap-1.5">
+              <Lock className="h-3 w-3" />
+              Konfirmasi Sandi Admin
+            </Label>
+            <Input
+              type="password"
+              placeholder="Masukkan sandi admin..."
+              value={uploadPassword}
+              onChange={(e) => setUploadPassword(e.target.value)}
+              className="text-sm"
+            />
+          </div>
+
+          {/* Upload result */}
+          {uploadResult && (
+            <div
+              className="rounded-lg p-3 text-xs"
+              style={{
+                background: uploadResult.success ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)',
+                border: `1px solid ${uploadResult.success ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`,
+                color: uploadResult.success ? '#22C55E' : '#EF4444',
+              }}
+            >
+              {uploadResult.message}
+            </div>
+          )}
+
+          {/* Submit */}
+          <Button
+            onClick={handleUpload}
+            disabled={!uploadFile || uploading || !uploadPassword.trim()}
+            className="w-full gap-2"
+            style={{ background: 'linear-gradient(135deg, #06B6D4, #0891B2)' }}
+          >
+            {uploading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Mengupload & Memproses...
+              </>
+            ) : (
+              <>
+                <Upload className="h-4 w-4" />
+                Upload & Proses
+              </>
+            )}
+          </Button>
+        </div>
+
+        {/* Format info */}
+        <div
+          className="rounded-xl p-4 space-y-2"
+          style={{
+            background: 'rgba(255,255,255,0.02)',
+            border: '1px solid rgba(255,255,255,0.06)',
+          }}
+        >
+          <h4 className="text-xs font-semibold flex items-center gap-1.5">
+            <Info className="h-3.5 w-3.5" style={{ color: '#06B6D4' }} />
+            Format File Excel
+          </h4>
+          <div className="text-[10px] text-muted-foreground space-y-1.5">
+            <p>File harus mengikuti format standar SIPBD dengan sheet:</p>
+            <ul className="list-disc pl-4 space-y-0.5">
+              <li><strong>Rekap Produksi</strong> — judul berisi tahun (e.g. &quot;PEMBESARAN IKAN - 2026&quot;)</li>
+              <li><strong>Database</strong> — data per baris: Bulan, TW, Semester, Jenis Wadah, Komoditas, Produksi, dll</li>
+              <li><strong>Data Populasi</strong> — RTP, Pembudidaya, Luas Lahan per Jenis Wadah</li>
+            </ul>
+            <p className="pt-1">Upload baru akan <strong>mengganti</strong> data tahun yang sama.</p>
+          </div>
+        </div>
+
+        {/* Existing uploads */}
+        {existingUploads.length > 0 && (
+          <div
+            className="rounded-xl p-4 space-y-2"
+            style={{
+              background: 'rgba(34,197,94,0.04)',
+              border: '1px solid rgba(34,197,94,0.12)',
+            }}
+          >
+            <h4 className="text-xs font-semibold flex items-center gap-1.5">
+              <CheckCircle2 className="h-3.5 w-3.5" style={{ color: '#22C55E' }} />
+              Data Tersedia
+            </h4>
+            <div className="space-y-1.5">
+              {existingUploads.map((u) => (
+                <div key={u.year} className="flex items-center justify-between text-xs px-2 py-1.5 rounded-md"
+                  style={{ background: 'rgba(34,197,94,0.06)' }}
+                >
+                  <div>
+                    <span className="font-semibold" style={{ color: '#22C55E' }}>Tahun {u.year}</span>
+                    <span className="text-muted-foreground ml-2">({u.fileName})</span>
+                  </div>
+                  <span className="text-muted-foreground text-[10px]">
+                    Lihat di tab &quot;Analisis Disagregasi S1&quot;
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     );
   }

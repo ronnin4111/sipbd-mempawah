@@ -12,6 +12,7 @@ import { ImportDialog } from '@/components/import-export/import-dialog';
 import { ExportSection } from '@/components/import-export/export-section';
 import { DisagregasiSection } from '@/components/disaggregation/disagregasi-section';
 import { Semester1Dashboard } from '@/components/disaggregation/semester1-dashboard';
+import { AnalyzeDashboard } from '@/components/disaggregation/analyze-dashboard';
 import { KusukaSection } from '@/components/kusuka/kusuka-section';
 import { KnowledgeBaseSection } from '@/components/knowledge-base/knowledge-base-section';
 import { AdminPanel } from '@/components/dashboard/admin-panel';
@@ -436,7 +437,7 @@ export default function Home() {
       case 'disagregasi':
         return <DisagregasiSection />;
       case 'disagregasi-analisis':
-        return <Semester1Dashboard />;
+        return <AnalyzeDashboard />;
       case 'admin-login':
         return <AdminLoginSection />;
       case 'import-export':

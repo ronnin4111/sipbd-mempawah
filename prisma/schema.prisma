@@ -51,6 +51,68 @@ model DisaggregationBatch {
   fishFarms       FishFarm[]
 }
 
+model AnalyzeUpload {
+  id          String   @id @default(cuid())
+  year        Int
+  semester    Int      @default(0)   // 0=full year, 1=S1, 2=S2
+  fileName    String
+  fileSize    Int      @default(0)
+  businessType String  @default("Pembesaran")
+  uploadedBy  String   @default("admin")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  rows        AnalyzeRow[]
+  populasi    AnalyzePopulasi[]
+
+  @@index([year])
+  @@index([semester])
+}
+
+model AnalyzeRow {
+  id              String         @id @default(cuid())
+  uploadId        String
+  upload          AnalyzeUpload  @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+  bulan           String
+  bulanNum        Int            @default(1)  // 1-12
+  tw              Int            @default(1)  // 1-4
+  semester        Int            @default(1)  // 1-2
+  jenisWadah      String
+  komoditas       String
+  produksiTon     Float          @default(0)
+  produksiKg      Float          @default(0)
+  produktifitas   Float          @default(0)
+  luasLahan       Float          @default(0)
+  hargaRpKg       Float          @default(0)
+  nilaiRp         Float          @default(0)
+  fcr             Float          @default(0)
+  pakanKg         Float          @default(0)
+  size            Float          @default(0)
+  sr              Float          @default(0)
+  agregatBenih    Float          @default(0)
+  createdAt       DateTime       @default(now())
+
+  @@index([uploadId])
+  @@index([tw])
+  @@index([semester])
+  @@index([komoditas])
+  @@index([jenisWadah])
+  @@index([bulanNum])
+}
+
+model AnalyzePopulasi {
+  id                String         @id @default(cuid())
+  uploadId          String
+  upload            AnalyzeUpload  @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+  jenisWadah        String
+  jumlahRtp         Int            @default(0)
+  jumlahPembudidaya Int            @default(0)
+  luasLahan         Float          @default(0)
+  createdAt         DateTime       @default(now())
+
+  @@index([uploadId])
+  @@index([jenisWadah])
+}
+
 model CommodityPrice {
   id            String @id @default(cuid())
   fishType      String
