@@ -260,6 +260,8 @@ export function BalanceEditor({ farmers, totalQty, unitLabel, formKey, onApply }
   const [path, setPath] = useState<{ nodeId: string; filters: Record<string, string> }[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [editingPropId, setEditingPropId] = useState<string | null>(null);
+  const [editPropValue, setEditPropValue] = useState('');
 
   // ─── Root value synced with totalQty ────────────────────────────────────
 
@@ -341,8 +343,20 @@ export function BalanceEditor({ farmers, totalQty, unitLabel, formKey, onApply }
     });
   }, [currentNode, farmers, currentFilters, updateTree]);
 
-  // Edit a child's value
+  // Edit a child's value (by Kg amount)
   const handleValueChange = useCallback((nodeId: string, newValue: number) => {
+    updateTree((root) =>
+      updateNodeById(root, nodeId, (node) => ({
+        ...node,
+        value: newValue,
+        isManual: true,
+      }))
+    );
+  }, [updateTree]);
+
+  // Edit a child's value (by % proportion)
+  const handleProportionChange = useCallback((nodeId: string, pct: number, parentValue: number) => {
+    const newValue = Math.round((pct / 100) * parentValue * 100) / 100;
     updateTree((root) =>
       updateNodeById(root, nodeId, (node) => ({
         ...node,
@@ -823,8 +837,44 @@ export function BalanceEditor({ farmers, totalQty, unitLabel, formKey, onApply }
                             </span>
                           )}
                         </TableCell>
-                        <TableCell className="text-xs text-right text-muted-foreground">
-                          {proportion.toFixed(1)}%
+                        <TableCell className="text-right">
+                          {editingPropId === child.id ? (
+                            <Input
+                              type="number"
+                              value={editPropValue}
+                              onChange={(e) => setEditPropValue(e.target.value)}
+                              onBlur={() => {
+                                const pct = parseFloat(editPropValue) || 0;
+                                handleProportionChange(child.id, pct, currentNode.value);
+                                setEditingPropId(null);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  const pct = parseFloat(editPropValue) || 0;
+                                  handleProportionChange(child.id, pct, currentNode.value);
+                                  setEditingPropId(null);
+                                }
+                                if (e.key === 'Escape') {
+                                  setEditingPropId(null);
+                                }
+                              }}
+                              className="h-7 w-16 text-xs text-right ml-auto"
+                              autoFocus
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          ) : (
+                            <span
+                              className="text-xs text-muted-foreground cursor-pointer hover:text-cyan-400 transition-colors"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingPropId(child.id);
+                                setEditPropValue(proportion.toFixed(1));
+                              }}
+                              title="Klik untuk edit %"
+                            >
+                              {proportion.toFixed(1)}%
+                            </span>
+                          )}
                         </TableCell>
                         <TableCell className="text-center">
                           {child.children && child.children.length > 0 ? (
