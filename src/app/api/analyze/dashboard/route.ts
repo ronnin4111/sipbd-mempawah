@@ -183,6 +183,7 @@ export async function GET(request: NextRequest) {
         totalLuasLahan: 0,
       },
       monthlyData: [],
+      monthlyByKomoditas: [],
       triwulanData: [],
       komoditasData: [],
       wadahData: [],
@@ -261,6 +262,30 @@ function buildUploadResponse(
       nilai: fmtNum(d.nilai / 1_000_000), // in juta
       tw: TW_LABELS[d.tw] || `TW ${d.tw}`,
     }));
+
+  // --- Monthly by Komoditas (pivot for bar+line chart) ---
+  // Each entry: { bulan, bulanNum, [komoditas1]: ton, [komoditas2]: ton, ..., total: ton }
+  const monthlyKomMap = new Map<number, Map<string, number>>(); // bulanNum -> (komoditas -> produksiTon)
+  for (const r of rows) {
+    if (!monthlyKomMap.has(r.bulanNum)) monthlyKomMap.set(r.bulanNum, new Map());
+    const kMap = monthlyKomMap.get(r.bulanNum)!;
+    kMap.set(r.komoditas, (kMap.get(r.komoditas) || 0) + r.produksiTon);
+  }
+  const monthlyByKomoditas = Array.from(monthlyKomMap.entries())
+    .sort(([a], [b]) => a - b)
+    .map(([bulanNum, kMap]) => {
+      const entry: Record<string, string | number> = {
+        bulan: BULAN_LABELS[bulanNum] || `B${bulanNum}`,
+        bulanNum,
+      };
+      let total = 0;
+      for (const [k, v] of kMap.entries()) {
+        entry[k] = fmtNum(v);
+        total += v;
+      }
+      entry.total = fmtNum(total);
+      return entry;
+    });
 
   // --- Triwulan data ---
   const twMap = new Map<number, { produksi: number; nilai: number }>();
@@ -400,6 +425,7 @@ function buildUploadResponse(
       totalLuasLahan,
     },
     monthlyData,
+    monthlyByKomoditas,
     triwulanData,
     komoditasData,
     wadahData,
@@ -488,6 +514,34 @@ function buildDisaggResponse(
         nilai: fmtNum(twData.nilai / 3 / 1_000_000),
         tw: `TW ${triwulanToTwNum(qLabel)}`,
       });
+    }
+  }
+
+  // --- Monthly by Komoditas (distribute per-komoditas per-triwulan across 3 months) ---
+  const twKomMap = new Map<string, Map<string, number>>(); // triwulan -> (komoditas -> produksiTon)
+  for (const batch of batches) {
+    if (!twKomMap.has(batch.triwulan)) twKomMap.set(batch.triwulan, new Map());
+    const kMap = twKomMap.get(batch.triwulan)!;
+    for (const ff of batch.fishFarms) {
+      kMap.set(ff.fishType, (kMap.get(ff.fishType) || 0) + ff.productionQty / 1000);
+    }
+  }
+  const monthlyByKomoditas: Record<string, string | number>[] = [];
+  for (let m = 1; m <= 12; m++) {
+    const qLabel = monthToTriwulan[m];
+    const kMap = twKomMap.get(qLabel);
+    if (kMap) {
+      const entry: Record<string, string | number> = {
+        bulan: BULAN_LABELS[m],
+        bulanNum: m,
+      };
+      let total = 0;
+      for (const [k, v] of kMap.entries()) {
+        entry[k] = fmtNum(v / 3); // distribute triwulan total across 3 months
+        total += v / 3;
+      }
+      entry.total = fmtNum(total);
+      monthlyByKomoditas.push(entry);
     }
   }
 
@@ -588,6 +642,7 @@ function buildDisaggResponse(
       totalLuasLahan,
     },
     monthlyData,
+    monthlyByKomoditas,
     triwulanData,
     komoditasData,
     wadahData,

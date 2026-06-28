@@ -62,6 +62,7 @@ interface DashboardData {
     totalLuasLahan: number;
   };
   monthlyData: { bulan: string; bulanNum: number; produksi: number; nilai: number; tw: string }[];
+  monthlyByKomoditas: Record<string, string | number>[];
   triwulanData: { name: string; produksi: number; nilai: number }[];
   komoditasData: { name: string; produksi: number; nilai: number; pakan: number; benih: number; pct: number }[];
   wadahData: { name: string; produksi: number; nilai: number; pct: number; rtp: number; pembudidaya: number; luasLahan: number }[];
@@ -261,6 +262,15 @@ export function AnalyzeDashboard() {
     const keys = Object.keys(data.productivityData[0]).filter(k => k !== 'name');
     return keys;
   }, [data?.productivityData]);
+
+  // Komoditas keys for monthly bar+line chart (exclude bulan/bulanNum/total meta fields)
+  const monthlyKomoditasKeys = useMemo(() => {
+    if (!data?.monthlyByKomoditas?.length) return [];
+    const keys = Object.keys(data.monthlyByKomoditas[0]).filter(
+      k => k !== 'bulan' && k !== 'bulanNum' && k !== 'total'
+    );
+    return keys;
+  }, [data?.monthlyByKomoditas]);
 
   // Source badge
   const sourceBadge = useMemo(() => {
@@ -694,24 +704,33 @@ export function AnalyzeDashboard() {
                 <CardContent>
                   {data.monthlyData.length > 0 ? (
                     <>
-                      <ResponsiveContainer width="100%" height={320}>
-                        <AreaChart data={data.monthlyData} margin={{ left: 10, right: 10 }}>
-                          <defs>
-                            <linearGradient id="prodGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#06B6D4" stopOpacity={0.3} />
-                              <stop offset="95%" stopColor="#06B6D4" stopOpacity={0} />
-                            </linearGradient>
-                          </defs>
+                      <ResponsiveContainer width="100%" height={340}>
+                        <ComposedChart data={data.monthlyByKomoditas} margin={{ left: 10, right: 10, top: 10 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#1E3A5F' : '#E5E7EB'} />
                           <XAxis dataKey="bulan" tick={{ fontSize: 10, fill: isDark ? '#94A3B8' : '#64748B' }} />
                           <YAxis tick={{ fontSize: 10, fill: isDark ? '#94A3B8' : '#64748B' }} />
                           <Tooltip content={<CustomTooltip />} />
-                          <Area
-                            type="monotone" dataKey="produksi" name="Produksi (Ton)"
-                            stroke="#06B6D4" fill="url(#prodGradient)" strokeWidth={2.5}
-                            dot={{ r: 4, fill: '#06B6D4', stroke: isDark ? '#0D1B2E' : '#fff', strokeWidth: 2 }}
+                          <Legend wrapperStyle={{ fontSize: 10 }} />
+                          {monthlyKomoditasKeys.map((k, i) => (
+                            <Bar
+                              key={k}
+                              dataKey={k}
+                              stackId="komoditas"
+                              fill={KOMODITAS_COLORS[k] || CHART_COLORS[i % CHART_COLORS.length]}
+                              radius={i === monthlyKomoditasKeys.length - 1 ? [4, 4, 0, 0] : undefined}
+                              maxBarSize={48}
+                            />
+                          ))}
+                          <Line
+                            type="monotone"
+                            dataKey="total"
+                            name="Total Produksi (Ton)"
+                            stroke={isDark ? '#FBBF24' : '#0F172A'}
+                            strokeWidth={2.5}
+                            dot={{ r: 4, fill: isDark ? '#FBBF24' : '#0F172A', stroke: isDark ? '#0D1B2E' : '#fff', strokeWidth: 2 }}
+                            activeDot={{ r: 6 }}
                           />
-                        </AreaChart>
+                        </ComposedChart>
                       </ResponsiveContainer>
                       {/* MoM Changes */}
                       {data.monthlyData.length > 1 && (
