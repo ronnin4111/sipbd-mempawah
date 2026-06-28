@@ -416,7 +416,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'data-produksi',     label: 'Data Pembudidaya',  labelLong: 'Data Pembudidaya',    icon: Database,        description: 'Tabel data lengkap',               adminOnly: false, group: 'data' },
   { id: 'data-kusuka',       label: 'Data KUSUKA',       labelLong: 'Data KUSUKA',          icon: CreditCard,      description: 'Registrasi KUSUKA publik',         adminOnly: false, group: 'data' },
   { id: 'import-export',     label: 'Import / Export',   labelLong: 'Import / Export',      icon: FileSpreadsheet, description: 'Kelola data Excel/PDF',             adminOnly: false, group: 'data' },
-  { id: 'disagregasi-analisis', label: 'Analisis S1',      labelLong: 'Analisis Disagregasi S1', icon: BarChart3, description: 'Analisis data disagregasi Semester 1', adminOnly: true, group: 'data' },
+  { id: 'disagregasi-analisis', label: 'Analisis S1',      labelLong: 'Analisis Disagregasi S1', icon: BarChart3, description: 'Analisis data disagregasi Semester 1', adminOnly: false, group: 'data' },
 
   // Group: Visualisasi
   { id: 'peta-lokasi',       label: 'Peta Lokasi',       labelLong: 'Peta Lokasi',          icon: Map,             description: 'Sebaran lokasi budidaya',           adminOnly: false, group: 'visualisasi' },
