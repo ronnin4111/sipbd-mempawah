@@ -481,3 +481,42 @@ Stage Summary:
 - Verified live on https://sipbd-mempawah.vercel.app/ : AI narration reads directly from Turso
   with exact data (1.815,29 Ton, Rp 72,92 Miliar, Nila 941,97 Ton 51,9%)
 - Note: On Vercel production, AI provider is Groq (Z.AI sandbox creds don't work on Vercel as documented in previous worklog Task ID 1)
+
+---
+Task ID: 9
+Agent: Main Agent
+Task: Change "Tren Produksi Bulanan (Ton)" chart on Analisis S1 > Tren tab to bar+line (per komoditas + total)
+
+Work Log:
+- User requested: "ubah grafik Tren Produksi Bulanan (Ton) berdasarkan komoditas dalam bentuk grafik batang + line"
+- Located chart in src/components/disaggregation/analyze-dashboard.tsx (line ~697): was AreaChart with single 'produksi' dataKey (total only, no per-komoditas breakdown)
+- API /api/analyze/dashboard/route.ts did not return per-bulan-per-komoditas data, only aggregated monthlyData
+- Modified API route.ts:
+  - buildUploadResponse: Added monthlyByKomoditas computation (Map<bulanNum, Map<komoditas, produksiTon>>), returns [{bulan, bulanNum, [komoditas1]: ton, ..., total: ton}]
+  - buildDisaggResponse: Added monthlyByKomoditas (distributes per-komoditas per-triwulan across 3 months)
+  - Empty response: Added monthlyByKomoditas: []
+  - Added monthlyByKomoditas to both return statements
+- Modified analyze-dashboard.tsx:
+  - Added monthlyByKomoditas: Record<string, string | number>[] to DashboardData interface
+  - Added monthlyKomoditasKeys useMemo (extracts komoditas names, excludes bulan/bulanNum/total)
+  - Replaced AreaChart (lines 707-724) with ComposedChart:
+    * Stacked Bars per komoditas (7 colors via KOMODITAS_COLORS map)
+    * Line overlay for 'total' dataKey (amber #FBBF24 in dark mode, slate #0F172A in light mode)
+    * Legend showing all komoditas + "Total Produksi (Ton)"
+    * maxBarSize=48 for better bar width
+    * Kept MoM (month-over-month) badges below chart
+- Lint: 0 errors in modified files (18 pre-existing errors in CommonJS files unchanged)
+- Tested with Agent Browser:
+  - Navigated to Analisis S1 page → Tren tab
+  - Verified SVG: chart #6 "Tren Produksi Bulanan (Ton)" has 42 bars (6 months × 7 komoditas) + 1 line
+  - VLM confirmed: stacked multi-color bars + yellow line overlay + legend present
+- Pushed to GitHub (commit 6dd2aff) → auto-deploys to Vercel
+
+Stage Summary:
+- "Tren Produksi Bulanan (Ton)" chart now shows:
+  - Stacked bars per komoditas (Nila=cyan, Mas=amber, Udang Vaname=red, Patin=purple, Lele=green, Bawal=pink, Jelawat=teal)
+  - Line overlay for total production trend (yellow in dark mode, dark slate in light mode)
+  - Legend with all komoditas + total
+- Data comes from Turso (AnalyzeRow) via monthlyByKomoditas API field
+- Verified: 42 bars + 1 line rendering correctly, VLM confirmed visual layout
+- Files modified: src/app/api/analyze/dashboard/route.ts (+74 lines), src/components/disaggregation/analyze-dashboard.tsx (+13 lines)
