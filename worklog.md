@@ -359,3 +359,23 @@ Stage Summary:
 - Analisis S1 is now the default landing page
 - Single-line change in src/store/filter-store.ts: activeSection default value changed
 - Page loads with year/semester selector and empty state placeholder
+
+---
+Task ID: 5
+Agent: Main Agent
+Task: Add HeroBanner to Analisis S1 page
+
+Work Log:
+- User requested: "hero baner di dashboard tampilkan juga di halaman tersebut (Analisis S1)"
+- Located HeroBanner usage in src/app/page.tsx line 44 (DashboardSection)
+- Wrapped <AnalyzeDashboard /> with HeroBanner at the page level (case 'disagregasi-analisis')
+- Verified with Agent Browser:
+  - Main content h1: "Sistem Informasi Perikanan Budidaya" (HeroBanner)
+  - Main content first button: "Tonton Video Launching" (HeroBanner)
+  - Main content first h2: "Analisis Data Disagregasi" (AnalyzeDashboard)
+- Pushed as commit dea1d56
+
+Stage Summary:
+- HeroBanner now appears at the top of Analisis S1 page
+- Layout: HeroBanner → AnalyzeDashboard content
+- Page renders correctly with hero section visible
