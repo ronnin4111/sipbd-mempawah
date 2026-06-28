@@ -334,6 +334,24 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // Collect distinct jenisWadah names from the Database sheet, in order of first
+    // appearance. This is used to assign real wadah names to Data Populasi rows
+    // when the user has cleared the "Jenis Wadah" column in that sheet.
+    const dbWadahOrder: string[] = [];
+    const dbWadahSeen = new Set<string>();
+    for (const r of analyzeRows) {
+      const w = r.jenisWadah;
+      if (!w || w.toUpperCase() === 'TOTAL') continue;
+      if (!dbWadahSeen.has(w)) {
+        dbWadahSeen.add(w);
+        dbWadahOrder.push(w);
+      }
+    }
+    console.log(
+      `[analyze/upload] Distinct wadah from Database sheet (${dbWadahOrder.length}):`,
+      dbWadahOrder
+    );
+
     // =============================================
     // 3. Parse "Data Populasi" sheet (header-based, strict validation)
     // =============================================
@@ -439,11 +457,20 @@ export async function POST(request: NextRequest) {
             // No wadah name AND no numeric data → skip (truly empty row)
             continue;
           }
-          // Generate a fallback name based on a counter so each empty-wadah row
-          // gets a unique identity (and unique dedup key).
+          // Try to assign a real wadah name from the Database sheet (by position).
+          // The Data Populasi sheet usually lists wadah in the same order as they
+          // first appear in the Database sheet. This handles the case where the
+          // user cleared the "Jenis Wadah" column in the Data Populasi sheet.
           emptyWadahCounter++;
-          jenisWadah = `Wadah ${emptyWadahCounter}`;
-          dedupKey = `__empty_${emptyWadahCounter}`;
+          const realName = dbWadahOrder[emptyWadahCounter - 1];
+          if (realName) {
+            jenisWadah = realName;
+            dedupKey = realName.toLowerCase();
+          } else {
+            // No matching real name available — use a fallback so the row is still kept
+            jenisWadah = `Wadah ${emptyWadahCounter}`;
+            dedupKey = `__empty_${emptyWadahCounter}`;
+          }
         } else {
           // Some other non-wadah string → skip
           continue;

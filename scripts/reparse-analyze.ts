@@ -137,6 +137,17 @@ async function main() {
   const totalTon = analyzeRows.reduce((s, r) => s + r.produksiTon, 0);
   console.log('Total produksi (Ton):', Math.round(totalTon * 100) / 100);
 
+  // Collect distinct wadah names from Database sheet (order of first appearance)
+  // — used to assign real names to empty-wadah rows in the Data Populasi sheet.
+  const dbWadahOrder: string[] = [];
+  const dbWadahSeen = new Set<string>();
+  for (const r of analyzeRows) {
+    const w = r.jenisWadah;
+    if (!w || w.toUpperCase() === 'TOTAL') continue;
+    if (!dbWadahSeen.has(w)) { dbWadahSeen.add(w); dbWadahOrder.push(w); }
+  }
+  console.log('Distinct wadah from Database sheet:', dbWadahOrder);
+
   // --- Parse Data Populasi sheet (header-based, with empty-wadah fallback) ---
   const popName = wb.SheetNames.find((n) => n.toLowerCase().includes('data populasi'));
   const populasiRows: any[] = [];
@@ -182,8 +193,15 @@ async function main() {
       } else if (rawWadah === '' || !/[a-zA-Z]/.test(rawWadah)) {
         if (rtp === 0 && pembudidaya === 0 && luasLahan === 0) continue;
         emptyWadahCounter++;
-        jenisWadah = `Wadah ${emptyWadahCounter}`;
-        dedupKey = `__empty_${emptyWadahCounter}`;
+        // Assign a real wadah name from the Database sheet by position
+        const realName = dbWadahOrder[emptyWadahCounter - 1];
+        if (realName) {
+          jenisWadah = realName;
+          dedupKey = realName.toLowerCase();
+        } else {
+          jenisWadah = `Wadah ${emptyWadahCounter}`;
+          dedupKey = `__empty_${emptyWadahCounter}`;
+        }
       } else {
         continue;
       }
