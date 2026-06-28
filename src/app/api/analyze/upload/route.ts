@@ -335,7 +335,7 @@ export async function POST(request: NextRequest) {
     }
 
     // =============================================
-    // 3. Parse "Data Populasi" sheet (header-based, with multi-sheet fallback)
+    // 3. Parse "Data Populasi" sheet (header-based, strict validation)
     // =============================================
     const populasiRows: {
       jenisWadah: string;
@@ -345,36 +345,63 @@ export async function POST(request: NextRequest) {
     }[] = [];
 
     /**
-     * Parse a populasi sheet (header-based) and append rows to populasiRows.
+     * Check if a string looks like a valid wadah name (not a code/number).
+     * Valid: "Jaring Apung Tawar", "Kolam Air Tenang", "Tambak Intensif"
+     * Invalid: "61" (Kode Provinsi), "6102" (Kode Kab/Kota), ""
+     */
+    function isValidWadahName(s: string): boolean {
+      if (!s || s.toUpperCase() === 'TOTAL') return false;
+      // Must contain at least one letter and be at least 3 chars
+      if (s.length < 3) return false;
+      if (!/[a-zA-Z]/.test(s)) return false; // reject pure numbers like "61", "6102"
+      // Reject if it's purely numeric with symbols (codes like "61.02")
+      if (/^[\d.\-/\s]+$/.test(s)) return false;
+      return true;
+    }
+
+    /**
+     * Parse a populasi sheet (STRICT header-based) and append rows to populasiRows.
      * Returns the number of rows parsed.
+     *
+     * STRICT mode: requires header row with "jenis wadah" + ("rtp" OR "pembudidaya").
+     * Does NOT fall back to legacy fixed-index (which misreads Kode Provinsi/Kab as wadah/pembudidaya).
+     * Also validates each parsed row: jenisWadah must be a real name (not a numeric code).
      */
     function parsePopulasiSheet(sheetName: string): number {
       const popWs = workbook.Sheets[sheetName];
       if (!popWs) return 0;
       const popRaw: unknown[][] = XLSX.utils.sheet_to_json(popWs, { header: 1 });
 
-      // Detect header row by looking for "jenis wadah" + "rtp"
-      const popHeaderIdx = findHeaderRow(popRaw, ['jenis wadah', 'rtp'], 10);
+      // STRICT: require "jenis wadah" + ("rtp" OR "pembudidaya") in header
+      // This prevents matching monthly sheets (which have "Jenis Wadah" but no RTP/Pembudidaya)
+      const popHeaderIdx = findHeaderRow(popRaw, ['jenis wadah'], 10);
+      if (popHeaderIdx < 0) {
+        console.log(`[analyze/upload] Populasi: sheet "${sheetName}" has no "jenis wadah" header, skipping`);
+        return 0;
+      }
 
-      let popColMap: Record<string, number>;
-      let popDataStart: number;
-
-      if (popHeaderIdx >= 0) {
-        popColMap = buildColumnMap(popRaw[popHeaderIdx], detectPopulasiField);
-        popDataStart = popHeaderIdx + 1;
+      // Verify the header also has "rtp" or "pembudidaya" (to confirm it's a populasi sheet)
+      const headerNorms = (popRaw[popHeaderIdx] || []).map((c) => normalizeHeader(c));
+      const hasRtp = headerNorms.some((n) => n.includes('rtp'));
+      const hasPembudidaya = headerNorms.some((n) => n.includes('pembudidaya'));
+      if (!hasRtp && !hasPembudidaya) {
         console.log(
-          `[analyze/upload] Populasi header-based: sheet="${sheetName}", header row=${popHeaderIdx}, colMap=`,
-          popColMap
+          `[analyze/upload] Populasi: sheet "${sheetName}" has "jenis wadah" but no rtp/pembudidaya columns, skipping (likely a production sheet, not populasi)`
         );
-      } else {
-        // Fallback: legacy fixed-index (data starts at row 5)
-        popColMap = {
-          jenisWadah: 2, jumlahRtp: 3, jumlahPembudidaya: 4, luasLahan: 5,
-        };
-        popDataStart = 5;
-        console.warn(
-          `[analyze/upload] Populasi header not detected in sheet "${sheetName}", using legacy fixed-index parsing`
-        );
+        return 0;
+      }
+
+      const popColMap = buildColumnMap(popRaw[popHeaderIdx], detectPopulasiField);
+      const popDataStart = popHeaderIdx + 1;
+      console.log(
+        `[analyze/upload] Populasi header-based: sheet="${sheetName}", header row=${popHeaderIdx}, colMap=`,
+        popColMap
+      );
+
+      // Require at least jenisWadah column to be mapped
+      if (popColMap.jenisWadah === undefined) {
+        console.warn(`[analyze/upload] Populasi: sheet "${sheetName}" — jenisWadah column not found in header, skipping`);
+        return 0;
       }
 
       const popData: unknown[][] = popRaw.slice(popDataStart);
@@ -384,18 +411,17 @@ export async function POST(request: NextRequest) {
       for (const row of popData) {
         if (!row || row.length === 0) continue;
 
-        const jenisWadah = toStr(row[popColMap.jenisWadah ?? 2]);
-        // Skip TOTAL row, empty rows, and rows without a wadah name
-        if (!jenisWadah || jenisWadah.toUpperCase() === 'TOTAL') continue;
-        // Deduplicate by wadah name (keep first occurrence with non-zero values)
+        const jenisWadah = toStr(row[popColMap.jenisWadah]);
+        // STRICT VALIDATION: skip rows where jenisWadah is empty, TOTAL, or looks like a numeric code
+        if (!isValidWadahName(jenisWadah)) continue;
+        // Deduplicate by wadah name
         if (seenWadah.has(jenisWadah.toLowerCase())) continue;
 
-        populasiRows.push({
-          jenisWadah,
-          jumlahRtp: toInt(row[popColMap.jumlahRtp ?? 3]),
-          jumlahPembudidaya: toInt(row[popColMap.jumlahPembudidaya ?? 4]),
-          luasLahan: toNumber(row[popColMap.luasLahan ?? 5]),
-        });
+        const rtp = popColMap.jumlahRtp !== undefined ? toInt(row[popColMap.jumlahRtp]) : 0;
+        const pembudidaya = popColMap.jumlahPembudidaya !== undefined ? toInt(row[popColMap.jumlahPembudidaya]) : 0;
+        const luasLahan = popColMap.luasLahan !== undefined ? toNumber(row[popColMap.luasLahan]) : 0;
+
+        populasiRows.push({ jenisWadah, jumlahRtp: rtp, jumlahPembudidaya: pembudidaya, luasLahan });
         seenWadah.add(jenisWadah.toLowerCase());
         parsed++;
       }
@@ -413,17 +439,23 @@ export async function POST(request: NextRequest) {
       console.warn('[analyze/upload] Sheet "Data Populasi" tidak ditemukan');
     }
 
-    // Strategy 2: Fallback — if primary sheet yielded 0 rows, scan ALL sheets
-    // for one that has "jenis wadah" + "rtp" headers (handles renamed/moved sheets)
+    // Strategy 2: Fallback — if primary sheet yielded 0 rows, scan remaining sheets
+    // EXCLUDE: Database, Master Data, Rekap, and monthly sheets (01-12) — these are
+    // production sheets that have "Jenis Wadah" but NOT RTP/Pembudidaya columns.
+    // The strict parsePopulasiSheet will also reject them, but we skip here for efficiency.
     if (populasiRows.length === 0) {
       console.warn(
-        '[analyze/upload] Populasi parsing yielded 0 rows from primary sheet, scanning all sheets as fallback...'
+        '[analyze/upload] Populasi parsing yielded 0 rows from primary sheet, scanning other sheets as fallback...'
       );
       for (const sheetName of workbook.SheetNames) {
-        if (populasiRows.length > 0) break; // stop once we find data
-        // Skip the Database sheet and monthly sheets (they don't have RTP data)
+        if (populasiRows.length > 0) break;
         const lower = sheetName.toLowerCase();
+        // Skip production/data sheets — they don't contain populasi (RTP/Pembudidaya) data
         if (lower === 'database' || lower === 'master data' || lower.startsWith('rekap')) continue;
+        // Skip monthly sheets (01, 02, ..., 12) — they are production sheets
+        if (/^\d{1,2}$/.test(sheetName.trim())) continue;
+        // Skip the primary populasi sheet (already tried)
+        if (lower.includes('data populasi')) continue;
         const count = parsePopulasiSheet(sheetName);
         if (count > 0) {
           console.log(`[analyze/upload] Fallback: found populasi data in sheet "${sheetName}" (${count} rows)`);
