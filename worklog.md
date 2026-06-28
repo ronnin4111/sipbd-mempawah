@@ -520,3 +520,62 @@ Stage Summary:
 - Data comes from Turso (AnalyzeRow) via monthlyByKomoditas API field
 - Verified: 42 bars + 1 line rendering correctly, VLM confirmed visual layout
 - Files modified: src/app/api/analyze/dashboard/route.ts (+74 lines), src/components/disaggregation/analyze-dashboard.tsx (+13 lines)
+
+---
+Task ID: 10
+Agent: Main Agent
+Task: Fix empty charts/data on Analisis S1 page after user re-uploaded Excel file
+
+Work Log:
+- User reported: after re-uploading data for "Analisis S1", all charts and data on the page became empty
+- Investigated by querying the dashboard API: source=upload, hasData=true, but summary.totalProduksiTon=0
+- Queried Turso raw rows: 66 rows existed but columns were misaligned:
+  * bulan="6102" (was reading Kode Kab/Kota column)
+  * komoditas="Jaring Apung Tawar"/"Kolam Air Tenang"/"Tambak Intensif" (was reading jenisWadah column)
+  * produksiTon=0 (reading wrong column)
+  * populasi=0 (populasi sheet not parsed)
+- Inspected the uploaded Excel file (upload/Pembesaran_Mempawah (1).xlsx) with xlsx:
+  * "Database" sheet has headers at row 3 (not row 4 as old parser assumed)
+  * New column order has extra "Kode Kab/Kota" column (col 4), shifting all data columns +1:
+    - col 4=Kode Kab/Kota(6102), col 5=Bulan, col 6=TW, col 7=Semester, col 8=Jenis Wadah,
+      col 9=Komoditas, col 10=Produksi(ton), col 11=Produksi(kg), ...
+  * "Data Populasi" sheet has headers at row 2, TOTAL row at row 4, data from row 5
+- Root cause: old parser used FIXED column indices (col 4=bulan, col 8=komoditas, col 9=produksiTon),
+  which broke when the new Excel template added an extra leading column (+1 shift)
+- Fix: rewrote src/app/api/analyze/upload/route.ts parser to be HEADER-BASED:
+  * Added normalizeHeader(), detectRowField(), detectPopulasiField() helpers
+  * Added findHeaderRow() — scans first 15 rows for one containing required keywords
+    ("bulan"+"komoditas"+"jenis wadah" for Database; "jenis wadah"+"rtp" for Populasi)
+  * Added buildColumnMap() — maps header names to column indices via keyword matching
+    (handles "Produksi (ton)", "Produksi (kg)", "Harga (Rp/kg)", "Nilai (Rp)", etc.)
+  * Kept legacy fixed-index as fallback if header row not detected (backward compatible)
+  * Applied same header-based approach to "Data Populasi" sheet parsing
+- Wrote scripts/reparse-analyze.ts to re-parse the existing Excel file and replace corrupt Turso data
+  (deleted old upload, created new upload with 66 correct rows + 3 populasi rows)
+- Verified dashboard API now returns correct data:
+  * totalProduksiTon: 1815.29, totalNilaiMiliar: 72.92
+  * totalRtp: 171, totalPembudidaya: 374, totalLuasLahan: 225000
+  * 7 komoditas: Nila 941.97 Ton (51.89%), Mas 494.48 Ton, Udang Vaname 170.11 Ton, etc.
+  * 3 wadah: Jaring Apung Tawar 1428.73 Ton (78.71%), Kolam Air Tenang 216.45 Ton, Tambak Intensif 170.11 Ton
+  * monthlyByKomoditas: 6 months × 7 komoditas with correct totals
+- Lint: 0 errors in modified files (only pre-existing CommonJS require() errors in other files)
+- Verified end-to-end with Agent Browser:
+  * Opened http://localhost:3000/ (Analisis S1 page)
+  * Clicked "S1 Jan–Jun" filter
+  * Ringkasan tab: VLM confirmed "Total Produksi: 1.815,29 Ton", Nila/Mas/Udang Vaname visible,
+    TW1 929,4 Ton vs TW2 885,9 Ton, all charts populated
+  * Tren tab: VLM confirmed "Tren Produksi Bulanan (Ton)" chart has stacked colored bars
+    (Lele, Mas, Nila, Patin, Bawal, Jelawat, Udang Vaname) + total production line overlay,
+    Jan-Jun x-axis labels, plus other charts (Tren Nilai, Data Populasi) with data
+
+Stage Summary:
+- Root cause: re-uploaded Excel had a new template with an extra "Kode Kab/Kota" column (+1 shift),
+  breaking the old fixed-index parser
+- Fix: parser is now header-based (detects header row by keywords, maps columns by name) with
+  legacy fixed-index fallback — robust to any future column reorderings/insertions
+- Corrupt Turso data replaced with correct data via reparse script (66 rows + 3 populasi)
+- All charts and data on Analisis S1 page now display correctly (Ringkasan + Tren tabs verified)
+- The "Tren Produksi Bulanan (Ton)" bar+line chart (from Task ID 9) now renders with real data:
+  stacked bars per komoditas + total line overlay
+- Files modified: src/app/api/analyze/upload/route.ts (rewrote parsing sections + added helpers),
+  scripts/reparse-analyze.ts (new one-time reparse utility)

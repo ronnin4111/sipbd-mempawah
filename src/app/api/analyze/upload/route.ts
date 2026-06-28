@@ -64,6 +64,84 @@ function getTriwulan(bulanNum: number): number {
   return Math.ceil(bulanNum / 3);
 }
 
+// ============================================================
+// Header-based column detection (robust to column shifts)
+// ============================================================
+
+/** Normalize a header cell for matching: lowercase, collapse spaces, trim. */
+function normalizeHeader(value: unknown): string {
+  return toStr(value).toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Map a normalized header to an AnalyzeRow field name.
+ * Order matters: more specific/compound fields are checked first.
+ */
+function detectRowField(norm: string): string | null {
+  if (norm === 'bulan') return 'bulan';
+  if (norm === 'tw' || norm === 'triwulan') return 'tw';
+  if (norm === 'semester' || norm === 'sem') return 'semester';
+  if (norm === 'jenis wadah') return 'jenisWadah';
+  if (norm === 'komoditas') return 'komoditas';
+  // Compound/specific fields before generic ones
+  if (norm.includes('produktifitas')) return 'produktifitas';
+  if (norm.includes('luas lahan')) return 'luasLahan';
+  if (norm.includes('agregat benih') || norm.includes('benih')) return 'agregatBenih';
+  if (norm.includes('produksi') && norm.includes('ton')) return 'produksiTon';
+  if (norm.includes('produksi') && norm.includes('kg')) return 'produksiKg';
+  if (norm.includes('pakan')) return 'pakanKg';
+  if (norm.includes('harga')) return 'hargaRpKg';
+  if (norm.includes('nilai')) return 'nilaiRp';
+  if (norm.includes('size')) return 'size';
+  if (norm === 'fcr') return 'fcr';
+  if (norm === 'sr') return 'sr';
+  return null;
+}
+
+/** Map a normalized header to an AnalyzePopulasi field name. */
+function detectPopulasiField(norm: string): string | null {
+  if (norm.includes('jenis wadah')) return 'jenisWadah';
+  if (norm.includes('rtp')) return 'jumlahRtp';
+  if (norm.includes('pembudidaya')) return 'jumlahPembudidaya';
+  if (norm.includes('luas lahan') || norm.includes('luas')) return 'luasLahan';
+  return null;
+}
+
+/**
+ * Find the header row index by scanning rows for one that contains
+ * all the required keywords (matched against normalized cell text).
+ */
+function findHeaderRow(
+  data: unknown[][],
+  requiredKeywords: string[],
+  maxScan = 15
+): number {
+  for (let i = 0; i < Math.min(data.length, maxScan); i++) {
+    const row = data[i] || [];
+    const norms = row.map((c) => normalizeHeader(c));
+    const allFound = requiredKeywords.every((kw) =>
+      norms.some((n) => n.includes(kw))
+    );
+    if (allFound) return i;
+  }
+  return -1;
+}
+
+/** Build a column index map { fieldName: columnIndex } from a header row. */
+function buildColumnMap(
+  headerRow: unknown[],
+  detector: (norm: string) => string | null
+): Record<string, number> {
+  const map: Record<string, number> = {};
+  headerRow.forEach((cell, idx) => {
+    const field = detector(normalizeHeader(cell));
+    if (field && map[field] === undefined) {
+      map[field] = idx;
+    }
+  });
+  return map;
+}
+
 export async function POST(request: NextRequest) {
   try {
     await ensureTablesExist();
@@ -158,7 +236,7 @@ export async function POST(request: NextRequest) {
     }
 
     // =============================================
-    // 2. Parse "Database" sheet for production rows
+    // 2. Parse "Database" sheet for production rows (header-based)
     // =============================================
     const dbSheetName = workbook.SheetNames.find(
       (name) => name.toLowerCase() === 'database'
@@ -174,8 +252,34 @@ export async function POST(request: NextRequest) {
     const dbWs = workbook.Sheets[dbSheetName];
     const dbRaw: unknown[][] = XLSX.utils.sheet_to_json(dbWs, { header: 1 });
 
-    // Skip first 4 rows (0-3 are headers), data starts at row 4
-    const dbRows: unknown[][] = dbRaw.slice(4);
+    // Detect header row by looking for "bulan" + "komoditas" + "jenis wadah"
+    const dbHeaderIdx = findHeaderRow(dbRaw, ['bulan', 'komoditas', 'jenis wadah'], 15);
+
+    let colMap: Record<string, number>;
+    let dbDataStart: number;
+
+    if (dbHeaderIdx >= 0) {
+      // Header-based mapping (robust to column shifts / extra columns)
+      colMap = buildColumnMap(dbRaw[dbHeaderIdx], detectRowField);
+      dbDataStart = dbHeaderIdx + 1;
+      console.log(
+        `[analyze/upload] Header-based parsing: header row=${dbHeaderIdx}, colMap=`,
+        colMap
+      );
+    } else {
+      // Fallback: legacy fixed-index format (data starts at row 4)
+      colMap = {
+        bulan: 4, tw: 5, semester: 6, jenisWadah: 7, komoditas: 8,
+        produksiTon: 9, produksiKg: 10, produktifitas: 11, luasLahan: 12,
+        hargaRpKg: 13, nilaiRp: 14, fcr: 15, pakanKg: 16, size: 17, sr: 18, agregatBenih: 19,
+      };
+      dbDataStart = 4;
+      console.warn(
+        '[analyze/upload] Header row not detected, using legacy fixed-index parsing'
+      );
+    }
+
+    const dbRows: unknown[][] = dbRaw.slice(dbDataStart);
 
     const analyzeRows: {
       bulan: string;
@@ -201,36 +305,37 @@ export async function POST(request: NextRequest) {
       // Skip empty rows
       if (!row || row.length === 0) continue;
 
-      const komoditas = toStr(row[8]);
+      const komoditas = toStr(row[colMap.komoditas ?? 8]);
       // Skip TOTAL rows and rows where komoditas is empty
       if (!komoditas || komoditas.toUpperCase() === 'TOTAL') continue;
 
-      const bulanStr = toStr(row[4]);
-      const bulanNum = BULAN_MAP[bulanStr.toLowerCase()] || toInt(row[4]) || 1;
+      const bulanStr = toStr(row[colMap.bulan ?? 4]);
+      const bulanNum =
+        BULAN_MAP[bulanStr.toLowerCase()] || toInt(row[colMap.bulan ?? 4]) || 1;
 
       analyzeRows.push({
         bulan: bulanStr,
         bulanNum,
-        tw: toInt(row[5]) || getTriwulan(bulanNum),
-        semester: toInt(row[6]) || getSemester(bulanNum),
-        jenisWadah: toStr(row[7]),
+        tw: toInt(row[colMap.tw ?? 5]) || getTriwulan(bulanNum),
+        semester: toInt(row[colMap.semester ?? 6]) || getSemester(bulanNum),
+        jenisWadah: toStr(row[colMap.jenisWadah ?? 7]),
         komoditas,
-        produksiTon: toNumber(row[9]),
-        produksiKg: toNumber(row[10]),
-        produktifitas: toNumber(row[11]),
-        luasLahan: toNumber(row[12]),
-        hargaRpKg: toNumber(row[13]),
-        nilaiRp: toNumber(row[14]),
-        fcr: toNumber(row[15]),
-        pakanKg: toNumber(row[16]),
-        size: toNumber(row[17]),
-        sr: toNumber(row[18]),
-        agregatBenih: toNumber(row[19]),
+        produksiTon: toNumber(row[colMap.produksiTon ?? 9]),
+        produksiKg: toNumber(row[colMap.produksiKg ?? 10]),
+        produktifitas: toNumber(row[colMap.produktifitas ?? 11]),
+        luasLahan: toNumber(row[colMap.luasLahan ?? 12]),
+        hargaRpKg: toNumber(row[colMap.hargaRpKg ?? 13]),
+        nilaiRp: toNumber(row[colMap.nilaiRp ?? 14]),
+        fcr: toNumber(row[colMap.fcr ?? 15]),
+        pakanKg: toNumber(row[colMap.pakanKg ?? 16]),
+        size: toNumber(row[colMap.size ?? 17]),
+        sr: toNumber(row[colMap.sr ?? 18]),
+        agregatBenih: toNumber(row[colMap.agregatBenih ?? 19]),
       });
     }
 
     // =============================================
-    // 3. Parse "Data Populasi" sheet
+    // 3. Parse "Data Populasi" sheet (header-based)
     // =============================================
     const popSheetName = workbook.SheetNames.find(
       (name) => name.toLowerCase().includes('data populasi')
@@ -247,21 +352,44 @@ export async function POST(request: NextRequest) {
       const popWs = workbook.Sheets[popSheetName];
       const popRaw: unknown[][] = XLSX.utils.sheet_to_json(popWs, { header: 1 });
 
-      // Data starts at row 5 (skip rows 0-4)
-      const popData: unknown[][] = popRaw.slice(5);
+      // Detect header row by looking for "jenis wadah" + "rtp"
+      const popHeaderIdx = findHeaderRow(popRaw, ['jenis wadah', 'rtp'], 10);
+
+      let popColMap: Record<string, number>;
+      let popDataStart: number;
+
+      if (popHeaderIdx >= 0) {
+        popColMap = buildColumnMap(popRaw[popHeaderIdx], detectPopulasiField);
+        popDataStart = popHeaderIdx + 1;
+        console.log(
+          `[analyze/upload] Populasi header-based: header row=${popHeaderIdx}, colMap=`,
+          popColMap
+        );
+      } else {
+        // Fallback: legacy fixed-index (data starts at row 5)
+        popColMap = {
+          jenisWadah: 2, jumlahRtp: 3, jumlahPembudidaya: 4, luasLahan: 5,
+        };
+        popDataStart = 5;
+        console.warn(
+          '[analyze/upload] Populasi header not detected, using legacy fixed-index parsing'
+        );
+      }
+
+      const popData: unknown[][] = popRaw.slice(popDataStart);
 
       for (const row of popData) {
         if (!row || row.length === 0) continue;
 
-        const jenisWadah = toStr(row[2]);
-        // Skip TOTAL row and empty rows
+        const jenisWadah = toStr(row[popColMap.jenisWadah ?? 2]);
+        // Skip TOTAL row, empty rows, and rows without a wadah name
         if (!jenisWadah || jenisWadah.toUpperCase() === 'TOTAL') continue;
 
         populasiRows.push({
           jenisWadah,
-          jumlahRtp: toInt(row[3]),
-          jumlahPembudidaya: toInt(row[4]),
-          luasLahan: toNumber(row[5]),
+          jumlahRtp: toInt(row[popColMap.jumlahRtp ?? 3]),
+          jumlahPembudidaya: toInt(row[popColMap.jumlahPembudidaya ?? 4]),
+          luasLahan: toNumber(row[popColMap.luasLahan ?? 5]),
         });
       }
     } else {
