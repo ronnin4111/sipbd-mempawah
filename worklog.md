@@ -441,3 +441,43 @@ Stage Summary:
 - Anti-hallucination rules ensure AI only uses actual Turso data
 - Badge "S1 · Turso" clearly indicates data source to users
 - Verified end-to-end via Agent Browser: narration generates successfully with exact Turso numbers
+
+---
+Task ID: 8
+Agent: Main Agent
+Task: Write Turso env vars to Vercel project (sipbd-mempawah) and trigger production redeploy
+
+Work Log:
+- User provided Vercel API token (vcp_...) and Turso credentials (URL + JWT auth token)
+- Verified Vercel token via GET /v2/user → user=ronnin4111, defaultTeamId=team_6G4ZtksLoZFwPl9Rsyx4eUB8
+- Listed projects via GET /v9/projects → found sipbd-mempawah (id=prj_8xswoLwOPMmiMStqoTsiKBv3ejlF, status=READY)
+- Checked existing env vars via GET /v9/projects/{id}/env → 17 env vars existed including:
+  - TURSO_DATABASE_URL (id=ZvLemUh8eKdZ0la4, type=sensitive) - OLD value, encrypted/not readable
+  - TURSO_AUTH_TOKEN (id=7sIIilfe7R7MHfch, type=sensitive) - OLD value
+  - DATABASE_URL (id=l2bvkfYZpbzrxxVD, type=sensitive) - OLD value
+- Deleted all 3 old env vars via DELETE /v9/projects/{id}/env/{envId}?teamId={teamId} (all succeeded)
+- Recreated 3 new env vars via POST /v10/projects/{id}/env?teamId={teamId} with:
+  - TURSO_DATABASE_URL = libsql://sipbd-mempawah-ronnin4111.aws-ap-northeast-1.turso.io (encrypted, target=production+preview+development)
+  - TURSO_AUTH_TOKEN = eyJhbGciOiJFZERTQSIs... (JWT Turso auth token, encrypted, target=production+preview+development)
+  - DATABASE_URL = file:./db/custom.db (placeholder - db.ts Priority 1 uses TURSO_* env vars when DATABASE_URL is not libsql://)
+  - New IDs: TURSO_DATABASE_URL=o2SFdbLkpOGZutVc, TURSO_AUTH_TOKEN=DJWfTLPpdhqhLbKF, DATABASE_URL=H2CmdagfQKYM5LQX
+- Triggered production redeploy via POST /v13/deployments with gitSource github/ronnin4111/sipbd-mempawah@main
+  - Deployment ID: dpl_GmZm6hZihTpuqWRB5vx4RUEGLKeq
+  - Polled status: INITIALIZING → BUILDING (10-40s) → READY (50s)
+  - Production aliases: sipbd-mempawah.vercel.app, sipbd-mempawah-ronnin4111s-projects.vercel.app
+- Verified production deployment end-to-end:
+  - GET https://sipbd-mempawah.vercel.app/ → HTTP 200 (1.36s)
+  - POST /api/ai/narrate {source:'analyze-s1', type:'summary', year:2026, semester:1} → HTTP 200 (14.7s)
+  - Response: success=true, source=analyze-s1, provider=groq, narrative=1612 chars
+  - Narrative contains exact Turso numbers: 1.815,29 ton, Rp 72,92 miliar, Nila 941,97 ton (51,9%)
+  - Confirms env vars are correctly set and db.ts Priority 1 (TURSO_* env vars + LibSQL adapter) is working on Vercel
+
+Stage Summary:
+- 3 env vars successfully written to Vercel project sipbd-mempawah:
+  - TURSO_DATABASE_URL (Turso database URL)
+  - TURSO_AUTH_TOKEN (Turso JWT auth token)
+  - DATABASE_URL (file: placeholder - db.ts uses TURSO_* via Priority 1)
+- Production redeploy completed in 50 seconds (status READY)
+- Verified live on https://sipbd-mempawah.vercel.app/ : AI narration reads directly from Turso
+  with exact data (1.815,29 Ton, Rp 72,92 Miliar, Nila 941,97 Ton 51,9%)
+- Note: On Vercel production, AI provider is Groq (Z.AI sandbox creds don't work on Vercel as documented in previous worklog Task ID 1)
