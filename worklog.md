@@ -701,3 +701,35 @@ Stage Summary:
   - `src/app/api/analyze/upload/route.ts` (parser fix for empty wadah names)
   - `scripts/reparse-analyze.ts` (synced same fix)
 - Next: verify UI via Agent Browser, and ensure Vercel production deploys the latest commit so future UI uploads also work correctly.
+
+---
+Task ID: 13
+Agent: main (continued session)
+Task: User reported the "Data Populasi per Jenis Wadah" chart is not showing data (empty).
+
+Work Log:
+- Located chart in `src/components/disaggregation/analyze-dashboard.tsx` (line 837, on "Tren" tab). It uses `data.wadahData` with ComposedChart (bars for rtp/pembudidaya + line for luasLahan).
+- Checked dashboard API (`src/app/api/analyze/dashboard/route.ts`):
+  - `wadahData` is built from `wadahProdMap` (production rows) keyed by real wadah names ("Jaring Apung Tawar", etc.)
+  - Populasi values are joined via `wadahPopMap.get(name)` where `name` comes from production wadah names
+- Root cause: The populasi data stored in Turso used fallback names ("Wadah 1/2/3") because the previous parser fix (Task 12) generated those when the Excel's Data Populasi sheet had an empty Jenis Wadah column. The name mismatch caused `wadahPopMap.get("Jaring Apung Tawar")` to return undefined → rtp=0, pembudidaya=0, luasLahan=0 for every wadah → chart appeared empty.
+- Verified via API: `wadahData` had 3 entries but all rtp/pembudidaya/luasLahan were 0.
+- Verified positional mapping is correct: Database sheet distinct wadah order = [Jaring Apung Tawar, Kolam Air Tenang, Tambak Intensif], matching Data Populasi rows 5-7 by position (rtp/luas values match known data).
+- Fix in `src/app/api/analyze/upload/route.ts`:
+  - After parsing Database sheet, collect distinct wadah names in order of first appearance into `dbWadahOrder`
+  - In `parsePopulasiSheet()`, when Jenis Wadah is empty/numeric, assign `dbWadahOrder[emptyWadahCounter - 1]` as the real wadah name (instead of "Wadah N"). Falls back to "Wadah N" only if no matching real name exists.
+- Synced same fix to `scripts/reparse-analyze.ts`.
+- Re-ran `bun run scripts/reparse-analyze.ts`:
+  - Deleted old upload (cmqy5qkyr...)
+  - Created new upload (cmqy637zz...) with 66 rows + 3 populasi rows
+  - Populasi now stored with REAL wadah names: Jaring Apung Tawar (rtp=47, pem=223, luas=30000), Kolam Air Tenang (rtp=120, pem=120, luas=45000), Tambak Intensif (rtp=4, pem=4, luas=150000)
+- Verified dashboard API `wadahData` now returns populasi values correctly linked to each wadah.
+- Verified via Agent Browser + VLM: "Data Populasi per Jenis Wadah" chart on Tren tab shows 3 wadah (Jaring Apung Tawar, Kolam Air Tenang, Tambak Intensif) with RTP bars (blue), Pembudidaya bars (orange), and Luas Lahan line (red) — all with actual values.
+- Committed (8d7c5f1) and pushed to GitHub for Vercel redeploy.
+
+Stage Summary:
+- Root cause: name mismatch between populasi fallback names ("Wadah 1/2/3") and production wadah names ("Jaring Apung Tawar", etc.) caused the chart join to fail.
+- Fix: parser now maps empty-wadah populasi rows to real wadah names from the Database sheet by position.
+- Turso DB updated with correctly-named populasi data.
+- Chart verified rendering with actual data via VLM.
+- Files modified: `src/app/api/analyze/upload/route.ts`, `scripts/reparse-analyze.ts`
