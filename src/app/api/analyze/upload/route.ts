@@ -335,12 +335,8 @@ export async function POST(request: NextRequest) {
     }
 
     // =============================================
-    // 3. Parse "Data Populasi" sheet (header-based)
+    // 3. Parse "Data Populasi" sheet (header-based, with multi-sheet fallback)
     // =============================================
-    const popSheetName = workbook.SheetNames.find(
-      (name) => name.toLowerCase().includes('data populasi')
-    );
-
     const populasiRows: {
       jenisWadah: string;
       jumlahRtp: number;
@@ -348,8 +344,13 @@ export async function POST(request: NextRequest) {
       luasLahan: number;
     }[] = [];
 
-    if (popSheetName) {
-      const popWs = workbook.Sheets[popSheetName];
+    /**
+     * Parse a populasi sheet (header-based) and append rows to populasiRows.
+     * Returns the number of rows parsed.
+     */
+    function parsePopulasiSheet(sheetName: string): number {
+      const popWs = workbook.Sheets[sheetName];
+      if (!popWs) return 0;
       const popRaw: unknown[][] = XLSX.utils.sheet_to_json(popWs, { header: 1 });
 
       // Detect header row by looking for "jenis wadah" + "rtp"
@@ -362,7 +363,7 @@ export async function POST(request: NextRequest) {
         popColMap = buildColumnMap(popRaw[popHeaderIdx], detectPopulasiField);
         popDataStart = popHeaderIdx + 1;
         console.log(
-          `[analyze/upload] Populasi header-based: header row=${popHeaderIdx}, colMap=`,
+          `[analyze/upload] Populasi header-based: sheet="${sheetName}", header row=${popHeaderIdx}, colMap=`,
           popColMap
         );
       } else {
@@ -372,11 +373,13 @@ export async function POST(request: NextRequest) {
         };
         popDataStart = 5;
         console.warn(
-          '[analyze/upload] Populasi header not detected, using legacy fixed-index parsing'
+          `[analyze/upload] Populasi header not detected in sheet "${sheetName}", using legacy fixed-index parsing`
         );
       }
 
       const popData: unknown[][] = popRaw.slice(popDataStart);
+      let parsed = 0;
+      const seenWadah = new Set<string>();
 
       for (const row of popData) {
         if (!row || row.length === 0) continue;
@@ -384,6 +387,8 @@ export async function POST(request: NextRequest) {
         const jenisWadah = toStr(row[popColMap.jenisWadah ?? 2]);
         // Skip TOTAL row, empty rows, and rows without a wadah name
         if (!jenisWadah || jenisWadah.toUpperCase() === 'TOTAL') continue;
+        // Deduplicate by wadah name (keep first occurrence with non-zero values)
+        if (seenWadah.has(jenisWadah.toLowerCase())) continue;
 
         populasiRows.push({
           jenisWadah,
@@ -391,10 +396,44 @@ export async function POST(request: NextRequest) {
           jumlahPembudidaya: toInt(row[popColMap.jumlahPembudidaya ?? 4]),
           luasLahan: toNumber(row[popColMap.luasLahan ?? 5]),
         });
+        seenWadah.add(jenisWadah.toLowerCase());
+        parsed++;
       }
-    } else {
-      console.warn('[analyze/upload] Sheet "Data Populasi" tidak ditemukan, melewati data populasi');
+      return parsed;
     }
+
+    // Strategy 1: Try the primary "Data Populasi" sheet
+    const popSheetName = workbook.SheetNames.find(
+      (name) => name.toLowerCase().includes('data populasi')
+    );
+
+    if (popSheetName) {
+      parsePopulasiSheet(popSheetName);
+    } else {
+      console.warn('[analyze/upload] Sheet "Data Populasi" tidak ditemukan');
+    }
+
+    // Strategy 2: Fallback — if primary sheet yielded 0 rows, scan ALL sheets
+    // for one that has "jenis wadah" + "rtp" headers (handles renamed/moved sheets)
+    if (populasiRows.length === 0) {
+      console.warn(
+        '[analyze/upload] Populasi parsing yielded 0 rows from primary sheet, scanning all sheets as fallback...'
+      );
+      for (const sheetName of workbook.SheetNames) {
+        if (populasiRows.length > 0) break; // stop once we find data
+        // Skip the Database sheet and monthly sheets (they don't have RTP data)
+        const lower = sheetName.toLowerCase();
+        if (lower === 'database' || lower === 'master data' || lower.startsWith('rekap')) continue;
+        const count = parsePopulasiSheet(sheetName);
+        if (count > 0) {
+          console.log(`[analyze/upload] Fallback: found populasi data in sheet "${sheetName}" (${count} rows)`);
+        }
+      }
+    }
+
+    console.log(
+      `[analyze/upload] Populasi parsing complete: ${populasiRows.length} rows total`
+    );
 
     // =============================================
     // 4. Delete existing upload with same year (replace mode)
