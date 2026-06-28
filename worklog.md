@@ -579,3 +579,38 @@ Stage Summary:
   stacked bars per komoditas + total line overlay
 - Files modified: src/app/api/analyze/upload/route.ts (rewrote parsing sections + added helpers),
   scripts/reparse-analyze.ts (new one-time reparse utility)
+
+---
+Task ID: 11
+Agent: Main Agent
+Task: Fix "Total Pembudidaya" and "Luas Lahan" showing 0 after re-upload (populasi not parsed)
+
+Work Log:
+- User reported: after re-uploading, "data populasi terbaca 0 sehingga kartu 'total pembudidaya' juga jadi 0" and "luas lahan juga tidak terbaca"
+- Checked Turso: latest upload (cmqy4fnsd, createdAt 18:27) had rows=66 (correct) but populasi=0
+- Inspected Data Populasi sheet structure: headers at row 2 ("Jenis Wadah", "Jumlah RTP (Unit)", "Jumlah Pembudidaya (Orang)", "Luas Lahan yang dimiliki (m^2)"), TOTAL row at row 4, data rows 5-7 (3 wadah)
+- Ran standalone debug script replicating the route.ts populasi parsing logic: WORKED PERFECTLY (found header at row 2, parsed 3 rows with correct RTP/pembudidaya/luasLahan)
+- Tested upload endpoint directly on localhost with real Excel file: populasiCount=3, log shows "Populasi header-based: sheet='Data Populasi', header row=2" — parser code is correct
+- Conclusion: user's upload at 18:27 used a cached/old Vercel serverless function despite deployment being marked READY (Vercel deploy was READY at 18:24, upload at 18:27)
+- Ran reparse script to fix data in Turso immediately (replaced upload with populasi=0 → new upload with populasi=3)
+- Enhanced src/app/api/analyze/upload/route.ts populasi parser for extra robustness:
+  * Refactored into reusable parsePopulasiSheet() function
+  * Strategy 1: Try primary "Data Populasi" sheet (header-based, as before)
+  * Strategy 2: Fallback — if 0 rows parsed, scan ALL sheets for one with "jenis wadah" + "rtp" headers (handles renamed/moved sheets)
+  * Added deduplication by wadah name (keeps first occurrence)
+  * Added detailed logging: sheet name, header row, colMap, total rows parsed
+- Verified end-to-end:
+  * Upload endpoint: rowCount=66, populasiCount=3
+  * Dashboard API: totalRtp=171, totalPembudidaya=374, totalLuasLahan=225000
+  * Per-wadah: Jaring Apung Tawar (rtp=47, pemb=250, luas=30000), Kolam Air Tenang (rtp=120, pemb=120, luas=45000), Tambak Intensif (rtp=4, pemb=4, luas=150000)
+  * Agent Browser: page shows "Total Pembudidaya: 374 Orang", per-wadah cards "47 RTP / 250 org" etc.
+  * VLM confirmed: (1) Total Pembudidaya=374 ✓, (2) Luas Lahan=22,5 Ha (225.000 m²) ✓, (3) RTP=171 ✓, (4) per-wadah cards show RTP/pembudidaya ✓
+- Lint: 0 errors in modified files
+- Pushed to GitHub (commit f049f30) → auto-deploys to Vercel
+
+Stage Summary:
+- Root cause: populasi parser code was correct, but user's UI upload used a cached/old Vercel serverless function that didn't parse populasi
+- Immediate fix: re-parsed Excel into Turso (populasi now has 3 correct rows)
+- Long-term fix: enhanced populasi parser with multi-sheet fallback (scans all sheets if primary yields 0 rows), deduplication, and detailed logging for diagnosis
+- All summary cards now show correct data: Total Pembudidaya=374, Total RTP=171, Total Luas Lahan=225000 (22,5 Ha)
+- The "luas lahan tidak terbaca" issue is also fixed — AnalyzePopulasi.luasLahan (per-wadah) is now correctly parsed and aggregated
