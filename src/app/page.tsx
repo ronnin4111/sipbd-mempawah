@@ -437,7 +437,12 @@ export default function Home() {
       case 'disagregasi':
         return <DisagregasiSection />;
       case 'disagregasi-analisis':
-        return <AnalyzeDashboard />;
+        return (
+          <div className="space-y-6">
+            <HeroBanner />
+            <AnalyzeDashboard />
+          </div>
+        );
       case 'admin-login':
         return <AdminLoginSection />;
       case 'import-export':
