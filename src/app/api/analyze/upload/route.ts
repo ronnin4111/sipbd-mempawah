@@ -347,7 +347,8 @@ export async function POST(request: NextRequest) {
     /**
      * Check if a string looks like a valid wadah name (not a code/number).
      * Valid: "Jaring Apung Tawar", "Kolam Air Tenang", "Tambak Intensif"
-     * Invalid: "61" (Kode Provinsi), "6102" (Kode Kab/Kota), ""
+     * Invalid: "61" (Kode Provinsi), "6102" (Kode Kab/Kota)
+     * NOTE: empty string ("") is handled separately — see parsePopulasiSheet.
      */
     function isValidWadahName(s: string): boolean {
       if (!s || s.toUpperCase() === 'TOTAL') return false;
@@ -407,22 +408,52 @@ export async function POST(request: NextRequest) {
       const popData: unknown[][] = popRaw.slice(popDataStart);
       let parsed = 0;
       const seenWadah = new Set<string>();
+      // Counter for rows where Jenis Wadah is empty — used to generate a fallback name.
+      let emptyWadahCounter = 0;
 
       for (const row of popData) {
         if (!row || row.length === 0) continue;
 
-        const jenisWadah = toStr(row[popColMap.jenisWadah]);
-        // STRICT VALIDATION: skip rows where jenisWadah is empty, TOTAL, or looks like a numeric code
-        if (!isValidWadahName(jenisWadah)) continue;
-        // Deduplicate by wadah name
-        if (seenWadah.has(jenisWadah.toLowerCase())) continue;
+        const rawWadah = toStr(row[popColMap.jenisWadah]);
 
+        // Read numeric values first — we need them to decide whether to keep the row.
         const rtp = popColMap.jumlahRtp !== undefined ? toInt(row[popColMap.jumlahRtp]) : 0;
         const pembudidaya = popColMap.jumlahPembudidaya !== undefined ? toInt(row[popColMap.jumlahPembudidaya]) : 0;
         const luasLahan = popColMap.luasLahan !== undefined ? toNumber(row[popColMap.luasLahan]) : 0;
 
+        // Skip TOTAL rows explicitly (even though they have numbers, they are aggregates)
+        if (rawWadah.toUpperCase() === 'TOTAL') continue;
+
+        // Decide on the final jenisWadah value + dedup key
+        let jenisWadah: string;
+        let dedupKey: string;
+
+        if (isValidWadahName(rawWadah)) {
+          // Real wadah name like "Jaring Apung Tawar"
+          jenisWadah = rawWadah;
+          dedupKey = rawWadah.toLowerCase();
+        } else if (rawWadah === '' || !/[a-zA-Z]/.test(rawWadah)) {
+          // Empty wadah OR numeric code (e.g., "61", "6102")
+          // Only accept if the row has at least one real numeric value
+          if (rtp === 0 && pembudidaya === 0 && luasLahan === 0) {
+            // No wadah name AND no numeric data → skip (truly empty row)
+            continue;
+          }
+          // Generate a fallback name based on a counter so each empty-wadah row
+          // gets a unique identity (and unique dedup key).
+          emptyWadahCounter++;
+          jenisWadah = `Wadah ${emptyWadahCounter}`;
+          dedupKey = `__empty_${emptyWadahCounter}`;
+        } else {
+          // Some other non-wadah string → skip
+          continue;
+        }
+
+        // Deduplicate by wadah name (or fallback key)
+        if (seenWadah.has(dedupKey)) continue;
+
         populasiRows.push({ jenisWadah, jumlahRtp: rtp, jumlahPembudidaya: pembudidaya, luasLahan });
-        seenWadah.add(jenisWadah.toLowerCase());
+        seenWadah.add(dedupKey);
         parsed++;
       }
       return parsed;

@@ -665,3 +665,39 @@ Stage Summary:
 - All summary cards now show correct non-zero data
 - User can re-upload their edited Excel (with 347) after Vercel deploy completes — strict parser
   will correctly read their edited values without producing garbage
+
+---
+Task ID: 12
+Agent: main (continued session)
+Task: User re-uploaded Excel with modified populasi data (pembudidaya 374→347, Jenis Wadah column cleared). Dashboard showed pembudidaya=0 and luas lahan=0 again. Investigate and fix.
+
+Work Log:
+- Inspected uploaded Excel `upload/Pembesaran_Mempawah (1).xlsx` Data Populasi sheet:
+  - Headers at row 2: ["Provinsi","Kab/Kota","Jenis Wadah","Jumlah RTP (Unit)","Jumlah Pembudidaya (Orang)","Luas Lahan yang dimiliki (m^2)","Catatan"]
+  - TOTAL row at row 4: RTP=171, Pembudidaya=347, LuasLahan=225000
+  - Data rows 5-7: RTP/Pembudidaya/LuasLahan present BUT Jenis Wadah column is EMPTY (null) for all 3 rows
+- Root cause: The previous parser's `isValidWadahName('')` returned false, so ALL 3 populasi rows were skipped → pembudidaya=0, luasLahan=0 in dashboard
+- Checked Turso DB: latest upload (cmqy5i5do...) had 0 populasi rows (confirmed)
+- Fixed parser in `src/app/api/analyze/upload/route.ts`:
+  - Modified `parsePopulasiSheet()` to handle empty/numeric Jenis Wadah values
+  - When rawWadah is empty OR a numeric code, but the row has at least one valid numeric value (rtp/pembudidaya/luasLahan), accept the row with a generated fallback name "Wadah {counter}"
+  - Dedup key uses the fallback counter so each empty-wadah row gets a unique identity
+  - TOTAL rows are still explicitly skipped
+- Synced the same fix to `scripts/reparse-analyze.ts` (it had the OLD buggy parser logic)
+- Tested new parser logic standalone against the uploaded Excel → produces 3 rows with SUM: rtp=171, pembudidaya=347, luasLahan=225000 ✓
+- Ran `bun run scripts/reparse-analyze.ts`:
+  - Deleted old upload (cmqy5i5do...)
+  - Created new upload (cmqy5qkyr...) with 66 analyze rows + 3 populasi rows
+  - Verified: RTP=171, Pembudidaya=347, LuasLahan=225000
+- Verified dashboard API `GET /api/analyze/dashboard?year=2026` returns:
+  - totalRtp: 171, totalPembudidaya: 347, totalLuasLahan: 225000, totalProduksiTon: 1815.29 ✓
+
+Stage Summary:
+- Root cause: user's modified Excel has EMPTY "Jenis Wadah" column in Data Populasi sheet (user cleared the wadah names). Old parser rejected these rows entirely.
+- Fix: Parser now accepts rows with empty/numeric wadah names IF they have valid numeric data, and generates fallback names "Wadah 1", "Wadah 2", "Wadah 3" with unique dedup keys.
+- Turso DB now has correct data: 66 rows + 3 populasi (pembudidaya=347, luasLahan=225000).
+- Dashboard API confirmed returning correct values.
+- Files modified:
+  - `src/app/api/analyze/upload/route.ts` (parser fix for empty wadah names)
+  - `scripts/reparse-analyze.ts` (synced same fix)
+- Next: verify UI via Agent Browser, and ensure Vercel production deploys the latest commit so future UI uploads also work correctly.

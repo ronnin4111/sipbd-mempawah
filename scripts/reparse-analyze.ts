@@ -137,32 +137,85 @@ async function main() {
   const totalTon = analyzeRows.reduce((s, r) => s + r.produksiTon, 0);
   console.log('Total produksi (Ton):', Math.round(totalTon * 100) / 100);
 
-  // --- Parse Data Populasi sheet (header-based) ---
+  // --- Parse Data Populasi sheet (header-based, with empty-wadah fallback) ---
   const popName = wb.SheetNames.find((n) => n.toLowerCase().includes('data populasi'));
   const populasiRows: any[] = [];
-  if (popName) {
-    const popRaw: unknown[][] = XLSX.utils.sheet_to_json(wb.Sheets[popName], { header: 1 });
-    const popHeaderIdx = findHeaderRow(popRaw, ['jenis wadah', 'rtp'], 10);
-    console.log('Populasi header row idx:', popHeaderIdx);
-    const popColMap = popHeaderIdx >= 0
-      ? buildColumnMap(popRaw[popHeaderIdx], detectPopulasiField)
-      : { jenisWadah: 2, jumlahRtp: 3, jumlahPembudidaya: 4, luasLahan: 5 };
-    console.log('Populasi col map:', popColMap);
-    const popStart = popHeaderIdx >= 0 ? popHeaderIdx + 1 : 5;
-    for (const row of popRaw.slice(popStart)) {
+
+  function isValidWadahName(s: string): boolean {
+    if (!s || s.toUpperCase() === 'TOTAL') return false;
+    if (s.length < 3) return false;
+    if (!/[a-zA-Z]/.test(s)) return false;
+    if (/^[\d.\-/\s]+$/.test(s)) return false;
+    return true;
+  }
+
+  function parsePopulasiSheet(sheetName: string): number {
+    const popWs = wb.Sheets[sheetName];
+    if (!popWs) return 0;
+    const popRaw: unknown[][] = XLSX.utils.sheet_to_json(popWs, { header: 1 });
+    const popHeaderIdx = findHeaderRow(popRaw, ['jenis wadah'], 10);
+    if (popHeaderIdx < 0) return 0;
+    const headerNorms = (popRaw[popHeaderIdx] || []).map((c) => normalizeHeader(c));
+    const hasRtp = headerNorms.some((n) => n.includes('rtp'));
+    const hasPem = headerNorms.some((n) => n.includes('pembudidaya'));
+    if (!hasRtp && !hasPem) return 0;
+    const popColMap = buildColumnMap(popRaw[popHeaderIdx], detectPopulasiField);
+    if (popColMap.jenisWadah === undefined) return 0;
+    console.log(`[populasi] sheet="${sheetName}" headerIdx=${popHeaderIdx} colMap=`, popColMap);
+
+    const seenWadah = new Set<string>();
+    let emptyWadahCounter = 0;
+    let parsed = 0;
+    for (const row of popRaw.slice(popHeaderIdx + 1)) {
       if (!row || row.length === 0) continue;
-      const jenisWadah = toStr(row[popColMap.jenisWadah ?? 2]);
-      if (!jenisWadah || jenisWadah.toUpperCase() === 'TOTAL') continue;
-      populasiRows.push({
-        jenisWadah,
-        jumlahRtp: toInt(row[popColMap.jumlahRtp ?? 3]),
-        jumlahPembudidaya: toInt(row[popColMap.jumlahPembudidaya ?? 4]),
-        luasLahan: toNumber(row[popColMap.luasLahan ?? 5]),
-      });
+      const rawWadah = toStr(row[popColMap.jenisWadah]);
+      const rtp = popColMap.jumlahRtp !== undefined ? toInt(row[popColMap.jumlahRtp]) : 0;
+      const pembudidaya = popColMap.jumlahPembudidaya !== undefined ? toInt(row[popColMap.jumlahPembudidaya]) : 0;
+      const luasLahan = popColMap.luasLahan !== undefined ? toNumber(row[popColMap.luasLahan]) : 0;
+      if (rawWadah.toUpperCase() === 'TOTAL') continue;
+
+      let jenisWadah: string;
+      let dedupKey: string;
+      if (isValidWadahName(rawWadah)) {
+        jenisWadah = rawWadah;
+        dedupKey = rawWadah.toLowerCase();
+      } else if (rawWadah === '' || !/[a-zA-Z]/.test(rawWadah)) {
+        if (rtp === 0 && pembudidaya === 0 && luasLahan === 0) continue;
+        emptyWadahCounter++;
+        jenisWadah = `Wadah ${emptyWadahCounter}`;
+        dedupKey = `__empty_${emptyWadahCounter}`;
+      } else {
+        continue;
+      }
+      if (seenWadah.has(dedupKey)) continue;
+      populasiRows.push({ jenisWadah, jumlahRtp: rtp, jumlahPembudidaya: pembudidaya, luasLahan });
+      seenWadah.add(dedupKey);
+      parsed++;
+    }
+    return parsed;
+  }
+
+  if (popName) {
+    parsePopulasiSheet(popName);
+  }
+  // Fallback: scan other sheets if primary yielded 0
+  if (populasiRows.length === 0) {
+    for (const sn of wb.SheetNames) {
+      if (populasiRows.length > 0) break;
+      const lower = sn.toLowerCase();
+      if (lower === 'database' || lower === 'master data' || lower.startsWith('rekap')) continue;
+      if (/^\d{1,2}$/.test(sn.trim())) continue;
+      if (lower.includes('data populasi')) continue;
+      const c = parsePopulasiSheet(sn);
+      if (c > 0) console.log(`[fallback] found populasi in sheet "${sn}" (${c} rows)`);
     }
   }
   console.log('Parsed populasi rows:', populasiRows.length);
-  console.log('Populasi sample:', populasiRows);
+  console.log('Populasi sample:', JSON.stringify(populasiRows, null, 2));
+  const sumRtp = populasiRows.reduce((s, r) => s + r.jumlahRtp, 0);
+  const sumPem = populasiRows.reduce((s, r) => s + r.jumlahPembudidaya, 0);
+  const sumLuas = populasiRows.reduce((s, r) => s + r.luasLahan, 0);
+  console.log(`SUM: rtp=${sumRtp}, pembudidaya=${sumPem}, luasLahan=${sumLuas}`);
 
   // --- Replace data in Turso ---
   console.log('\n--- Replacing data in Turso ---');
