@@ -363,7 +363,6 @@ import {
   TrendingUp,
   DollarSign,
   FileSpreadsheet,
-  ExternalLink,
   CreditCard,
   Lock,
   Share2,
@@ -421,7 +420,6 @@ export const NAV_ITEMS: NavItem[] = [
   // Group: Visualisasi
   { id: 'peta-lokasi',       label: 'Peta Lokasi',       labelLong: 'Peta Lokasi',          icon: Map,             description: 'Sebaran lokasi budidaya',           adminOnly: false, group: 'visualisasi' },
   { id: 'tren-laporan',      label: 'Tren & Laporan',    labelLong: 'Tren & Laporan',       icon: TrendingUp,      description: 'Analisis tren produksi',            adminOnly: false, group: 'visualisasi' },
-  { id: 'tren-v2',           label: 'Tren V2',           labelLong: 'Tren V2 (Triwulan)',   icon: ExternalLink,    description: 'Data tren versi triwulan',          adminOnly: false, group: 'visualisasi' },
 
   // Group: Informasi
   { id: 'harga-komoditas',   label: 'Harga Komoditas',   labelLong: 'Harga Komoditas',      icon: DollarSign,      description: 'Daftar harga ikan',                 adminOnly: false, group: 'informasi' },
