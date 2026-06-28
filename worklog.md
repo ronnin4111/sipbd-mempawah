@@ -341,3 +341,21 @@ Stage Summary:
 - Analisis S1 page is now accessible to all users (no admin login required)
 - Single-line change in src/lib/constants.ts: adminOnly: true → adminOnly: false
 - Page renders correctly with year/semester filters and empty state placeholder
+
+---
+Task ID: 4
+Agent: Main Agent
+Task: Make Analisis S1 the default landing page when app first opens
+
+Work Log:
+- User requested: "jadikan ini sebagai halaman utama / default saat pertama kali aplikasi di buka"
+- Located default activeSection in src/store/filter-store.ts line 41
+- Changed `activeSection: 'dashboard'` → `activeSection: 'disagregasi-analisis'`
+- Verified no localStorage persistence in filter-store (so default is always used on fresh page load)
+- Tested with Agent Browser: opening http://localhost:3000 now shows "Analisis Data Disagregasi" as the main heading
+- Pushed as commit 156bfad
+
+Stage Summary:
+- Analisis S1 is now the default landing page
+- Single-line change in src/store/filter-store.ts: activeSection default value changed
+- Page loads with year/semester selector and empty state placeholder
