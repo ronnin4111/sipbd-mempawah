@@ -38,7 +38,7 @@ const initialState: FilterState = {
   containerType: [],
   businessType: [],
   search: '',
-  activeSection: 'dashboard',
+  activeSection: 'disagregasi-analisis',
   isAdmin: false,
   kecamatanChartSegment: 'produksi',
 };
