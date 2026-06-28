@@ -441,7 +441,7 @@ export default function Home() {
           <div className="space-y-6">
             <HeroBanner />
             <AnalyzeDashboard />
-            <SmartNarrator />
+            <SmartNarrator source="analyze-s1" />
           </div>
         );
       case 'admin-login':

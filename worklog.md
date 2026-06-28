@@ -400,3 +400,44 @@ Stage Summary:
 - SmartNarrator AI now appears on Analisis S1 page
 - Layout: HeroBanner → AnalyzeDashboard → SmartNarrator
 - All 4 narration types work (Ringkasan, Tren, Perbandingan, Target)
+
+---
+Task ID: 7
+Agent: Main Agent
+Task: Verify SmartNarrator on Analisis S1 page reads from Turso (AnalyzeRow + AnalyzePopulasi) instead of FishFarm stats
+
+Work Log:
+- Read current state of src/components/ai/smart-narrator.tsx, src/app/api/ai/narrate/route.ts, src/app/page.tsx
+- Confirmed implementation was already in place from previous session:
+  - SmartNarrator component has `source?: 'fishfarm' | 'analyze-s1'` prop
+  - When source='analyze-s1': skips useFishFarmStats(), sends {source, type, year, semester} to API
+  - 4 S1-specific narration buttons: Ringkasan, Analisis Tren, Perbandingan Wadah, Efisiensi Produksi
+  - UI badge "S1 · Turso" with green accent
+  - page.tsx line 444: <SmartNarrator source="analyze-s1" /> on Analisis S1 page
+  - API /api/ai/narrate has buildAnalyzeS1Context() that queries Turso:
+    * db.analyzeUpload.findFirst() → latest upload (filtered by year)
+    * db.analyzeRow.findMany() → all rows for that upload (filtered by semester)
+    * Aggregates: totalProduksiTon, totalNilaiRp, totalPakanKg, totalBenih, totalLuasLahan
+    * Per komoditas (weighted FCR/SR/Size/Harga), per wadah, per bulan, per triwulan
+    * Populasi data (RTP, Pembudidaya, Luas Lahan per wadah)
+    * 4 S1-specific prompts with anti-hallucination rules
+    * Error handling for NO_ANALYZE_DATA case
+- Ran lint: 18 errors but ALL in pre-existing CommonJS files (docs/, scripts/, workflows/, run-dev.js, server-wrapper.js) — NONE in modified files
+- Dev server log confirmed: POST /api/ai/narrate 200, Z.AI SUCCESS
+- Tested API directly with curl: returned perfect narration with exact Turso numbers (1.815,29 Ton, Rp 72,92 Miliar, Nila 941,97 Ton, etc.)
+- Tested end-to-end with Agent Browser:
+  * Opened http://localhost:3000/ (default landing = Analisis S1 page)
+  * Clicked "S1 Jan–Jun" filter
+  * Clicked "Ringkasan" (S1 Turso) button
+  * AI generated narration in 6.5s (Z.AI, glm-4-plus)
+  * Narration displayed with "Salin narasi" button
+  * All numbers match Turso data exactly
+  * Subtitle: "Narasi dari data Excel S1 di Turso · 2026 · Semester 1"
+
+Stage Summary:
+- SmartNarrator on Analisis S1 page now reads DIRECTLY from Turso (AnalyzeUpload → AnalyzeRow + AnalyzePopulasi)
+- AI narration is consistent with charts shown above it (same data source)
+- 4 narration types available: Ringkasan, Analisis Tren, Perbandingan Wadah, Efisiensi Produksi (FCR/SR/Size)
+- Anti-hallucination rules ensure AI only uses actual Turso data
+- Badge "S1 · Turso" clearly indicates data source to users
+- Verified end-to-end via Agent Browser: narration generates successfully with exact Turso numbers

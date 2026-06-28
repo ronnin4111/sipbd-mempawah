@@ -7,31 +7,54 @@ import { useFilterStore } from '@/store/filter-store';
 import { motion, AnimatePresence } from 'framer-motion';
 
 type NarrationType = 'summary' | 'trend' | 'kecamatan' | 'target';
+type NarrationSource = 'fishfarm' | 'analyze-s1';
 
-const NARRATION_OPTIONS: { type: NarrationType; label: string; icon: React.ElementType; desc: string }[] = [
+// Options for FishFarm (global) source
+const NARRATION_OPTIONS_FISHFARM: { type: NarrationType; label: string; icon: React.ElementType; desc: string }[] = [
   { type: 'summary', label: 'Ringkasan', icon: FileText, desc: 'Narasi ringkasan produksi' },
   { type: 'trend', label: 'Analisis Tren', icon: TrendingUp, desc: 'Tren 5 tahun terakhir' },
   { type: 'kecamatan', label: 'Perbandingan Wilayah', icon: MapPin, desc: 'Perbandingan antar kecamatan' },
   { type: 'target', label: 'Pencapaian Target', icon: Target, desc: 'Target vs realisasi' },
 ];
 
-export function SmartNarrator() {
+// Options for Analyze S1 (Excel upload) source
+const NARRATION_OPTIONS_ANALYZE_S1: { type: NarrationType; label: string; icon: React.ElementType; desc: string }[] = [
+  { type: 'summary', label: 'Ringkasan', icon: FileText, desc: 'Ringkasan produksi S1 (Turso)' },
+  { type: 'trend', label: 'Analisis Tren', icon: TrendingUp, desc: 'Tren bulanan Jan–Jun' },
+  { type: 'kecamatan', label: 'Perbandingan Wadah', icon: MapPin, desc: 'Perbandingan antar wadah' },
+  { type: 'target', label: 'Efisiensi Produksi', icon: Target, desc: 'Analisis FCR, SR, Size' },
+];
+
+interface SmartNarratorProps {
+  source?: NarrationSource;
+}
+
+export function SmartNarrator({ source = 'fishfarm' }: SmartNarratorProps) {
+  const isAnalyzeS1 = source === 'analyze-s1';
   const [narrative, setNarrative] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [activeType, setActiveType] = useState<NarrationType | null>(null);
   const [copied, setCopied] = useState(false);
   const [errorInfo, setErrorInfo] = useState<{ error: string; detail: string } | null>(null);
-  const { data: stats } = useFishFarmStats();
+  // Skip FishFarm stats fetch in analyze-s1 mode (data comes from Turso Analyze tables instead)
+  const { data: stats } = useFishFarmStats(!isAnalyzeS1);
   const years = useFilterStore((s) => s.years);
   const kecamatan = useFilterStore((s) => s.kecamatan);
   const desa = useFilterStore((s) => s.desa);
   const fishType = useFilterStore((s) => s.fishType);
   const containerType = useFilterStore((s) => s.containerType);
   const businessType = useFilterStore((s) => s.businessType);
+  // Shared filter state for analyze-s1 (synced with AnalyzeDashboard)
+  const analyzeYear = useFilterStore((s) => s.analyzeYear);
+  const analyzeSemester = useFilterStore((s) => s.analyzeSemester);
+
+  const NARRATION_OPTIONS = isAnalyzeS1 ? NARRATION_OPTIONS_ANALYZE_S1 : NARRATION_OPTIONS_FISHFARM;
 
   const generateNarration = async (type: NarrationType) => {
     if (isLoading) return;
-    if (!stats) {
+
+    // For analyze-s1 source, we don't need stats to be loaded (API fetches from Turso directly)
+    if (!isAnalyzeS1 && !stats) {
       setErrorInfo({
         error: 'Data statistik belum tersedia',
         detail: 'Tunggu hingga data selesai dimuat, lalu coba lagi.',
@@ -45,36 +68,50 @@ export function SmartNarrator() {
     setErrorInfo(null);
 
     try {
-      const statsContext = {
-        periodLabel: stats.periodLabel,
-        currentYear: stats.currentYear,
-        pembesaranProduction: stats.pembesaranProduction,
-        pembenihanProduction: stats.pembenihanProduction,
-        totalRtp: stats.totalRtp,
-        totalFarmer: stats.totalFarmer,
-        totalGroup: stats.totalGroup,
-        totalKusuka: stats.totalKusuka,
-        productionByFishType: stats.productionByFishType,
-        productionByKecamatan: stats.productionByKecamatan,
-        productionByKecamatanDetail: stats.productionByKecamatanDetail,
-        productionByFishTypeDetail: stats.productionByFishTypeDetail,
-        trend5Year: stats.trend5Year,
-        targetVsRealisasiPembesaran: stats.targetVsRealisasiPembesaran,
-        targetVsRealisasiPembenihan: stats.targetVsRealisasiPembenihan,
-        activeFilters: {
-          years: years.length > 0 ? years : 'Semua tahun',
-          kecamatan: kecamatan.length > 0 ? kecamatan : 'Semua kecamatan',
-          desa: desa.length > 0 ? desa : 'Semua desa',
-          fishType: fishType.length > 0 ? fishType : 'Semua jenis ikan',
-          containerType: containerType.length > 0 ? containerType : 'Semua wadah',
-          businessType: businessType.length > 0 ? businessType : 'Semua jenis usaha',
-        },
-      };
+      let requestBody: Record<string, unknown>;
+
+      if (isAnalyzeS1) {
+        // Branch: read from AnalyzeUpload/AnalyzeRow/AnalyzePopulasi in Turso
+        requestBody = {
+          source: 'analyze-s1',
+          type,
+          year: analyzeYear,
+          semester: analyzeSemester ?? undefined,
+        };
+      } else {
+        // Branch: existing FishFarm stats
+        const statsContext = {
+          periodLabel: stats!.periodLabel,
+          currentYear: stats!.currentYear,
+          pembesaranProduction: stats!.pembesaranProduction,
+          pembenihanProduction: stats!.pembenihanProduction,
+          totalRtp: stats!.totalRtp,
+          totalFarmer: stats!.totalFarmer,
+          totalGroup: stats!.totalGroup,
+          totalKusuka: stats!.totalKusuka,
+          productionByFishType: stats!.productionByFishType,
+          productionByKecamatan: stats!.productionByKecamatan,
+          productionByKecamatanDetail: stats!.productionByKecamatanDetail,
+          productionByFishTypeDetail: stats!.productionByFishTypeDetail,
+          trend5Year: stats!.trend5Year,
+          targetVsRealisasiPembesaran: stats!.targetVsRealisasiPembesaran,
+          targetVsRealisasiPembenihan: stats!.targetVsRealisasiPembenihan,
+          activeFilters: {
+            years: years.length > 0 ? years : 'Semua tahun',
+            kecamatan: kecamatan.length > 0 ? kecamatan : 'Semua kecamatan',
+            desa: desa.length > 0 ? desa : 'Semua desa',
+            fishType: fishType.length > 0 ? fishType : 'Semua jenis ikan',
+            containerType: containerType.length > 0 ? containerType : 'Semua wadah',
+            businessType: businessType.length > 0 ? businessType : 'Semua jenis usaha',
+          },
+        };
+        requestBody = { statsContext, type };
+      }
 
       const response = await fetch('/api/ai/narrate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ statsContext, type }),
+        body: JSON.stringify(requestBody),
       });
 
       const data = await response.json();
@@ -131,12 +168,27 @@ export function SmartNarrator() {
         >
           <Sparkles className="h-3.5 w-3.5 text-white" />
         </div>
-        <div>
-          <div className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold flex items-center gap-2" style={{ color: 'var(--foreground)' }}>
             Narasi Cerdas AI
+            {isAnalyzeS1 && (
+              <span
+                className="text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wide"
+                style={{
+                  background: 'rgba(16, 185, 129, 0.15)',
+                  color: '#10B981',
+                  border: '1px solid rgba(16, 185, 129, 0.3)',
+                }}
+                title="Sumber data: Excel Analisis S1 yang diupload ke Turso"
+              >
+                S1 · Turso
+              </span>
+            )}
           </div>
           <div className="text-[10px]" style={{ color: 'var(--muted-foreground)' }}>
-            Auto-generate narasi laporan dari data aktif
+            {isAnalyzeS1
+              ? `Narasi dari data Excel S1 di Turso${analyzeYear ? ` · ${analyzeYear}` : ''}${analyzeSemester ? ` · Semester ${analyzeSemester}` : ''}`
+              : 'Auto-generate narasi laporan dari data aktif'}
           </div>
         </div>
       </div>

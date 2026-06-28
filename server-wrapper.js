@@ -5,7 +5,7 @@ function startServer() {
   console.log('[Wrapper] Starting server...');
   const env = { 
     ...process.env,
-    NODE_OPTIONS: '--max-old-space-size=768'
+    NODE_OPTIONS: '--max-old-space-size=1536'
   };
   const child = spawn('node', ['node_modules/.bin/next', 'dev', '-p', '3000'], {
     cwd: '/home/z/my-project',

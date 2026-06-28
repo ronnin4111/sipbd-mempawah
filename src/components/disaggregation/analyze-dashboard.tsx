@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useMounted } from '@/hooks/use-mounted';
+import { useFilterStore } from '@/store/filter-store';
 
 // ─── Colors ──────────────────────────────────────────────────────────────
 const CHART_COLORS = ['#10B981', '#06B6D4', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6'];
@@ -216,8 +217,11 @@ export function AnalyzeDashboard() {
   const isDark = mounted ? theme === 'dark' : true;
 
   const currentYear = new Date().getFullYear();
-  const [year, setYear] = useState(currentYear);
-  const [semester, setSemester] = useState<number | null>(null); // null = all
+  // Use shared store so SmartNarrator can access same filters
+  const year = useFilterStore((s) => s.analyzeYear) || currentYear;
+  const semester = useFilterStore((s) => s.analyzeSemester);
+  const setYear = useFilterStore((s) => s.setAnalyzeYear);
+  const setSemester = useFilterStore((s) => s.setAnalyzeSemester);
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');

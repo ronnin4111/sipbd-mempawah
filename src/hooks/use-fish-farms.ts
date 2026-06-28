@@ -139,7 +139,7 @@ export function useFishFarms(page: number = 1, pageSize: number = 20) {
   });
 }
 
-export function useFishFarmStats() {
+export function useFishFarmStats(enabled: boolean = true) {
   const years = useFilterStore((s) => s.years);
   const kecamatan = useFilterStore((s) => s.kecamatan);
   const desa = useFilterStore((s) => s.desa);
@@ -157,6 +157,7 @@ export function useFishFarmStats() {
       if (!res.ok) throw new Error('Failed to fetch stats');
       return res.json();
     },
+    enabled,
   });
 }
 

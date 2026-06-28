@@ -759,7 +759,9 @@ export function DashboardCharts() {
 // === PDF-OPTIMIZED CHARTS ===
 
 export function PdfDashboardCharts() {
-  const { data: stats } = useFishFarmStats();
+  // Only fetch stats when on dashboard section (avoid crashing Turso on other pages)
+  const activeSection = useFilterStore((s) => s.activeSection);
+  const { data: stats } = useFishFarmStats(activeSection === 'dashboard');
   const [trendViewBy, setTrendViewBy] = useState<TrendViewBy>('jenis-usaha');
   const [produksiViewBy, setProduksiViewBy] = useState<ProduksiViewBy>('jenis-ikan');
   const [produksiChartType, setProduksiChartType] = useState<ChartType>('bar');

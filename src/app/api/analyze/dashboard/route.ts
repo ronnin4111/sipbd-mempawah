@@ -70,28 +70,35 @@ export async function GET(request: NextRequest) {
 
     // ============================================================
     // 1. Gather available years & semesters from both sources
+    // Using findMany without distinct (Turso adapter workaround)
     // ============================================================
-    const [uploadYears, disaggYears] = await Promise.all([
+    const [uploadYearsAll, disaggYearsAll] = await Promise.all([
       db.analyzeUpload.findMany({
         select: { year: true, semester: true },
-        distinct: ['year', 'semester'],
         orderBy: { year: 'asc' },
-      }),
+      }).catch(() => []),
       db.disaggregationBatch.findMany({
         select: { year: true, triwulan: true },
-        distinct: ['year', 'triwulan'],
         orderBy: { year: 'asc' },
-      }),
+      }).catch(() => []),
     ]);
 
+    // Dedupe in JS (avoid distinct query that crashes Turso adapter)
     const yearSet = new Set<number>();
     const semesterSet = new Set<number>();
-
-    for (const u of uploadYears) {
+    const seenUpload = new Set<string>();
+    for (const u of uploadYearsAll) {
+      const key = `${u.year}-${u.semester}`;
+      if (seenUpload.has(key)) continue;
+      seenUpload.add(key);
       yearSet.add(u.year);
       if (u.semester && u.semester > 0) semesterSet.add(u.semester);
     }
-    for (const d of disaggYears) {
+    const seenDisagg = new Set<string>();
+    for (const d of disaggYearsAll) {
+      const key = `${d.year}-${d.triwulan}`;
+      if (seenDisagg.has(key)) continue;
+      seenDisagg.add(key);
       yearSet.add(d.year);
       const sem = triwulanToSemester(d.triwulan);
       semesterSet.add(sem);
