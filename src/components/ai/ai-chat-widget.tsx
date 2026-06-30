@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageSquare, X, Send, Bot, User, Sparkles, Trash2, Loader2, Settings, Key, CheckCircle2, AlertCircle, Eye, EyeOff, Wifi, WifiOff } from 'lucide-react';
 import { useFilterStore } from '@/store/filter-store';
-import { useFishFarmStats } from '@/hooks/use-fish-farms';
+import { useQueryClient } from '@tanstack/react-query';
+import type { StatsResponse } from '@/hooks/use-fish-farms';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -36,6 +37,99 @@ const QUICK_PROMPTS = [
   '🧠 Hapus semua memori AI',
 ];
 
+// [H-10] `formatContent` has no closure deps on component state, so it lives
+// at module scope and is stable across renders (no per-render re-creation).
+function formatContent(content: string) {
+  // Split by newlines and handle bullet points
+  return content.split('\n').map((line, i) => {
+    // Bold text
+    const formattedLine = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    // Bullet points
+    if (line.trimStart().startsWith('- ') || line.trimStart().startsWith('• ') || line.trimStart().startsWith('* ')) {
+      return (
+        <div key={i} className="flex gap-1.5 ml-1">
+          <span className="shrink-0">•</span>
+          <span dangerouslySetInnerHTML={{ __html: formattedLine.replace(/^[\s]*[-•*]\s*/, '') }} />
+        </div>
+      );
+    }
+    // Numbered lists
+    const numMatch = line.trimStart().match(/^(\d+)\.\s/);
+    if (numMatch) {
+      return (
+        <div key={i} className="flex gap-1.5 ml-1">
+          <span className="shrink-0">{numMatch[1]}.</span>
+          <span dangerouslySetInnerHTML={{ __html: formattedLine.replace(/^\s*\d+\.\s/, '') }} />
+        </div>
+      );
+    }
+    // Empty line = paragraph break
+    if (line.trim() === '') {
+      return <div key={i} className="h-2" />;
+    }
+    return <div key={i} dangerouslySetInnerHTML={{ __html: formattedLine }} />;
+  });
+}
+
+// [H-10] Message list is extracted to a memoized component so typing in the
+// input box (which re-renders AIChatWidget) does NOT re-render the entire
+// chat history. The `messages` array reference only changes when a new
+// message is added/removed — which is exactly when we want a re-render.
+// Stable keys: timestamp is unique per message; index fallback is safe
+// because messages are append-only.
+const MessageList = memo(function MessageList({ messages }: { messages: Message[] }) {
+  return (
+    <>
+      {messages.map((msg, i) => {
+        const key = `${msg.role}-${msg.timestamp.getTime()}-${i}`;
+        return (
+          <div
+            key={key}
+            className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+          >
+            {msg.role === 'assistant' && (
+              <div
+                className="w-6 h-6 rounded-full shrink-0 flex items-center justify-center mt-1"
+                style={{ background: 'linear-gradient(135deg, #06B6D4, #0891B2)' }}
+              >
+                <Bot className="h-3 w-3 text-white" />
+              </div>
+            )}
+            <div
+              className={`max-w-[80%] rounded-2xl px-3 py-2 text-xs leading-relaxed ${
+                msg.role === 'user'
+                  ? 'text-white rounded-br-md'
+                  : 'rounded-bl-md'
+              }`}
+              style={{
+                background:
+                  msg.role === 'user'
+                    ? 'linear-gradient(135deg, #06B6D4, #0891B2)'
+                    : 'var(--muted)',
+                color: msg.role === 'user' ? 'white' : 'var(--foreground)',
+              }}
+            >
+              {msg.role === 'user' ? (
+                <div className="whitespace-pre-wrap">{msg.content}</div>
+              ) : (
+                <div className="space-y-0.5">{formatContent(msg.content)}</div>
+              )}
+            </div>
+            {msg.role === 'user' && (
+              <div
+                className="w-6 h-6 rounded-full shrink-0 flex items-center justify-center mt-1"
+                style={{ background: 'var(--muted)' }}
+              >
+                <User className="h-3 w-3" style={{ color: 'var(--muted-foreground)' }} />
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </>
+  );
+});
+
 export function AIChatWidget() {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -65,16 +159,14 @@ export function AIChatWidget() {
     return newId;
   });
 
-  // Get current filter state for context
-  const years = useFilterStore((s) => s.years);
-  const kecamatan = useFilterStore((s) => s.kecamatan);
-  const desa = useFilterStore((s) => s.desa);
-  const fishType = useFilterStore((s) => s.fishType);
-  const containerType = useFilterStore((s) => s.containerType);
-  const businessType = useFilterStore((s) => s.businessType);
-
-  // Get stats data for AI context
-  const { data: stats } = useFishFarmStats();
+  // [H-9] Removed the 6 per-slice `useFilterStore((s) => s.X)` subscriptions
+  // and the `useFishFarmStats()` subscription. Those values were ONLY used
+  // inside the `sendMessage` callback, but each subscription caused
+  // AIChatWidget to re-render on every filter change and every stats
+  // refetch — which in turn re-rendered the entire chat history.
+  // We now read filters via `useFilterStore.getState()` and stats via
+  // `queryClient.getQueryData(...)` INSIDE the callback (lazy read).
+  const queryClient = useQueryClient();
 
   // Fetch AI config when panel opens
   const fetchAIConfig = useCallback(async () => {
@@ -188,6 +280,30 @@ export function AIChatWidget() {
         role: m.role,
         content: m.content,
       }));
+
+      // [H-9] Lazy-read filter state + stats cache inside the callback.
+      // Reading here (instead of subscribing at the top of the component)
+      // means filter changes and stats refetches don't trigger a re-render
+      // of the chat widget — we only consult the latest values at the
+      // moment the user actually sends a message.
+      const filterState = useFilterStore.getState();
+      const years = filterState.years;
+      const kecamatan = filterState.kecamatan;
+      const desa = filterState.desa;
+      const fishType = filterState.fishType;
+      const containerType = filterState.containerType;
+      const businessType = filterState.businessType;
+      const stats = queryClient.getQueryData<StatsResponse>([
+        'fish-farms-stats',
+        years,
+        kecamatan,
+        desa,
+        filterState.groupName,
+        fishType,
+        containerType,
+        businessType,
+        filterState.search,
+      ]);
 
       // Build stats context with filter info
       const statsContext = stats
@@ -306,38 +422,10 @@ export function AIChatWidget() {
   // Check if any AI provider is available
   const isAIConfigured = aiConfig?.zai?.available || aiConfig?.gemini?.configured || aiConfig?.groq?.configured;
 
-  // Format message content with simple markdown-like rendering
-  const formatContent = (content: string) => {
-    // Split by newlines and handle bullet points
-    return content.split('\n').map((line, i) => {
-      // Bold text
-      const formattedLine = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-      // Bullet points
-      if (line.trimStart().startsWith('- ') || line.trimStart().startsWith('• ') || line.trimStart().startsWith('* ')) {
-        return (
-          <div key={i} className="flex gap-1.5 ml-1">
-            <span className="shrink-0">•</span>
-            <span dangerouslySetInnerHTML={{ __html: formattedLine.replace(/^[\s]*[-•*]\s*/, '') }} />
-          </div>
-        );
-      }
-      // Numbered lists
-      const numMatch = line.trimStart().match(/^(\d+)\.\s/);
-      if (numMatch) {
-        return (
-          <div key={i} className="flex gap-1.5 ml-1">
-            <span className="shrink-0">{numMatch[1]}.</span>
-            <span dangerouslySetInnerHTML={{ __html: formattedLine.replace(/^\s*\d+\.\s/, '') }} />
-          </div>
-        );
-      }
-      // Empty line = paragraph break
-      if (line.trim() === '') {
-        return <div key={i} className="h-2" />;
-      }
-      return <div key={i} dangerouslySetInnerHTML={{ __html: formattedLine }} />;
-    });
-  };
+  // [H-10] `formatContent` and the message list rendering have been hoisted
+  // out to module scope (see `formatContent` and `MessageList` above). The
+  // memoized MessageList only re-renders when the `messages` array reference
+  // changes — not on every keystroke.
 
   // Render test result badge
   const renderTestBadge = (result: 'success' | 'failed' | 'testing' | 'not_tested' | 'empty_response', label: string) => {
@@ -686,50 +774,8 @@ export function AIChatWidget() {
                 </div>
               )}
 
-              {/* Chat messages */}
-              {messages.map((msg, i) => (
-                <div
-                  key={i}
-                  className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
-                  {msg.role === 'assistant' && (
-                    <div
-                      className="w-6 h-6 rounded-full shrink-0 flex items-center justify-center mt-1"
-                      style={{ background: 'linear-gradient(135deg, #06B6D4, #0891B2)' }}
-                    >
-                      <Bot className="h-3 w-3 text-white" />
-                    </div>
-                  )}
-                  <div
-                    className={`max-w-[80%] rounded-2xl px-3 py-2 text-xs leading-relaxed ${
-                      msg.role === 'user'
-                        ? 'text-white rounded-br-md'
-                        : 'rounded-bl-md'
-                    }`}
-                    style={{
-                      background:
-                        msg.role === 'user'
-                          ? 'linear-gradient(135deg, #06B6D4, #0891B2)'
-                          : 'var(--muted)',
-                      color: msg.role === 'user' ? 'white' : 'var(--foreground)',
-                    }}
-                  >
-                    {msg.role === 'user' ? (
-                      <div className="whitespace-pre-wrap">{msg.content}</div>
-                    ) : (
-                      <div className="space-y-0.5">{formatContent(msg.content)}</div>
-                    )}
-                  </div>
-                  {msg.role === 'user' && (
-                    <div
-                      className="w-6 h-6 rounded-full shrink-0 flex items-center justify-center mt-1"
-                      style={{ background: 'var(--muted)' }}
-                    >
-                      <User className="h-3 w-3" style={{ color: 'var(--muted-foreground)' }} />
-                    </div>
-                  )}
-                </div>
-              ))}
+              {/* Chat messages — [H-10] extracted to memoized <MessageList> */}
+              <MessageList messages={messages} />
 
               {/* Loading indicator */}
               {isLoading && (

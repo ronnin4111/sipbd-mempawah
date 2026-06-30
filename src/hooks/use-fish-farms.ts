@@ -136,6 +136,9 @@ export function useFishFarms(page: number = 1, pageSize: number = 20) {
       if (!res.ok) throw new Error('Failed to fetch fish farms');
       return res.json();
     },
+    // [M-10] 30s staleTime avoids refetching the paginated list on every
+    // mount/navigation while still picking up new edits within a session.
+    staleTime: 30_000,
   });
 }
 
@@ -158,6 +161,9 @@ export function useFishFarmStats(enabled: boolean = true) {
       return res.json();
     },
     enabled,
+    // [M-10] Stats power the dashboard; 30s staleTime prevents hammering the
+    // heavy SQL aggregation on every component mount.
+    staleTime: 30_000,
   });
 }
 
@@ -269,6 +275,8 @@ export function useAllFishFarms() {
       if (!res.ok) throw new Error('Failed to fetch fish farms');
       return res.json();
     },
+    // [M-10] Avoid re-pulling the full 1000-row dump on every mount.
+    staleTime: 30_000,
   });
 }
 
@@ -290,10 +298,9 @@ export function useCreateFishFarm() {
       return res.json();
     },
     onSuccess: () => {
+      // [M-11] Single prefix invalidation covers ['fish-farms'],
+      // ['fish-farms-stats'], ['fish-farms-all'], ['fish-farms-years'], etc.
       queryClient.invalidateQueries({ queryKey: ['fish-farms'] });
-      queryClient.invalidateQueries({ queryKey: ['fish-farms-stats'] });
-      queryClient.invalidateQueries({ queryKey: ['fish-farms-all'] });
-      queryClient.invalidateQueries({ queryKey: ['fish-farms-years'] });
     },
   });
 }
@@ -314,9 +321,8 @@ export function useUpdateFishFarm() {
       return res.json();
     },
     onSuccess: () => {
+      // [M-11] Prefix invalidation — see useCreateFishFarm.
       queryClient.invalidateQueries({ queryKey: ['fish-farms'] });
-      queryClient.invalidateQueries({ queryKey: ['fish-farms-stats'] });
-      queryClient.invalidateQueries({ queryKey: ['fish-farms-all'] });
     },
   });
 }
@@ -337,10 +343,8 @@ export function useDeleteFishFarm() {
       return res.json();
     },
     onSuccess: () => {
+      // [M-11] Prefix invalidation — see useCreateFishFarm.
       queryClient.invalidateQueries({ queryKey: ['fish-farms'] });
-      queryClient.invalidateQueries({ queryKey: ['fish-farms-stats'] });
-      queryClient.invalidateQueries({ queryKey: ['fish-farms-all'] });
-      queryClient.invalidateQueries({ queryKey: ['fish-farms-years'] });
     },
   });
 }

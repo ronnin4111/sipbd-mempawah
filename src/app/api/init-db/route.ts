@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { ensureTablesExist, tableExists } from '@/lib/db-init';
 
+export const dynamic = 'force-dynamic';
+
 // GET /api/init-db - Initialize database tables
 // This endpoint ensures all required tables exist in the database.
 // Safe to call multiple times.

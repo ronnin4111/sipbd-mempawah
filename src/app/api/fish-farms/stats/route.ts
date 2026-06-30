@@ -103,13 +103,50 @@ export async function GET(request: NextRequest) {
       where.year = calendarYear;
     }
 
-    const records = await db.fishFarm.findMany({ where });
+    // [Q-3] Optimization: previously both findMany calls fetched all 24 columns. Now both use
+    //       `select` to return only the columns referenced by the forEach aggregation passes
+    //       below (~50% payload reduction). The two queries remain separate because their
+    //       WHERE clauses differ (one is year-scoped, the other fetches all years for trends).
+    //       groupCount/latitude/longitude/cpib/cbib/triwulan/id/createdAt/updatedAt/
+    //       disaggregationBatchId are NOT referenced in any aggregation and are omitted.
+    const recordsSelect = {
+      year: true,
+      kecamatan: true,
+      desa: true,
+      fishType: true,
+      containerType: true,
+      businessType: true,
+      farmerName: true,
+      groupName: true,
+      productionQty: true,
+      rtpCount: true,
+      farmerCount: true,
+      targetQty: true,
+      productionValue: true,
+      kusuka: true,
+      farmerId: true,
+    } as const;
 
     // === For trend data, always fetch ALL years (not just current year) ===
     const trendWhere = buildWhere(searchParams);
     // Remove year filter for trend data to show all years
     delete trendWhere.year;
-    const trendRecords = await db.fishFarm.findMany({ where: trendWhere });
+    // [H-2] Run the year-scoped query and the all-years trend query in parallel
+    //       (previously two sequential round-trips to Turso). Trend aggregations
+    //       only use year/businessType/productionQty/fishType/kecamatan/containerType.
+    const trendSelect = {
+      year: true,
+      businessType: true,
+      productionQty: true,
+      fishType: true,
+      kecamatan: true,
+      containerType: true,
+    } as const;
+
+    const [records, trendRecords] = await Promise.all([
+      db.fishFarm.findMany({ where, select: recordsSelect }),
+      db.fishFarm.findMany({ where: trendWhere, select: trendSelect }),
+    ]);
 
     const indonesianMonths = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
 
@@ -573,21 +610,28 @@ export async function GET(request: NextRequest) {
     // === Commodity Prices (with try/catch - may not exist yet) ===
     let commodityPrices: Record<string, Record<string, number>> | null = null;
     try {
-      const priceRecords = await db.commodityPrice.findMany();
-      const { DEFAULT_COMMODITY_PRICES: DEFAULT_PRICES, DEFAULT_PEMBENIHAN_PRICES, FISH_TYPES: FISHES, CONTAINER_TYPES: CONTAINERS } = await import('@/lib/constants');
+      // [H-3] Run the findMany and dynamic import in parallel; build a Map for
+      //       O(1) lookup instead of O(N) .find() inside the FISHES × CONTAINERS
+      //       nested loop (and the pembenihan loop).
+      const [priceRecords, constants] = await Promise.all([
+        db.commodityPrice.findMany({ select: { fishType: true, containerType: true, price: true } }),
+        import('@/lib/constants'),
+      ]);
+      const { DEFAULT_COMMODITY_PRICES: DEFAULT_PRICES, DEFAULT_PEMBENIHAN_PRICES, FISH_TYPES: FISHES, CONTAINER_TYPES: CONTAINERS } = constants;
+      const priceMap = new Map(priceRecords.map(p => [`${p.fishType}|${p.containerType}`, p.price]));
       commodityPrices = {};
       for (const fish of FISHES) {
         commodityPrices[fish] = {};
         for (const container of CONTAINERS) {
-          const dbPrice = priceRecords.find(p => p.fishType === fish && p.containerType === container);
-          commodityPrices[fish][container] = dbPrice ? dbPrice.price : (DEFAULT_PRICES[fish]?.[container] ?? 0);
+          const dbPrice = priceMap.get(`${fish}|${container}`);
+          commodityPrices[fish][container] = dbPrice !== undefined ? dbPrice : (DEFAULT_PRICES[fish]?.[container] ?? 0);
         }
       }
       // Add pembenihan prices as a special entry
       const pembenihanPrices: Record<string, number> = {};
       for (const fish of FISHES) {
-        const dbPrice = priceRecords.find(p => p.fishType === fish && p.containerType === 'Pembenihan');
-        pembenihanPrices[fish] = dbPrice ? dbPrice.price : (DEFAULT_PEMBENIHAN_PRICES[fish] ?? 0);
+        const dbPrice = priceMap.get(`${fish}|Pembenihan`);
+        pembenihanPrices[fish] = dbPrice !== undefined ? dbPrice : (DEFAULT_PEMBENIHAN_PRICES[fish] ?? 0);
       }
       (commodityPrices as Record<string, Record<string, number>>)['Pembenihan'] = pembenihanPrices as unknown as Record<string, number> as Record<string, number>;
     } catch (err) {

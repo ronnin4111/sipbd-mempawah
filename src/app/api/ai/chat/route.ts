@@ -480,7 +480,12 @@ async function parseQuestionContext(message: string): Promise<QuestionContext> {
   ctx.years = [...explicitYears].sort((a, b) => a - b);
 
   // ===== Parse kecamatan =====
-  const dynamicKecamatan = await getDynamicKecamatanList();
+  // [M-3] Fetch kecamatan + fish type lists in parallel (previously awaited
+  //       sequentially at L483 + L522). Both are independent cached DB reads.
+  const [dynamicKecamatan, dynamicFishTypes] = await Promise.all([
+    getDynamicKecamatanList(),
+    getDynamicFishTypeList(),
+  ]);
   for (const kec of dynamicKecamatan) {
     if (lower.includes(kec.toLowerCase())) {
       ctx.kecamatan.push(kec);
@@ -518,8 +523,7 @@ async function parseQuestionContext(message: string): Promise<QuestionContext> {
     ctx.businessType.push('Pembesaran');
   }
 
-  // ===== Parse fish type =====
-  const dynamicFishTypes = await getDynamicFishTypeList();
+  // ===== Parse fish type ===== (list already fetched in parallel above)
   for (const fish of dynamicFishTypes) {
     if (lower.includes(fish.toLowerCase())) {
       ctx.fishType.push(fish);
@@ -650,73 +654,84 @@ function buildContextHeader(questionCtx: QuestionContext): string {
  */
 async function fetchKusukaDataContext(): Promise<string> {
   try {
-    const registrations = await db.kusukaRegistration.findMany();
+    // Push aggregation into DB via groupBy instead of loading entire table — AUDIT-DB [Q-6]
+    const where = {};
+    const [
+      total,
+      statusAgg,
+      kecAgg,
+      profesiAgg,
+      bentukAgg,
+      kelompokAggAll,
+      desaAgg,
+      withKelompokCount,
+      noKusukaRows,
+    ] = await Promise.all([
+      db.kusukaRegistration.count({ where }),
+      db.kusukaRegistration.groupBy({ by: ['statusKusuka'], where, _count: true }),
+      db.kusukaRegistration.groupBy({ by: ['kecamatan'], where, _count: true }),
+      db.kusukaRegistration.groupBy({ by: ['profesiUtama'], where, _count: true }),
+      db.kusukaRegistration.groupBy({ by: ['bentukUsaha'], where, _count: true }),
+      // All unique kelompok (excluding blanks) — distinct count is typically <100 so cheap
+      db.kusukaRegistration.groupBy({
+        by: ['namaKelompok'],
+        where: { ...where, namaKelompok: { not: '' } },
+        _count: true,
+        orderBy: { _count: { id: 'desc' } },
+      }),
+      // Desa breakdown grouped by kecamatan + kelDesa
+      db.kusukaRegistration.groupBy({ by: ['kecamatan', 'kelDesa'], where, _count: true }),
+      db.kusukaRegistration.count({
+        where: { ...where, NOT: { namaKelompok: { in: [''] } } },
+      }),
+      // SQLite can't regex in WHERE — fetch only noKusuka strings and filter in JS
+      db.kusukaRegistration.findMany({ where, select: { noKusuka: true } }),
+    ]);
 
-    if (registrations.length === 0) {
+    if (total === 0) {
       return '\n=== DATA KUSUKA (Registrasi Perorangan) ===\nTidak ada data registrasi KUSUKA.';
     }
 
-    const total = registrations.length;
+    const kelompokMapSize = kelompokAggAll.length;
+    const kelompokTop = kelompokAggAll.slice(0, 30);
 
-    // Count per status
-    const statusCount = new Map<string, number>();
-    for (const r of registrations) {
-      const status = r.statusKusuka || '-';
-      statusCount.set(status, (statusCount.get(status) || 0) + 1);
-    }
-    const statusLines = [...statusCount.entries()]
-      .sort(([, a], [, b]) => b - a)
-      .map(([s, c]) => `${s}: ${c}`)
+    const statusLines = statusAgg
+      .map(g => ({ s: g.statusKusuka || '-', c: g._count }))
+      .sort((a, b) => b.c - a.c)
+      .map(x => `${x.s}: ${x.c}`)
       .join(', ');
 
-    // Count per kecamatan
-    const kecCount = new Map<string, number>();
-    for (const r of registrations) {
-      const kec = r.kecamatan || '-';
-      kecCount.set(kec, (kecCount.get(kec) || 0) + 1);
-    }
-    const kecLines = [...kecCount.entries()]
-      .sort(([, a], [, b]) => b - a)
-      .map(([k, c]) => `${k}: ${c}`)
+    const kecLines = kecAgg
+      .map(g => ({ k: g.kecamatan || '-', c: g._count }))
+      .sort((a, b) => b.c - a.c)
+      .map(x => `${x.k}: ${x.c}`)
       .join(', ');
 
-    // Count per profesi utama
-    const profesiCount = new Map<string, number>();
-    for (const r of registrations) {
-      const p = r.profesiUtama || '-';
-      profesiCount.set(p, (profesiCount.get(p) || 0) + 1);
-    }
-    const profesiLines = [...profesiCount.entries()]
-      .sort(([, a], [, b]) => b - a)
-      .map(([p, c]) => `${p}: ${c}`)
+    const profesiLines = profesiAgg
+      .map(g => ({ p: g.profesiUtama || '-', c: g._count }))
+      .sort((a, b) => b.c - a.c)
+      .map(x => `${x.p}: ${x.c}`)
       .join(', ');
 
-    // Count per bentuk usaha
-    const bentukCount = new Map<string, number>();
-    for (const r of registrations) {
-      const b = r.bentukUsaha || '-';
-      bentukCount.set(b, (bentukCount.get(b) || 0) + 1);
-    }
-    const bentukLines = [...bentukCount.entries()]
-      .sort(([, a], [, b]) => b - a)
-      .map(([b, c]) => `${b}: ${c}`)
+    const bentukLines = bentukAgg
+      .map(g => ({ b: g.bentukUsaha || '-', c: g._count }))
+      .sort((a, b) => b.c - a.c)
+      .map(x => `${x.b}: ${x.c}`)
       .join(', ');
 
-    // Count with valid KUSUKA card number (16 digits)
-    const validKusukaCard = registrations.filter(r => /^\d{16}$/.test((r.noKusuka || '').trim())).length;
+    // Count valid 16-digit KUSUKA cards (regex filter in JS — small payload)
+    const validKusukaCard = noKusukaRows.filter(r => /^\d{16}$/.test((r.noKusuka || '').trim())).length;
 
-    // Count with kelompok vs without kelompok (independent)
-    const withKelompok = registrations.filter(r => r.namaKelompok && r.namaKelompok.trim() !== '').length;
+    const withKelompok = withKelompokCount;
     const withoutKelompok = total - withKelompok;
 
-    // Count per desa (grouped by kecamatan)
-    const desaCount = new Map<string, Map<string, number>>(); // kecamatan -> desa -> count
-    for (const r of registrations) {
-      const kec = r.kecamatan || '-';
-      const desa = r.kelDesa || '-';
+    // Build kecamatan → Map<desa, count> from the (kecamatan, kelDesa) groupBy
+    const desaCount = new Map<string, Map<string, number>>();
+    for (const g of desaAgg) {
+      const kec = g.kecamatan || '-';
+      const desa = g.kelDesa || '-';
       if (!desaCount.has(kec)) desaCount.set(kec, new Map());
-      const desaMap = desaCount.get(kec)!;
-      desaMap.set(desa, (desaMap.get(desa) || 0) + 1);
+      desaCount.get(kec)!.set(desa, g._count);
     }
     const desaLines = [...desaCount.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
@@ -729,20 +744,11 @@ async function fetchKusukaDataContext(): Promise<string> {
       })
       .join('\n');
 
-    // List unique kelompok with member counts
-    const kelompokMap = new Map<string, number>();
-    for (const r of registrations) {
-      if (r.namaKelompok && r.namaKelompok.trim()) {
-        const k = r.namaKelompok.trim();
-        kelompokMap.set(k, (kelompokMap.get(k) || 0) + 1);
-      }
-    }
-    const kelompokLines = [...kelompokMap.entries()]
-      .sort(([, a], [, b]) => b - a)
-      .slice(0, 30) // Limit to top 30 kelompok to keep compact
-      .map(([k, c]) => `${k} (${c})`)
+    // kelompokLines from the top-30 of the groupBy result (already sorted desc by count)
+    const kelompokLines = kelompokTop
+      .map(g => `${g.namaKelompok} (${g._count})`)
       .join(', ');
-    const kelompokExtra = kelompokMap.size > 30 ? ` ...dan ${kelompokMap.size - 30} lagi` : '';
+    const kelompokExtra = kelompokMapSize > 30 ? ` ...dan ${kelompokMapSize - 30} lagi` : '';
 
     const dataContext = `\n=== DATA KUSUKA (Registrasi Perorangan) ===
 Total registran: ${total}
@@ -752,7 +758,7 @@ Per profesi utama: ${profesiLines}
 Per bentuk usaha: ${bentukLines}
 No.KUSUKA valid (16 digit): ${validKusukaCard}
 Dengan kelompok: ${withKelompok}, Mandiri (tanpa kelompok): ${withoutKelompok}
-Kelompok (${kelompokMap.size}): ${kelompokLines}${kelompokExtra}
+Kelompok (${kelompokMapSize}): ${kelompokLines}${kelompokExtra}
 
 Per desa (kecamatan → desa:jumlah):
 ${desaLines}`;
@@ -770,55 +776,73 @@ ${desaLines}`;
  */
 async function fetchKusukaTargetedResults(searchTerms: string[], questionType: string): Promise<string> {
   try {
-    const registrations = await db.kusukaRegistration.findMany();
+    // Compact column set used downstream for both listing & search-result formatting
+    const kusukaSelect = {
+      id: true,
+      nama: true,
+      kecamatan: true,
+      kelDesa: true,
+      namaKelompok: true,
+      bentukUsaha: true,
+      profesiUtama: true,
+      noKusuka: true,
+      statusKusuka: true,
+      alamat: true,
+      tglDibuat: true,
+    } as const;
 
-    if (registrations.length === 0) {
-      return '';
-    }
-
-    // If no search terms but it's a specific KUSUKA question, return summary listing
+    // If no search terms but it's a specific KUSUKA question, return compact listing
     if (searchTerms.length === 0) {
       if (questionType === 'specific') {
-        // Return a compact listing of all registrants (name, kec, status)
-        const lines = registrations
-          .sort((a, b) => a.nama.localeCompare(b.nama))
-          .slice(0, 50) // Limit to keep prompt manageable
+        // Push pagination & ordering INTO the DB — AUDIT-DB [Q-6]
+        const [total, top] = await Promise.all([
+          db.kusukaRegistration.count(),
+          db.kusukaRegistration.findMany({
+            orderBy: { nama: 'asc' },
+            take: 50,
+            select: kusukaSelect,
+          }),
+        ]);
+        if (total === 0) return '';
+        const lines = top
           .map((r, i) => `${i + 1}. ${r.nama} | Kec:${r.kecamatan} | Desa:${r.kelDesa} | ${r.bentukUsaha} | ${r.profesiUtama} | Status:${r.statusKusuka}`)
           .join('\n');
-        const extra = registrations.length > 50 ? `\n...dan ${registrations.length - 50} registran lainnya` : '';
-        return `\n=== DAFTAR REGISTRAN KUSUKA (${registrations.length} orang) ===\n${lines}${extra}`;
+        const extra = total > 50 ? `\n...dan ${total - 50} registran lainnya` : '';
+        return `\n=== DAFTAR REGISTRAN KUSUKA (${total} orang) ===\n${lines}${extra}`;
       }
       return '';
     }
 
-    // Search for matching registrants
-    const found: string[] = [];
-    const matchedIds = new Set<string>();
+    // Push search terms INTO the Prisma where clause instead of loading full table — AUDIT-DB [Q-6]
+    const lowerTerms = searchTerms.map(t => t.toLowerCase());
+    const orClauses = lowerTerms.flatMap(q => [
+      { nama: { contains: q } },
+      { kecamatan: { contains: q } },
+      { kelDesa: { contains: q } },
+      { namaKelompok: { contains: q } },
+      { noKusuka: { contains: q } },
+    ]);
 
-    for (const term of searchTerms) {
-      const q = term.toLowerCase();
+    const matches = await db.kusukaRegistration.findMany({
+      where: { OR: orClauses },
+      take: 50,
+      select: kusukaSelect,
+    });
 
-      for (const r of registrations) {
-        if (matchedIds.has(r.id)) continue;
-
-        if (
-          (r.nama && r.nama.toLowerCase().includes(q)) ||
-          (r.kecamatan && r.kecamatan.toLowerCase().includes(q)) ||
-          (r.kelDesa && r.kelDesa.toLowerCase().includes(q)) ||
-          (r.namaKelompok && r.namaKelompok.toLowerCase().includes(q)) ||
-          (r.noKusuka && r.noKusuka.toLowerCase().includes(q))
-        ) {
-          matchedIds.add(r.id);
-          // Return full details for matched registrants
-          const kelStr = r.namaKelompok ? `Kel:${r.namaKelompok}` : 'Mandiri';
-          const noKusukaStr = r.noKusuka ? `No.KUSUKA:${r.noKusuka}` : 'No.KUSUKA:-';
-          found.push(`${r.nama} | Kec:${r.kecamatan} | Desa:${r.kelDesa} | ${kelStr} | ${r.bentukUsaha} | ${r.profesiUtama} | ${noKusukaStr} | Alamat:${r.alamat || '-'} | Status:${r.statusKusuka}`);
-        }
-      }
+    if (matches.length === 0) {
+      return `\nHASIL PENCARIAN KUSUKA: Tidak ditemukan untuk "${searchTerms.join(', ')}". Coba periksa ejaan.`;
     }
 
-    if (found.length === 0) {
-      return `\nHASIL PENCARIAN KUSUKA: Tidak ditemukan untuk "${searchTerms.join(', ')}". Coba periksa ejaan.`;
+    // Dedupe by id (in case the same row matches multiple search terms via different OR clauses —
+    // Prisma already dedupes rows for OR on the same table, but be defensive)
+    const seenIds = new Set<string>();
+    const found: string[] = [];
+    for (const r of matches) {
+      if (seenIds.has(r.id)) continue;
+      seenIds.add(r.id);
+      const kelStr = r.namaKelompok ? `Kel:${r.namaKelompok}` : 'Mandiri';
+      const noKusukaStr = r.noKusuka ? `No.KUSUKA:${r.noKusuka}` : 'No.KUSUKA:-';
+      found.push(`${r.nama} | Kec:${r.kecamatan} | Desa:${r.kelDesa} | ${kelStr} | ${r.bentukUsaha} | ${r.profesiUtama} | ${noKusukaStr} | Alamat:${r.alamat || '-'} | Status:${r.statusKusuka}`);
     }
 
     return `\n=== HASIL PENCARIAN KUSUKA (${found.length} ditemukan) ===\n${found.join('\n')}`;
@@ -843,7 +867,19 @@ async function fetchCompactDataContext(year?: number): Promise<{
       const availableYears = await getAvailableYears();
       targetYear = availableYears.length > 0 ? availableYears[0] : new Date().getFullYear();
     }
-    const records = await db.fishFarm.findMany({ where: { year: targetYear } });
+    const records = await db.fishFarm.findMany({
+      where: { year: targetYear },
+      // Select only fields used downstream — AUDIT-DB [Q-8]
+      select: {
+        year: true,
+        farmerId: true,
+        groupName: true,
+        kecamatan: true,
+        fishType: true,
+        businessType: true,
+        farmerCount: true,
+      },
+    });
 
     if (records.length === 0) {
       return {
@@ -922,7 +958,23 @@ async function fetchStatsDataContext(filters: {
     if (filters.fishType.length > 0) where.fishType = { in: filters.fishType };
     if (filters.businessType.length > 0) where.businessType = { in: filters.businessType };
 
-    const records = await db.fishFarm.findMany({ where });
+    const records = await db.fishFarm.findMany({
+      where,
+      // Select only fields used downstream — AUDIT-DB [Q-8]
+      select: {
+        year: true,
+        farmerId: true,
+        farmerName: true,
+        groupName: true,
+        kecamatan: true,
+        desa: true,
+        fishType: true,
+        businessType: true,
+        containerType: true,
+        farmerCount: true,
+        rtpCount: true,
+      },
+    });
 
     if (records.length === 0) {
       return {
@@ -1080,7 +1132,24 @@ async function fetchFullDataContext(filters: {
     if (filters.fishType.length > 0) where.fishType = { in: filters.fishType };
     if (filters.businessType.length > 0) where.businessType = { in: filters.businessType };
 
-    const records = await db.fishFarm.findMany({ where });
+    const records = await db.fishFarm.findMany({
+      where,
+      // Select only fields used downstream — AUDIT-DB [Q-8]
+      select: {
+        year: true,
+        farmerId: true,
+        farmerName: true,
+        groupName: true,
+        kecamatan: true,
+        desa: true,
+        fishType: true,
+        businessType: true,
+        containerType: true,
+        farmerCount: true,
+        rtpCount: true,
+        kusuka: true,
+      },
+    });
 
     if (records.length === 0) {
       return {
@@ -1276,7 +1345,24 @@ async function fetchTargetedResults(searchTerms: string[], questionType: string,
     if (filters?.fishType.length) where.fishType = { in: filters.fishType };
     if (filters?.businessType.length) where.businessType = { in: filters.businessType };
 
-    const records = await db.fishFarm.findMany({ where });
+    const records = await db.fishFarm.findMany({
+      where,
+      // Select only fields used downstream — AUDIT-DB [Q-8]
+      select: {
+        year: true,
+        farmerId: true,
+        farmerName: true,
+        groupName: true,
+        kecamatan: true,
+        desa: true,
+        fishType: true,
+        businessType: true,
+        containerType: true,
+        farmerCount: true,
+        rtpCount: true,
+        productionQty: true,
+      },
+    });
 
     const groupMap = new Map<string, {
       name: string; kecamatan: string; desaList: Set<string>;
@@ -1472,14 +1558,40 @@ async function fetchMultiYearComparisonContext(resolvedFilters: {
     }
     const yearDataList: YearData[] = [];
 
-    for (const year of years) {
-      const where: Record<string, unknown> = { year };
-      if (resolvedFilters.kecamatan.length > 0) where.kecamatan = { in: resolvedFilters.kecamatan };
-      if (resolvedFilters.desa.length > 0) where.desa = { in: resolvedFilters.desa };
-      if (resolvedFilters.fishType.length > 0) where.fishType = { in: resolvedFilters.fishType };
-      if (resolvedFilters.businessType.length > 0) where.businessType = { in: resolvedFilters.businessType };
+    // Single findMany across ALL years, then group by year in JS — AUDIT-DB [Q-7]
+    // (previously: N sequential findMany calls, one per year)
+    const baseWhere: Record<string, unknown> = { year: { in: years } };
+    if (resolvedFilters.kecamatan.length > 0) baseWhere.kecamatan = { in: resolvedFilters.kecamatan };
+    if (resolvedFilters.desa.length > 0) baseWhere.desa = { in: resolvedFilters.desa };
+    if (resolvedFilters.fishType.length > 0) baseWhere.fishType = { in: resolvedFilters.fishType };
+    if (resolvedFilters.businessType.length > 0) baseWhere.businessType = { in: resolvedFilters.businessType };
 
-      const records = await db.fishFarm.findMany({ where });
+    const allRecords = await db.fishFarm.findMany({
+      where: baseWhere,
+      select: {
+        year: true,
+        farmerId: true,
+        farmerName: true,
+        groupName: true,
+        kecamatan: true,
+        desa: true,
+        fishType: true,
+        businessType: true,
+        productionQty: true,
+        rtpCount: true,
+        farmerCount: true,
+        kusuka: true,
+      },
+    });
+
+    const recordsByYear = new Map<number, typeof allRecords>();
+    for (const r of allRecords) {
+      if (!recordsByYear.has(r.year)) recordsByYear.set(r.year, []);
+      recordsByYear.get(r.year)!.push(r);
+    }
+
+    for (const year of years) {
+      const records = recordsByYear.get(year) ?? [];
 
       if (records.length === 0) {
         lines.push(`\n--- Tahun ${year}: ⛔ TIDAK ADA DATA di database untuk tahun ini. JANGAN membuat angka palsu untuk tahun ini. ---`);
@@ -1962,8 +2074,28 @@ export async function POST(request: NextRequest) {
       // don't contain "pegawai" but have employee data (numbered lists).
       // ============================================================
       if (isPersonnelQuestion) {
-        // Step 1: Get ALL chunks from pegawai-related documents (most reliable)
-        const allPegawaiChunks = await getAllPegawaiChunks();
+        // [M-8] Parallelize the 3 independent personnel lookups that were
+        //       previously awaited sequentially: getAllPegawaiChunks(),
+        //       countUniquePegawai(), and the entity-name search.
+        //       countUniquePegawai's try/catch is preserved via .catch
+        //       returning 0 (matches original default + error log).
+        //       entityResults is computed unconditionally; the
+        //       searchTerms.length === 0 case resolves to [] so the dedup
+        //       loop below is a no-op.
+        const entitySearchQuery = searchTerms.join(' ');
+        const [allPegawaiChunks, totalPegawaiCountResult, entityResults] = await Promise.all([
+          getAllPegawaiChunks(),
+          countUniquePegawai().catch(countErr => {
+            console.error('[AI Chat] Personnel: countUniquePegawai() error:', countErr);
+            return 0;
+          }),
+          searchTerms.length > 0
+            ? searchKnowledgeBase(entitySearchQuery, 15, 50)
+            : Promise.resolve([] as string[]),
+        ]);
+        totalPegawaiCount = totalPegawaiCountResult;
+        console.log(`[AI Chat] Personnel: countUniquePegawai() → ${totalPegawaiCount}`);
+
         if (allPegawaiChunks.length > 0) {
           kbSearchResults = allPegawaiChunks;
           console.log(`[AI Chat] Personnel: using getAllPegawaiChunks() → ${allPegawaiChunks.length} chunks`);
@@ -1971,37 +2103,36 @@ export async function POST(request: NextRequest) {
           // Fallback: do keyword-based search if getAllPegawaiChunks returns empty
           console.log('[AI Chat] Personnel: getAllPegawaiChunks() returned empty, falling back to keyword search');
           kbSearchResults = await searchKnowledgeBase(message, 50, 50);
-          // Also try broad searches
+          // [H-6] Also try broad searches in parallel (was: sequential
+          //       for...of with N awaited searchKnowledgeBase calls). Dedup
+          //       Set is hoisted out of the loop and updated on each push
+          //       to prevent intra-batch duplicates.
           const broadSearchTerms = ['pegawai dinas', 'data pegawai', 'struktur organisasi', 'daftar pegawai'];
-          for (const term of broadSearchTerms) {
-            const broadResults = await searchKnowledgeBase(term, 10, 15);
-            const existingContents = new Set(kbSearchResults.map(r => r.substring(0, 100)));
-            for (const result of broadResults) {
-              if (!existingContents.has(result.substring(0, 100))) {
+          const broadResultsArrays = await Promise.all(
+            broadSearchTerms.map(term => searchKnowledgeBase(term, 10, 15))
+          );
+          const existingContents = new Set(kbSearchResults.map(r => r.substring(0, 100)));
+          for (const results of broadResultsArrays) {
+            for (const result of results) {
+              const key = result.substring(0, 100);
+              if (!existingContents.has(key)) {
                 kbSearchResults.push(result);
+                existingContents.add(key);
               }
             }
           }
           console.log(`[AI Chat] Personnel: keyword fallback → ${kbSearchResults.length} results`);
         }
 
-        // Step 2: Get accurate pegawai count
-        try {
-          totalPegawaiCount = await countUniquePegawai();
-          console.log(`[AI Chat] Personnel: countUniquePegawai() → ${totalPegawaiCount}`);
-        } catch (countErr) {
-          console.error('[AI Chat] Personnel: countUniquePegawai() error:', countErr);
-        }
-
-        // Step 3: Also do keyword search for specific names mentioned in the question
-        // (e.g., "jabatan Hasto Priyarso" → search for "Hasto Priyarso")
-        if (searchTerms.length > 0) {
-          const entitySearchQuery = searchTerms.join(' ');
-          const entityResults = await searchKnowledgeBase(entitySearchQuery, 15, 50);
+        // Step 3: Merge entity-name search results (computed in parallel above)
+        //         with dedup against the now-populated kbSearchResults.
+        if (entityResults.length > 0) {
           const existingContents = new Set(kbSearchResults.map(r => r.substring(0, 100)));
           for (const result of entityResults) {
-            if (!existingContents.has(result.substring(0, 100))) {
+            const key = result.substring(0, 100);
+            if (!existingContents.has(key)) {
               kbSearchResults.push(result);
+              existingContents.add(key);
             }
           }
         }
@@ -2025,12 +2156,20 @@ export async function POST(request: NextRequest) {
 
       // For KUSUKA questions, also search specifically with extracted desa/nama terms
       if (isKusukaQuestion && searchTerms.length > 0) {
-        for (const term of searchTerms) {
-          const termResults = await searchKnowledgeBase(`kusuka ${term}`, 5, 5);
-          const existingContents = new Set(kbSearchResults.map(r => r.substring(0, 100)));
-          for (const result of termResults) {
-            if (!existingContents.has(result.substring(0, 100))) {
+        // [H-6] Parallelize per-term `kusuka ${term}` searches (was: sequential
+        //       for...of with N awaited searchKnowledgeBase calls). Dedup Set
+        //       is hoisted out of the loop and updated on each push to prevent
+        //       intra-batch duplicates.
+        const kusukaResultsArrays = await Promise.all(
+          searchTerms.map(term => searchKnowledgeBase(`kusuka ${term}`, 5, 5))
+        );
+        const existingContents = new Set(kbSearchResults.map(r => r.substring(0, 100)));
+        for (const results of kusukaResultsArrays) {
+          for (const result of results) {
+            const key = result.substring(0, 100);
+            if (!existingContents.has(key)) {
               kbSearchResults.push(result);
+              existingContents.add(key);
             }
           }
         }

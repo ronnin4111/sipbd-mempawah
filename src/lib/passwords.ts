@@ -37,10 +37,14 @@ export async function getPasswords(): Promise<{ admin: string; exportPwd: string
     // Ensure AppSetting table exists before querying
     await ensureTablesExist();
 
-    const [adminSetting, exportSetting] = await Promise.all([
-      db.appSetting.findUnique({ where: { key: 'password_admin' } }),
-      db.appSetting.findUnique({ where: { key: 'password_export' } }),
-    ]);
+    // [H-4] Single findMany instead of two findUnique calls (2 round-trips → 1).
+    // Behavior preserved: same fallback chain (DB → env var → DEFAULT_PASSWORD),
+    // same `replace(/^"|"$/g, '')` unquoting of DB-stored JSON-encoded values.
+    const settings = await db.appSetting.findMany({
+      where: { key: { in: ['password_admin', 'password_export'] } },
+    });
+    const adminSetting = settings.find(s => s.key === 'password_admin');
+    const exportSetting = settings.find(s => s.key === 'password_export');
 
     const admin = adminSetting?.value?.replace(/^"|"$/g, '') || IMPORT_PASSWORD || DEFAULT_PASSWORD;
     const exportPwd = exportSetting?.value?.replace(/^"|"$/g, '') || EXPORT_PASSWORD || DEFAULT_PASSWORD;

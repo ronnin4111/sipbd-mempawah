@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { Sparkles, FileText, TrendingUp, MapPin, Target, Loader2, Copy, Check, AlertCircle, RotateCcw } from 'lucide-react';
 import { useFishFarmStats } from '@/hooks/use-fish-farms';
 import { useFilterStore } from '@/store/filter-store';
@@ -38,19 +38,17 @@ export function SmartNarrator({ source = 'fishfarm' }: SmartNarratorProps) {
   const [errorInfo, setErrorInfo] = useState<{ error: string; detail: string } | null>(null);
   // Skip FishFarm stats fetch in analyze-s1 mode (data comes from Turso Analyze tables instead)
   const { data: stats } = useFishFarmStats(!isAnalyzeS1);
-  const years = useFilterStore((s) => s.years);
-  const kecamatan = useFilterStore((s) => s.kecamatan);
-  const desa = useFilterStore((s) => s.desa);
-  const fishType = useFilterStore((s) => s.fishType);
-  const containerType = useFilterStore((s) => s.containerType);
-  const businessType = useFilterStore((s) => s.businessType);
-  // Shared filter state for analyze-s1 (synced with AnalyzeDashboard)
+  // [A-8] Removed 6 individual filter-store subscriptions (years, kecamatan, desa,
+  // fishType, containerType, businessType) — these are only read inside the
+  // generateNarration handler, so we read them via getState() there instead.
+  // Shared filter state for analyze-s1 (synced with AnalyzeDashboard) — kept as
+  // subscriptions because they're rendered in the header below.
   const analyzeYear = useFilterStore((s) => s.analyzeYear);
   const analyzeSemester = useFilterStore((s) => s.analyzeSemester);
 
   const NARRATION_OPTIONS = isAnalyzeS1 ? NARRATION_OPTIONS_ANALYZE_S1 : NARRATION_OPTIONS_FISHFARM;
 
-  const generateNarration = async (type: NarrationType) => {
+  const generateNarration = useCallback(async (type: NarrationType) => {
     if (isLoading) return;
 
     // For analyze-s1 source, we don't need stats to be loaded (API fetches from Turso directly)
@@ -79,7 +77,8 @@ export function SmartNarrator({ source = 'fishfarm' }: SmartNarratorProps) {
           semester: analyzeSemester ?? undefined,
         };
       } else {
-        // Branch: existing FishFarm stats
+        // Branch: existing FishFarm stats — read filter state lazily here
+        const { years, kecamatan, desa, fishType, containerType, businessType } = useFilterStore.getState();
         const statsContext = {
           periodLabel: stats!.periodLabel,
           currentYear: stats!.currentYear,
@@ -135,7 +134,7 @@ export function SmartNarrator({ source = 'fishfarm' }: SmartNarratorProps) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [isLoading, isAnalyzeS1, stats, analyzeYear, analyzeSemester]);
 
   const copyToClipboard = () => {
     if (narrative) {

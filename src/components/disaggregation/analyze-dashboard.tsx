@@ -303,6 +303,78 @@ export function AnalyzeDashboard() {
     return { diffPct, diffTon, firstName: first.name, secondName: second.name, isDown: second.produksi < first.produksi };
   }, [data?.triwulanData]);
 
+  // [A-5] Hoist the Math.max(...) out of the wadah .map() to avoid O(N²) per render
+  const wadahProductivity = useMemo(() => {
+    if (!data?.wadahData?.length) return [] as { name: string; val: number; color: string; pct: number }[];
+    const items = data.wadahData.map((w) => ({
+      name: w.name,
+      val: w.luasLahan > 0 ? (w.produksi * 1000) / w.luasLahan : 0,
+      color: WADAH_COLORS[w.name] || CHART_COLORS[0],
+    }));
+    const maxProd = Math.max(...items.map((i) => i.val), 1);
+    return items.map((i) => ({ ...i, pct: (i.val / maxProd) * 100 }));
+  }, [data?.wadahData]);
+
+  // [A-7] Memoize totals for benih/pakan cards (avoid re-running reduce on every render)
+  const totalBenih = useMemo(() => data?.komoditasData?.reduce((s, k) => s + k.benih, 0) ?? 0, [data?.komoditasData]);
+  const totalPakan = useMemo(() => data?.komoditasData?.reduce((s, k) => s + k.pakan, 0) ?? 0, [data?.komoditasData]);
+
+  // [M-13] Memoize the radar-chart data transform so it isn't recomputed
+  // on every render of the matrix tab (e.g. when sibling state changes).
+  const radarData = useMemo(
+    () => data?.productivityData?.map((d) => ({ ...d, komoditas: d.name })) ?? [],
+    [data?.productivityData],
+  );
+
+  // [M-14] Memoize the 6 use-case cards array. Previously this was an inline
+  // array literal in JSX, so every parent re-render rebuilt the array AND
+  // re-evaluated every template-string interpolation. Wrapped here with the
+  // minimal set of deps actually referenced inside the descriptions.
+  const useCaseCards = useMemo(() => [
+    {
+      icon: GitBranch,
+      title: 'Disagregasi ke Level Desa',
+      desc: 'Pecah data agregat kabupaten menjadi data per desa/kecamatan berdasarkan proporsi RTP dan luas lahan.',
+      color: '#06B6D4',
+      tag: 'Fitur Utama',
+    },
+    {
+      icon: Target,
+      title: 'Analisis Kesenjangan Produktifitas',
+      desc: `Identifikasi komoditas/wadah dengan produktifitas di bawah rata-rata. ${data?.komoditasData?.[0]?.name || 'Komoditas utama'} mendominasi ${data?.komoditasData?.[0]?.pct.toFixed(1) || '—'}% produksi.`,
+      color: '#EF4444',
+      tag: 'Analisis',
+    },
+    {
+      icon: TrendingDown,
+      title: 'Deteksi Penurunan Produksi',
+      desc: 'Monitor perubahan produksi bulanan/triwulanan. Identifikasi bulan dengan penurunan signifikan untuk investigasi.',
+      color: '#F59E0B',
+      tag: 'Prioritas',
+    },
+    {
+      icon: Scale,
+      title: 'Perencanaan Alokasi Benih',
+      desc: `Total benih: ${totalBenih.toLocaleString('id-ID', { maximumFractionDigits: 0 })} ekor. Disagregasi memungkinkan alokasi per desa lebih tepat.`,
+      color: '#10B981',
+      tag: 'Perencanaan',
+    },
+    {
+      icon: Shield,
+      title: 'Evaluasi Efisiensi Pakan',
+      desc: `Total pakan: ${totalPakan.toLocaleString('id-ID', { maximumFractionDigits: 0 })} kg. Analisis FCR per kelompok untuk best practices.`,
+      color: '#8B5CF6',
+      tag: 'Efisiensi',
+    },
+    {
+      icon: BarChart3,
+      title: 'Proyeksi & Target',
+      desc: `Berdasarkan tren, target produksi berikutnya bisa dihitung. Produksi saat ini ${(data?.summary?.totalProduksiTon ?? 0).toLocaleString('id-ID', { maximumFractionDigits: 0 })} Ton.`,
+      color: '#EC4899',
+      tag: 'Proyeksi',
+    },
+  ], [data?.komoditasData, data?.summary?.totalProduksiTon, totalBenih, totalPakan]);
+
   // ─── Loading ─────────────────────────────────────────────────────────
   if (loading) {
     return (
@@ -667,20 +739,15 @@ export function AnalyzeDashboard() {
                   {data.wadahData.length > 0 && (
                     <div className="mt-4 space-y-2">
                       <p className="text-xs font-semibold text-muted-foreground">Produktifitas per Jenis Wadah</p>
-                      {data.wadahData.map((w) => {
-                        const maxProd = Math.max(...data.wadahData.map((wd) => wd.luasLahan > 0 ? (wd.produksi * 1000) / wd.luasLahan : 0), 1);
-                        const val = w.luasLahan > 0 ? (w.produksi * 1000) / w.luasLahan : 0;
-                        const color = WADAH_COLORS[w.name] || CHART_COLORS[0];
-                        return (
-                          <div key={w.name} className="space-y-1">
-                            <div className="flex justify-between text-[10px]">
-                              <span className="text-muted-foreground">{w.name}</span>
-                              <span className="font-medium" style={{ color }}>{val.toFixed(1)} kg/m²</span>
-                            </div>
-                            <Progress value={(val / maxProd) * 100} className="h-1.5" />
+                      {wadahProductivity.map((w) => (
+                        <div key={w.name} className="space-y-1">
+                          <div className="flex justify-between text-[10px]">
+                            <span className="text-muted-foreground">{w.name}</span>
+                            <span className="font-medium" style={{ color: w.color }}>{w.val.toFixed(1)} kg/m²</span>
                           </div>
-                        );
-                      })}
+                          <Progress value={w.pct} className="h-1.5" />
+                        </div>
+                      ))}
                     </div>
                   )}
                 </CardContent>
@@ -910,10 +977,7 @@ export function AnalyzeDashboard() {
                 <CardContent>
                   {data.productivityData.length > 0 && prodWadahKeys.length > 0 ? (
                     <ResponsiveContainer width="100%" height={350}>
-                      <RadarChart data={data.productivityData.map((d) => ({
-                        ...d,
-                        komoditas: d.name,
-                      }))}>
+                      <RadarChart data={radarData}>
                         <PolarGrid stroke={isDark ? '#1E3A5F' : '#E5E7EB'} />
                         <PolarAngleAxis dataKey="komoditas" tick={{ fontSize: 10, fill: isDark ? '#94A3B8' : '#64748B' }} />
                         <PolarRadiusAxis tick={{ fontSize: 8, fill: isDark ? '#94A3B8' : '#64748B' }} />
@@ -946,50 +1010,7 @@ export function AnalyzeDashboard() {
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {[
-                      {
-                        icon: GitBranch,
-                        title: 'Disagregasi ke Level Desa',
-                        desc: 'Pecah data agregat kabupaten menjadi data per desa/kecamatan berdasarkan proporsi RTP dan luas lahan.',
-                        color: '#06B6D4',
-                        tag: 'Fitur Utama',
-                      },
-                      {
-                        icon: Target,
-                        title: 'Analisis Kesenjangan Produktifitas',
-                        desc: `Identifikasi komoditas/wadah dengan produktifitas di bawah rata-rata. ${data.komoditasData[0]?.name || 'Komoditas utama'} mendominasi ${data.komoditasData[0]?.pct.toFixed(1) || '—'}% produksi.`,
-                        color: '#EF4444',
-                        tag: 'Analisis',
-                      },
-                      {
-                        icon: TrendingDown,
-                        title: 'Deteksi Penurunan Produksi',
-                        desc: 'Monitor perubahan produksi bulanan/triwulanan. Identifikasi bulan dengan penurunan signifikan untuk investigasi.',
-                        color: '#F59E0B',
-                        tag: 'Prioritas',
-                      },
-                      {
-                        icon: Scale,
-                        title: 'Perencanaan Alokasi Benih',
-                        desc: `Total benih: ${data.komoditasData.reduce((s, k) => s + k.benih, 0).toLocaleString('id-ID', { maximumFractionDigits: 0 })} ekor. Disagregasi memungkinkan alokasi per desa lebih tepat.`,
-                        color: '#10B981',
-                        tag: 'Perencanaan',
-                      },
-                      {
-                        icon: Shield,
-                        title: 'Evaluasi Efisiensi Pakan',
-                        desc: `Total pakan: ${data.komoditasData.reduce((s, k) => s + k.pakan, 0).toLocaleString('id-ID', { maximumFractionDigits: 0 })} kg. Analisis FCR per kelompok untuk best practices.`,
-                        color: '#8B5CF6',
-                        tag: 'Efisiensi',
-                      },
-                      {
-                        icon: BarChart3,
-                        title: 'Proyeksi & Target',
-                        desc: `Berdasarkan tren, target produksi berikutnya bisa dihitung. Produksi saat ini ${s.totalProduksiTon.toLocaleString('id-ID', { maximumFractionDigits: 0 })} Ton.`,
-                        color: '#EC4899',
-                        tag: 'Proyeksi',
-                      },
-                    ].map((item, i) => {
+                    {useCaseCards.map((item, i) => {
                       const Icon = item.icon;
                       return (
                         <motion.div

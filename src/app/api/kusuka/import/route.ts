@@ -297,12 +297,14 @@ export async function POST(request: NextRequest) {
       }
 
       // Insert in batches
+      // [Q-18] Bumped from 5 to 100 — Turso/libSQL supports 100-500 row batches.
       let count = 0;
-      for (let i = 0; i < formattedRecords.length; i += 5) {
+      const BATCH_SIZE = 100;
+      for (let i = 0; i < formattedRecords.length; i += BATCH_SIZE) {
         await db.kusukaRegistration.createMany({
-          data: formattedRecords.slice(i, i + 5) as any,
+          data: formattedRecords.slice(i, i + BATCH_SIZE) as any,
         });
-        count += Math.min(5, formattedRecords.length - i);
+        count += Math.min(BATCH_SIZE, formattedRecords.length - i);
       }
 
       return NextResponse.json({
@@ -397,13 +399,15 @@ export async function POST(request: NextRequest) {
       deletedCount = result.count;
     }
 
-    // Insert in small batches for stability
+    // Insert in larger batches for performance
+    // [Q-18] Bumped from 5 to 100 — Turso/libSQL supports 100-500 row batches.
     let count = 0;
-    for (let i = 0; i < formattedRecords.length; i += 5) {
+    const BATCH_SIZE = 100;
+    for (let i = 0; i < formattedRecords.length; i += BATCH_SIZE) {
       await db.kusukaRegistration.createMany({
-        data: formattedRecords.slice(i, i + 5) as any,
+        data: formattedRecords.slice(i, i + BATCH_SIZE) as any,
       });
-      count += Math.min(5, formattedRecords.length - i);
+      count += Math.min(BATCH_SIZE, formattedRecords.length - i);
     }
 
     return NextResponse.json({

@@ -362,96 +362,101 @@ export async function POST(request: NextRequest) {
     });
 
     // Step 2: Create FishFarm records for each farmer
-    const createdRecords = [];
-    const BATCH_SIZE = 10;
+    // [Q-1] Optimization: previously fired N findFirst + N create queries inside an async .map
+    //       (2N round trips). Now: ONE findMany with `farmerId IN [...]` to build a metadata
+    //       Map<farmerId, latestRecord>, then a single createMany loop in batches of 100.
 
-    for (let i = 0; i < farmers.length; i += BATCH_SIZE) {
-      const farmerBatch = farmers.slice(i, i + BATCH_SIZE);
-      const createPromises = farmerBatch.map(async (farmer) => {
-        let farmerId = farmer.farmerId || '';
+    // 2a) Compute farmerId + farmer-specific kecamatan/fishType/containerType for each farmer
+    const farmersWithIds = farmers.map((farmer) => {
+      let farmerId = farmer.farmerId || '';
+      const farmerKecamatan = farmer.kecamatan || kecamatanList[0];
+      const farmerFishType = farmer.fishType || fishTypeList[0];
+      const farmerContainerType = farmer.containerType || containerTypeList[0];
 
-        // Use farmer-specific kecamatan/fishType/containerType if provided
-        const farmerKecamatan = farmer.kecamatan || kecamatanList[0];
-        const farmerFishType = farmer.fishType || fishTypeList[0];
-        const farmerContainerType = farmer.containerType || containerTypeList[0];
-
-        if (farmer.isNew || !farmerId) {
-          farmerId = generateFarmerId({
-            farmerName: farmer.farmerName,
-            groupName: farmer.groupName,
-            kecamatan: farmerKecamatan,
-            desa: farmer.desa,
-          });
-        }
-
-        // For existing farmers, look up their latest record to get metadata
-        let metadata = {
-          rtpCount: farmer.rtpCount || 1,
-          farmerCount: farmer.farmerCount || 1,
-          groupCount: farmer.groupCount || 0,
-          latitude: farmer.latitude || 0,
-          longitude: farmer.longitude || 0,
-          kusuka: farmer.kusuka || '',
-          cpib: farmer.cpib || false,
-          cbib: farmer.cbib || false,
-        };
-
-        if (!farmer.isNew && farmerId) {
-          const existingRecord = await db.fishFarm.findFirst({
-            where: { farmerId },
-            orderBy: { year: 'desc' },
-          });
-          if (existingRecord) {
-            metadata = {
-              rtpCount: farmer.rtpCount ?? existingRecord.rtpCount,
-              farmerCount: farmer.farmerCount ?? existingRecord.farmerCount,
-              groupCount: farmer.groupCount ?? existingRecord.groupCount,
-              latitude: farmer.latitude ?? existingRecord.latitude,
-              longitude: farmer.longitude ?? existingRecord.longitude,
-              kusuka: farmer.kusuka ?? existingRecord.kusuka,
-              cpib: farmer.cpib ?? existingRecord.cpib,
-              cbib: farmer.cbib ?? existingRecord.cbib,
-            };
-          }
-        }
-
-        return db.fishFarm.create({
-          data: {
-            year,
-            triwulan,
-            farmerId,
-            kecamatan: farmerKecamatan,
-            desa: farmer.desa,
-            fishType: farmerFishType,
-            containerType: farmerContainerType,
-            businessType,
-            farmerName: farmer.farmerName,
-            groupName: farmer.groupName,
-            productionQty: farmer.allocatedQty,
-            rtpCount: metadata.rtpCount,
-            farmerCount: metadata.farmerCount,
-            groupCount: metadata.groupCount,
-            targetQty: 0,
-            productionValue: 0,
-            latitude: metadata.latitude,
-            longitude: metadata.longitude,
-            kusuka: metadata.kusuka,
-            cpib: metadata.cpib,
-            cbib: metadata.cbib,
-            disaggregationBatchId: batch.id,
-          },
+      if (farmer.isNew || !farmerId) {
+        farmerId = generateFarmerId({
+          farmerName: farmer.farmerName,
+          groupName: farmer.groupName,
+          kecamatan: farmerKecamatan,
+          desa: farmer.desa,
         });
-      });
+      }
 
-      const results = await Promise.all(createPromises);
-      createdRecords.push(...results);
+      return { farmer, farmerId, farmerKecamatan, farmerFishType, farmerContainerType };
+    });
+
+    // 2b) ONE query for all existing farmers' latest metadata (sorted by year desc)
+    const existingFarmerIds = farmersWithIds
+      .filter((f) => !f.farmer.isNew && f.farmerId)
+      .map((f) => f.farmerId);
+    const existingRecords = existingFarmerIds.length > 0
+      ? await db.fishFarm.findMany({
+          where: { farmerId: { in: existingFarmerIds } },
+          orderBy: { year: 'desc' },
+          select: {
+            farmerId: true,
+            rtpCount: true,
+            farmerCount: true,
+            groupCount: true,
+            latitude: true,
+            longitude: true,
+            kusuka: true,
+            cpib: true,
+            cbib: true,
+            year: true,
+          },
+        })
+      : [];
+    // latest record per farmerId (records already sorted by year desc, so first match wins)
+    const metaByFarmer = new Map<string, typeof existingRecords[number]>();
+    for (const r of existingRecords) {
+      if (!metaByFarmer.has(r.farmerId)) metaByFarmer.set(r.farmerId, r);
     }
+
+    // 2c) Build insert payload in memory
+    const insertData = farmersWithIds.map(({ farmer, farmerId, farmerKecamatan, farmerFishType, farmerContainerType }) => {
+      const meta = (!farmer.isNew && farmerId) ? metaByFarmer.get(farmerId) : undefined;
+
+      return {
+        year,
+        triwulan,
+        farmerId,
+        kecamatan: farmerKecamatan,
+        desa: farmer.desa,
+        fishType: farmerFishType,
+        containerType: farmerContainerType,
+        businessType,
+        farmerName: farmer.farmerName,
+        groupName: farmer.groupName,
+        productionQty: farmer.allocatedQty,
+        rtpCount: farmer.rtpCount ?? meta?.rtpCount ?? 1,
+        farmerCount: farmer.farmerCount ?? meta?.farmerCount ?? 1,
+        groupCount: farmer.groupCount ?? meta?.groupCount ?? 0,
+        targetQty: 0,
+        productionValue: 0,
+        latitude: farmer.latitude ?? meta?.latitude ?? 0,
+        longitude: farmer.longitude ?? meta?.longitude ?? 0,
+        kusuka: farmer.kusuka ?? meta?.kusuka ?? '',
+        cpib: farmer.cpib ?? meta?.cpib ?? false,
+        cbib: farmer.cbib ?? meta?.cbib ?? false,
+        disaggregationBatchId: batch.id,
+      };
+    });
+
+    // 2d) Batch insert in chunks of 100 (was 10)
+    const INSERT_BATCH_SIZE = 100;
+    for (let i = 0; i < insertData.length; i += INSERT_BATCH_SIZE) {
+      await db.fishFarm.createMany({ data: insertData.slice(i, i + INSERT_BATCH_SIZE) });
+    }
+
+    const createdCount = insertData.length;
+    const totalQtyInserted = Math.round(insertData.reduce((sum, r) => sum + r.productionQty, 0) * 100) / 100;
 
     return NextResponse.json({
       success: true,
       batchId: batch.id,
-      createdCount: createdRecords.length,
-      totalQty: Math.round(createdRecords.reduce((sum, r) => sum + r.productionQty, 0) * 100) / 100,
+      createdCount,
+      totalQty: totalQtyInserted,
     });
   } catch (error) {
     console.error('Error saving disaggregation:', error);

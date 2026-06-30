@@ -72,9 +72,36 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const where = buildWhere(searchParams);
 
+    // [Q-4] Optimization: previously fetched ALL columns (24) with no row cap. Now `select`
+    //       returns only the 19 columns written to the XLSX (skips id/farmerId/triwulan/
+    //       disaggregationBatchId/createdAt/updatedAt) and `take: 10000` caps memory use on
+    //       huge datasets. 10k rows × 19 cols is roughly the upper bound that fits comfortably
+    //       in a serverless function's memory budget while still exporting meaningful data.
     const records = await db.fishFarm.findMany({
       where,
       orderBy: [{ year: 'desc' }, { kecamatan: 'asc' }, { desa: 'asc' }],
+      take: 10000,
+      select: {
+        year: true,
+        kecamatan: true,
+        desa: true,
+        fishType: true,
+        containerType: true,
+        businessType: true,
+        farmerName: true,
+        groupName: true,
+        productionQty: true,
+        rtpCount: true,
+        farmerCount: true,
+        groupCount: true,
+        targetQty: true,
+        productionValue: true,
+        latitude: true,
+        longitude: true,
+        kusuka: true,
+        cpib: true,
+        cbib: true,
+      },
     });
 
     const wb = XLSX.utils.book_new();
@@ -258,23 +285,30 @@ export async function GET(request: NextRequest) {
 
     // Sheet 6: Harga Komoditas
     try {
-      const priceRecords = await db.commodityPrice.findMany();
-      const { DEFAULT_COMMODITY_PRICES: DEFAULT_PRICES, DEFAULT_PEMBENIHAN_PRICES, FISH_TYPES: FISHES, CONTAINER_TYPES: CONTAINERS } = await import('@/lib/constants');
+      // [H-4] Run the findMany and dynamic import in parallel; build a Map for
+      //       O(1) lookup instead of O(N) .find() inside the FISHES × CONTAINERS
+      //       nested loop (and the pembenihan loop).
+      const [priceRecords, constants] = await Promise.all([
+        db.commodityPrice.findMany({ select: { fishType: true, containerType: true, price: true } }),
+        import('@/lib/constants'),
+      ]);
+      const { DEFAULT_COMMODITY_PRICES: DEFAULT_PRICES, DEFAULT_PEMBENIHAN_PRICES, FISH_TYPES: FISHES, CONTAINER_TYPES: CONTAINERS } = constants;
+      const priceMap = new Map(priceRecords.map(p => [`${p.fishType}|${p.containerType}`, p.price]));
 
       // Pembesaran prices section
       const pembesaranHeaders = ['Jenis Ikan', ...CONTAINERS];
       const pembesaranRows = FISHES.map(fish =>
         [fish, ...CONTAINERS.map(ct => {
-          const dbPrice = priceRecords.find(p => p.fishType === fish && p.containerType === ct);
-          return dbPrice ? dbPrice.price : (DEFAULT_PRICES[fish]?.[ct] ?? 0);
+          const dbPrice = priceMap.get(`${fish}|${ct}`);
+          return dbPrice !== undefined ? dbPrice : (DEFAULT_PRICES[fish]?.[ct] ?? 0);
         })]
       );
 
       // Pembenihan prices section
       const pembenihanHeaders = ['Jenis Ikan', 'Harga per Ekor (Rp)'];
       const pembenihanRows = FISHES.map(fish => {
-        const dbPrice = priceRecords.find(p => p.fishType === fish && p.containerType === 'Pembenihan');
-        return [fish, dbPrice ? dbPrice.price : (DEFAULT_PEMBENIHAN_PRICES[fish] ?? 0)];
+        const dbPrice = priceMap.get(`${fish}|Pembenihan`);
+        return [fish, dbPrice !== undefined ? dbPrice : (DEFAULT_PEMBENIHAN_PRICES[fish] ?? 0)];
       });
 
       // Combine both sections with a blank row separator

@@ -185,8 +185,7 @@ export async function checkZaiAvailable(): Promise<boolean> {
   }
   // Also check if SDK auto-discovery works (no env vars or file needed)
   try {
-    const ZAI = (await import('z-ai-web-dev-sdk')).default;
-    await ZAI.create();
+    await getZai();
     console.log('[AI SDK] Z.AI available via SDK auto-discovery');
     return true;
   } catch {
@@ -194,6 +193,54 @@ export async function checkZaiAvailable(): Promise<boolean> {
   }
   console.log('[AI SDK] Z.AI NOT available — no config found (env vars or file)');
   return false;
+}
+
+// [H-2] Module-scope memoization of the Z.AI SDK instance.
+// Previously `callZAI` re-created the instance on every invocation
+// (dynamic import + config resolution + `new ZAI(config)` or `ZAI.create()`).
+// Now we cache the instance after the first successful init and reuse it.
+// `zaiInitPromise` dedupes concurrent first-callers within the same cold start.
+let zaiInstance: any = null;
+let zaiInitPromise: Promise<any> | null = null;
+
+async function getZai(): Promise<any> {
+  if (zaiInstance) return zaiInstance;
+  if (!zaiInitPromise) {
+    zaiInitPromise = (async () => {
+      const ZAI = (await import('z-ai-web-dev-sdk')).default;
+      const config = getZaiConfigFromEnv() || await getZaiConfigFromFile();
+      if (config) {
+        // Use resolved config (from env vars or file)
+        // Note: ZAI constructor is private in TypeScript types but accessible in JS runtime
+        // This is needed because ZAI.create() only reads from file system, not env vars
+        const ZAIConstructor = ZAI as any;
+        const inst = new ZAIConstructor(config);
+        console.log(`[AI SDK] Z.AI initialized with config: baseUrl=${config.baseUrl.substring(0, 30)}...`);
+        return inst;
+      }
+      // Try SDK auto-discovery as last resort
+      try {
+        const inst = await ZAI.create();
+        console.log('[AI SDK] Z.AI initialized via SDK auto-discovery');
+        return inst;
+      } catch (sdkError) {
+        const errMsg = sdkError instanceof Error ? sdkError.message : 'Unknown';
+        let hint = '';
+        if (errMsg.includes('Configuration file not found') || errMsg.includes('config')) {
+          hint = ' Set ZAI_BASE_URL=https://api.z.ai/api/v1 and ZAI_API_KEY in env vars. (NOT chat.z.ai/api/v1 — that is the web frontend!)';
+        }
+        throw new Error(`Z.AI config not found: ${errMsg.substring(0, 200)}.${hint}`);
+      }
+    })();
+  }
+  try {
+    zaiInstance = await zaiInitPromise;
+    return zaiInstance;
+  } catch (err) {
+    // Reset so the next call can retry (don't cache failure forever)
+    zaiInitPromise = null;
+    throw err;
+  }
 }
 
 /**
@@ -205,40 +252,8 @@ export async function checkZaiAvailable(): Promise<boolean> {
  */
 async function callZAI(options: UnifiedAIOptions): Promise<UnifiedAIResult> {
   try {
-    // Dynamic import
-    const ZAI = (await import('z-ai-web-dev-sdk')).default;
-
-    // Resolve config: env vars → file → SDK auto
-    const config = getZaiConfigFromEnv() || await getZaiConfigFromFile();
-
-    let zai;
-    if (config) {
-      // Use resolved config (from env vars or file)
-      // Note: ZAI constructor is private in TypeScript types but accessible in JS runtime
-      // This is needed because ZAI.create() only reads from file system, not env vars
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const ZAIConstructor = ZAI as any;
-      zai = new ZAIConstructor(config);
-      console.log(`[AI SDK] Z.AI initialized with config: baseUrl=${config.baseUrl.substring(0, 30)}...`);
-    } else {
-      // Try SDK auto-discovery as last resort
-      try {
-        zai = await ZAI.create();
-        console.log('[AI SDK] Z.AI initialized via SDK auto-discovery');
-      } catch (sdkError) {
-        const errMsg = sdkError instanceof Error ? sdkError.message : 'Unknown';
-        let hint = '';
-        if (errMsg.includes('Configuration file not found') || errMsg.includes('config')) {
-          hint = ' Set ZAI_BASE_URL=https://api.z.ai/api/v1 and ZAI_API_KEY in env vars. (NOT chat.z.ai/api/v1 — that is the web frontend!)';
-        }
-        return {
-          success: false,
-          content: '',
-          error: `Z.AI config not found: ${errMsg.substring(0, 200)}.${hint}`,
-          provider: 'z-ai',
-        };
-      }
-    }
+    // [H-2] Reuse the memoized Z.AI instance (was: re-created per call)
+    const zai = await getZai();
 
     // z-ai uses 'assistant' role for system prompts
     const messages = options.messages.map(m => ({
@@ -347,12 +362,30 @@ export async function callAI(options: UnifiedAIOptions): Promise<UnifiedAIResult
   const errors: Array<{ provider: string; detail: string }> = [];
   const startTime = Date.now();
 
-  // Resolve API keys from env + database (for fallback providers)
+  // Resolve API keys + models in a SINGLE DB round-trip (4 → 1 query).
+  // [H-1] Previously 4 sequential `findUnique` calls via getApiKey/getModel.
+  // Behavior preserved: env var takes priority; DB value must JSON-parse to a
+  // non-empty trimmed string; otherwise null.
   console.log('[AI SDK] Resolving API keys...');
-  const geminiKey = await getApiKey('GEMINI_API_KEY', 'ai_gemini_api_key');
-  const groqKey = await getApiKey('GROQ_API_KEY', 'ai_groq_api_key');
-  const geminiModel = await getModel('GEMINI_MODEL', 'ai_gemini_model');
-  const groqModel = await getModel('GROQ_MODEL', 'ai_groq_model');
+  const settings = await db.appSetting.findMany({
+    where: { key: { in: ['ai_gemini_api_key', 'ai_groq_api_key', 'ai_gemini_model', 'ai_groq_model'] } },
+  });
+  const settingsMap = new Map(settings.map(s => [s.key, s.value]));
+  const parseSetting = (k: string): string | null => {
+    const v = settingsMap.get(k);
+    if (!v) return null;
+    try {
+      const parsed = JSON.parse(v);
+      if (typeof parsed === 'string' && parsed.trim()) return parsed.trim();
+      return null;
+    } catch {
+      return null;
+    }
+  };
+  const geminiKey = process.env.GEMINI_API_KEY || parseSetting('ai_gemini_api_key');
+  const groqKey = process.env.GROQ_API_KEY || parseSetting('ai_groq_api_key');
+  const geminiModel = process.env.GEMINI_MODEL || parseSetting('ai_gemini_model');
+  const groqModel = process.env.GROQ_MODEL || parseSetting('ai_groq_model');
 
   console.log(`[AI SDK] Keys resolved: Gemini=${geminiKey ? 'yes(' + geminiKey.substring(0, 6) + '...)' : 'no'}, Groq=${groqKey ? 'yes(' + groqKey.substring(0, 6) + '...)' : 'no'}`);
   console.log(`[AI SDK] Models resolved: Gemini=${geminiModel || 'default'}, Groq=${groqModel || 'default'}`);

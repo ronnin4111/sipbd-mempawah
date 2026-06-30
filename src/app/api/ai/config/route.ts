@@ -18,9 +18,18 @@ export async function GET() {
     await ensureTablesExist();
     const results: Record<string, string | null> = {};
 
+    // Single findMany instead of N sequential findUnique — see AUDIT-DB [Q-10]
+    const settingKeys = Object.values(AI_KEY_SETTINGS);
+    const settings = await db.appSetting.findMany({
+      where: { key: { in: settingKeys } },
+    });
+    const settingByKey = settings.reduce<Record<string, string>>((acc, s) => {
+      acc[s.key] = s.value;
+      return acc;
+    }, {});
     for (const [name, key] of Object.entries(AI_KEY_SETTINGS)) {
-      const setting = await db.appSetting.findUnique({ where: { key } });
-      results[name] = setting?.value ? JSON.parse(setting.value) : null;
+      const value = settingByKey[key];
+      results[name] = value ? JSON.parse(value) : null;
     }
 
     // Also check environment variables

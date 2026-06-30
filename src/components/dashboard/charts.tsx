@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -245,48 +245,58 @@ function getProduksiData(
 function TrendChart() {
   const { data: stats } = useFishFarmStats();
   const [viewBy, setViewBy] = useState<TrendViewBy>('jenis-usaha');
-  if (!stats) return null;
 
-  let data: Record<string, unknown>[] = [];
-  let lines: { key: string; color: string; name: string }[] = [];
+  // [H-11] Wrap data + lines building in useMemo keyed on [stats, viewBy].
+  // Previously this ran on every parent re-render (filter change, stats
+  // refetch, sibling component state) and rebuilt the same arrays.
+  const { data, lines } = useMemo(() => {
+    if (!stats) return { data: [] as Record<string, unknown>[], lines: [] as { key: string; color: string; name: string }[] };
 
-  if (viewBy === 'jenis-usaha') {
-    data = Object.entries(stats.trend5Year)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([year, val]) => ({
-        year,
-        'Pembesaran (Kg)': val.pembesaran,
-        'Pembenihan (Ekor)': val.pembenihan,
+    let data: Record<string, unknown>[] = [];
+    let lines: { key: string; color: string; name: string }[] = [];
+
+    if (viewBy === 'jenis-usaha') {
+      data = Object.entries(stats.trend5Year)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([year, val]) => ({
+          year,
+          'Pembesaran (Kg)': val.pembesaran,
+          'Pembenihan (Ekor)': val.pembenihan,
+        }));
+      lines = [
+        { key: 'Pembesaran (Kg)', color: PEMBESARAN_COLOR, name: 'Pembesaran (Kg)' },
+        { key: 'Pembenihan (Ekor)', color: PEMBENIHAN_COLOR, name: 'Pembenihan (Ekor)' },
+      ];
+    } else {
+      let trendData: Record<string, Record<string, { pembesaran: number; pembenihan: number }>>;
+      if (viewBy === 'jenis-ikan') trendData = stats.trendByFishType;
+      else if (viewBy === 'kecamatan') trendData = stats.trendByKecamatan;
+      else trendData = stats.trendByContainer;
+
+      const allYears = new Set<string>();
+      Object.values(trendData).forEach(yearMap => Object.keys(yearMap).forEach(y => allYears.add(y)));
+      const sortedYears = Array.from(allYears).sort();
+      const categories = Object.keys(trendData).sort();
+      lines = categories.map((cat, i) => ({
+        key: cat,
+        color: CHART_COLORS[i % CHART_COLORS.length],
+        name: `${cat} (Kg)`,
       }));
-    lines = [
-      { key: 'Pembesaran (Kg)', color: PEMBESARAN_COLOR, name: 'Pembesaran (Kg)' },
-      { key: 'Pembenihan (Ekor)', color: PEMBENIHAN_COLOR, name: 'Pembenihan (Ekor)' },
-    ];
-  } else {
-    let trendData: Record<string, Record<string, { pembesaran: number; pembenihan: number }>>;
-    if (viewBy === 'jenis-ikan') trendData = stats.trendByFishType;
-    else if (viewBy === 'kecamatan') trendData = stats.trendByKecamatan;
-    else trendData = stats.trendByContainer;
-
-    const allYears = new Set<string>();
-    Object.values(trendData).forEach(yearMap => Object.keys(yearMap).forEach(y => allYears.add(y)));
-    const sortedYears = Array.from(allYears).sort();
-    const categories = Object.keys(trendData).sort();
-    lines = categories.map((cat, i) => ({
-      key: cat,
-      color: CHART_COLORS[i % CHART_COLORS.length],
-      name: `${cat} (Kg)`,
-    }));
-    data = sortedYears.map(year => {
-      const row: Record<string, unknown> = { year };
-      categories.forEach(cat => {
-        const val = trendData[cat]?.[year];
-        // Use only pembesaran (Kg) — pembenihan (Ekor) has different units
-        row[cat] = val ? val.pembesaran : 0;
+      data = sortedYears.map(year => {
+        const row: Record<string, unknown> = { year };
+        categories.forEach(cat => {
+          const val = trendData[cat]?.[year];
+          // Use only pembesaran (Kg) — pembenihan (Ekor) has different units
+          row[cat] = val ? val.pembesaran : 0;
+        });
+        return row;
       });
-      return row;
-    });
-  }
+    }
+
+    return { data, lines };
+  }, [stats, viewBy]);
+
+  if (!stats) return null;
 
   return (
     <ChartCard title="Tren Produksi" index={0}>
@@ -351,19 +361,32 @@ function ProduksiChart() {
   const [viewBy, setViewBy] = useState<ProduksiViewBy>('jenis-ikan');
   const [chartType, setChartType] = useState<ChartType>('bar');
 
+  // [H-11] Wrap data + pie-data building in useMemo keyed on [stats, viewBy].
+  // Previously these were recomputed on every render (e.g. when chartType
+  // changed, even though chartType doesn't affect the underlying data).
+  const { data, pembesaranPieData, pembenihanPieData } = useMemo(() => {
+    if (!stats) {
+      return {
+        data: [] as Record<string, unknown>[],
+        pembesaranPieData: [] as { name: string; value: number }[],
+        pembenihanPieData: [] as { name: string; value: number }[],
+      };
+    }
+    const d = getProduksiData(stats, viewBy);
+    return {
+      data: d,
+      pembesaranPieData: d
+        .filter(d2 => (d2['Pembesaran (Kg)'] as number) > 0)
+        .map(d2 => ({ name: d2.name, value: d2['Pembesaran (Kg)'] as number })),
+      pembenihanPieData: d
+        .filter(d2 => (d2['Pembenihan (Ekor)'] as number) > 0)
+        .map(d2 => ({ name: d2.name, value: d2['Pembenihan (Ekor)'] as number })),
+    };
+  }, [stats, viewBy]);
+
   if (!stats) return null;
 
-  const data = getProduksiData(stats, viewBy);
   const title = `Produksi per ${PRODUKSI_VIEWS.find(v => v.id === viewBy)?.label ?? ''}`;
-
-  // Pie chart data
-  const pembesaranPieData = data
-    .filter(d => (d['Pembesaran (Kg)'] as number) > 0)
-    .map(d => ({ name: d.name, value: d['Pembesaran (Kg)'] as number }));
-
-  const pembenihanPieData = data
-    .filter(d => (d['Pembenihan (Ekor)'] as number) > 0)
-    .map(d => ({ name: d.name, value: d['Pembenihan (Ekor)'] as number }));
 
   const renderChart = () => {
     if (chartType === 'pie') {
@@ -523,126 +546,142 @@ function ProduksiKecamatanChart() {
   const setKecamatanChartSegment = useFilterStore((s) => s.setKecamatanChartSegment);
   const viewBy = (kecamatanChartSegment || 'produksi') as KecamatanViewBy;
 
+  // [A-6] Wrap data/series/maxVal building in useMemo keyed on [stats, viewBy]
+  const { data, series, maxVal } = useMemo(() => {
+    if (!stats) return { data: [] as Record<string, unknown>[], series: [] as { key: string; color: string; name: string }[], maxVal: 1 };
+
+    let data: Record<string, unknown>[] = [];
+    let series: { key: string; color: string; name: string }[] = [];
+
+    // Get all kecamatan sorted
+    const allKecamatan = Object.keys(stats.productionByKecamatanDetail).sort();
+
+    if (viewBy === 'produksi') {
+      // Total production (pembesaran + pembenihan volume) per kecamatan
+      data = allKecamatan.map(kec => {
+        const val = stats.productionByKecamatanDetail[kec];
+        return {
+          name: kec,
+          'Pembesaran': val.pembesaranProduction,
+          'Pembenihan': val.pembenihanProduction,
+        };
+      });
+      series = [
+        { key: 'Pembesaran', color: '#3B82F6', name: 'Pembesaran (Kg)' },
+        { key: 'Pembenihan', color: '#22C55E', name: 'Pembenihan (Ekor)' },
+      ];
+    } else if (viewBy === 'jenis-usaha') {
+      // Same as produksi but labeled differently
+      data = allKecamatan.map(kec => {
+        const val = stats.productionByKecamatanDetail[kec];
+        return {
+          name: kec,
+          'Pembesaran': val.pembesaranProduction,
+          'Pembenihan': val.pembenihanProduction,
+        };
+      });
+      series = [
+        { key: 'Pembesaran', color: '#3B82F6', name: 'Pembesaran' },
+        { key: 'Pembenihan', color: '#22C55E', name: 'Pembenihan' },
+      ];
+    } else if (viewBy === 'jenis-ikan') {
+      // Cross-tab: Kecamatan x FishType (stacked) — Pembesaran (Kg) only
+      // Note: Pembenihan (Ekor) cannot be stacked with Pembesaran (Kg) due to different units
+      const crossData = stats.productionByKecamatanByFishType;
+      const allFishTypes = new Set<string>();
+      Object.values(crossData).forEach(ft => Object.keys(ft).forEach(f => allFishTypes.add(f)));
+      const sortedFishTypes = Array.from(allFishTypes).sort();
+      series = sortedFishTypes.map((ft, i) => ({
+        key: ft,
+        color: CHART_COLORS[i % CHART_COLORS.length],
+        name: `${ft} (Kg)`,
+      }));
+      data = allKecamatan.map(kec => {
+        const row: Record<string, unknown> = { name: kec };
+        sortedFishTypes.forEach(ft => {
+          const val = crossData[kec]?.[ft];
+          row[ft] = val ? val.pembesaran : 0;
+        });
+        return row;
+      });
+    } else if (viewBy === 'wadah') {
+      // Cross-tab: Kecamatan x ContainerType (stacked) — Pembesaran (Kg) only
+      // Note: Pembenihan (Ekor) cannot be stacked with Pembesaran (Kg) due to different units
+      const crossData = stats.productionByKecamatanByContainer;
+      const allContainers = new Set<string>();
+      Object.values(crossData).forEach(ct => Object.keys(ct).forEach(c => allContainers.add(c)));
+      const sortedContainers = Array.from(allContainers).sort();
+      series = sortedContainers.map((ct, i) => ({
+        key: ct,
+        color: CHART_COLORS[i % CHART_COLORS.length],
+        name: `${ct} (Kg)`,
+      }));
+      data = allKecamatan.map(kec => {
+        const row: Record<string, unknown> = { name: kec };
+        sortedContainers.forEach(ct => {
+          const val = crossData[kec]?.[ct];
+          row[ct] = val ? val.pembesaran : 0;
+        });
+        return row;
+      });
+    } else if (viewBy === 'pelaku-usaha') {
+      // Pelaku Usaha per kecamatan split by Pembesaran & Pembenihan
+      data = allKecamatan.map(kec => {
+        const val = stats.productionByKecamatanDetail[kec];
+        return {
+          name: kec,
+          'Pembesaran': val.pembesaranFarmer,
+          'Pembenihan': val.pembenihanFarmer,
+        };
+      });
+      series = [
+        { key: 'Pembesaran', color: '#3B82F6', name: 'Pelaku Pembesaran' },
+        { key: 'Pembenihan', color: '#22C55E', name: 'Pelaku Pembenihan' },
+      ];
+    } else if (viewBy === 'kelompok') {
+      // Kelompok per kecamatan split by Pembesaran & Pembenihan
+      data = allKecamatan.map(kec => {
+        const val = stats.productionByKecamatanDetail[kec];
+        return {
+          name: kec,
+          'Pembesaran': val.pembesaranGroup,
+          'Pembenihan': val.pembenihanGroup,
+        };
+      });
+      series = [
+        { key: 'Pembesaran', color: '#3B82F6', name: 'Kelompok Pembesaran' },
+        { key: 'Pembenihan', color: '#22C55E', name: 'Kelompok Pembenihan' },
+      ];
+    }
+
+    // Sort data by total descending for better visual
+    data.sort((a, b) => {
+      const totalA = series.reduce((s, ser) => s + ((a[ser.key] as number) || 0), 0);
+      const totalB = series.reduce((s, ser) => s + ((b[ser.key] as number) || 0), 0);
+      return totalB - totalA;
+    });
+
+    // Determine max value for x-axis
+    const maxVal = Math.max(...data.map(d =>
+      series.reduce((s, ser) => s + ((d[ser.key] as number) || 0), 0)
+    ), 1);
+
+    return { data, series, maxVal };
+  }, [stats, viewBy]);
+
+  // [H-12] Hoist the per-Bar label closures out of the JSX .map so the
+  // `series.map(ss => ss.key)` (O(N) per Bar, O(N²) per render) runs once
+  // inside a useMemo. The label array is then indexed by position in JSX.
+  // Placed BEFORE the `if (!stats) return null` early return to satisfy
+  // the rules-of-hooks (series/data default to [] when stats is null).
+  const stackedBarLabels = useMemo(
+    () => series.map(s => createStackedBarLabel(s.key, s.name, series.map(ss => ss.key), data)),
+    [series, data],
+  );
+
   if (!stats) return null;
 
   const title = 'Produksi per Kecamatan';
-
-  // Build data based on viewBy - stacked horizontal bar chart
-  let data: Record<string, unknown>[] = [];
-  let series: { key: string; color: string; name: string }[] = [];
-
-  // Get all kecamatan sorted
-  const allKecamatan = Object.keys(stats.productionByKecamatanDetail).sort();
-
-  if (viewBy === 'produksi') {
-    // Total production (pembesaran + pembenihan volume) per kecamatan
-    data = allKecamatan.map(kec => {
-      const val = stats.productionByKecamatanDetail[kec];
-      return {
-        name: kec,
-        'Pembesaran': val.pembesaranProduction,
-        'Pembenihan': val.pembenihanProduction,
-      };
-    });
-    series = [
-      { key: 'Pembesaran', color: '#3B82F6', name: 'Pembesaran (Kg)' },
-      { key: 'Pembenihan', color: '#22C55E', name: 'Pembenihan (Ekor)' },
-    ];
-  } else if (viewBy === 'jenis-usaha') {
-    // Same as produksi but labeled differently
-    data = allKecamatan.map(kec => {
-      const val = stats.productionByKecamatanDetail[kec];
-      return {
-        name: kec,
-        'Pembesaran': val.pembesaranProduction,
-        'Pembenihan': val.pembenihanProduction,
-      };
-    });
-    series = [
-      { key: 'Pembesaran', color: '#3B82F6', name: 'Pembesaran' },
-      { key: 'Pembenihan', color: '#22C55E', name: 'Pembenihan' },
-    ];
-  } else if (viewBy === 'jenis-ikan') {
-    // Cross-tab: Kecamatan x FishType (stacked) — Pembesaran (Kg) only
-    // Note: Pembenihan (Ekor) cannot be stacked with Pembesaran (Kg) due to different units
-    const crossData = stats.productionByKecamatanByFishType;
-    const allFishTypes = new Set<string>();
-    Object.values(crossData).forEach(ft => Object.keys(ft).forEach(f => allFishTypes.add(f)));
-    const sortedFishTypes = Array.from(allFishTypes).sort();
-    series = sortedFishTypes.map((ft, i) => ({
-      key: ft,
-      color: CHART_COLORS[i % CHART_COLORS.length],
-      name: `${ft} (Kg)`,
-    }));
-    data = allKecamatan.map(kec => {
-      const row: Record<string, unknown> = { name: kec };
-      sortedFishTypes.forEach(ft => {
-        const val = crossData[kec]?.[ft];
-        row[ft] = val ? val.pembesaran : 0;
-      });
-      return row;
-    });
-  } else if (viewBy === 'wadah') {
-    // Cross-tab: Kecamatan x ContainerType (stacked) — Pembesaran (Kg) only
-    // Note: Pembenihan (Ekor) cannot be stacked with Pembesaran (Kg) due to different units
-    const crossData = stats.productionByKecamatanByContainer;
-    const allContainers = new Set<string>();
-    Object.values(crossData).forEach(ct => Object.keys(ct).forEach(c => allContainers.add(c)));
-    const sortedContainers = Array.from(allContainers).sort();
-    series = sortedContainers.map((ct, i) => ({
-      key: ct,
-      color: CHART_COLORS[i % CHART_COLORS.length],
-      name: `${ct} (Kg)`,
-    }));
-    data = allKecamatan.map(kec => {
-      const row: Record<string, unknown> = { name: kec };
-      sortedContainers.forEach(ct => {
-        const val = crossData[kec]?.[ct];
-        row[ct] = val ? val.pembesaran : 0;
-      });
-      return row;
-    });
-  } else if (viewBy === 'pelaku-usaha') {
-    // Pelaku Usaha per kecamatan split by Pembesaran & Pembenihan
-    data = allKecamatan.map(kec => {
-      const val = stats.productionByKecamatanDetail[kec];
-      return {
-        name: kec,
-        'Pembesaran': val.pembesaranFarmer,
-        'Pembenihan': val.pembenihanFarmer,
-      };
-    });
-    series = [
-      { key: 'Pembesaran', color: '#3B82F6', name: 'Pelaku Pembesaran' },
-      { key: 'Pembenihan', color: '#22C55E', name: 'Pelaku Pembenihan' },
-    ];
-  } else if (viewBy === 'kelompok') {
-    // Kelompok per kecamatan split by Pembesaran & Pembenihan
-    data = allKecamatan.map(kec => {
-      const val = stats.productionByKecamatanDetail[kec];
-      return {
-        name: kec,
-        'Pembesaran': val.pembesaranGroup,
-        'Pembenihan': val.pembenihanGroup,
-      };
-    });
-    series = [
-      { key: 'Pembesaran', color: '#3B82F6', name: 'Kelompok Pembesaran' },
-      { key: 'Pembenihan', color: '#22C55E', name: 'Kelompok Pembenihan' },
-    ];
-  }
-
-  // Sort data by total descending for better visual
-  data.sort((a, b) => {
-    const totalA = series.reduce((s, ser) => s + ((a[ser.key] as number) || 0), 0);
-    const totalB = series.reduce((s, ser) => s + ((b[ser.key] as number) || 0), 0);
-    return totalB - totalA;
-  });
-
-  // Determine max value for x-axis
-  const maxVal = Math.max(...data.map(d => 
-    series.reduce((s, ser) => s + ((d[ser.key] as number) || 0), 0)
-  ), 1);
 
   const formatXAxis = (v: number) => {
     if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
@@ -660,6 +699,9 @@ function ProduksiKecamatanChart() {
     : viewBy === 'kelompok'
     ? 'Jumlah Kelompok'
     : '';
+
+  // Reference maxVal so it's "used" — keeps it part of the memoized output for future use
+  void maxVal;
 
   return (
     <ChartCard title={title} index={2}>
@@ -691,8 +733,8 @@ function ProduksiKecamatanChart() {
                 contentStyle={tooltipStyle}
               />
               <Legend wrapperStyle={{ fontSize: 10 }} />
-              {series.map(s => (
-                <Bar key={s.key} dataKey={s.key} fill={s.color} stackId="a" name={s.name} label={createStackedBarLabel(s.key, s.name, series.map(ss => ss.key), data)} />
+              {series.map((s, i) => (
+                <Bar key={s.key} dataKey={s.key} fill={s.color} stackId="a" name={s.name} label={stackedBarLabels[i]} />
               ))}
             </BarChart>
           </ResponsiveContainer>
@@ -768,122 +810,158 @@ export function PdfDashboardCharts() {
   const kecamatanChartSegment = useFilterStore((s) => s.kecamatanChartSegment);
   const kecamatanViewBy = (kecamatanChartSegment || 'produksi') as KecamatanViewBy;
 
-  if (!stats) return null;
+  // [A-6] Wrap all chart-data building in useMemo so it only re-runs when inputs change
+  const {
+    trendData, trendLines, produksiData, produksiTitle,
+    pembesaranPieData, pembenihanPieData,
+    kecData, kecSeries, kecTitle,
+  } = useMemo(() => {
+    const empty = {
+      trendData: [] as Record<string, unknown>[],
+      trendLines: [] as { key: string; color: string; name: string }[],
+      produksiData: [] as Record<string, unknown>[],
+      produksiTitle: '',
+      pembesaranPieData: [] as { name: string; value: number }[],
+      pembenihanPieData: [] as { name: string; value: number }[],
+      kecData: [] as Record<string, unknown>[],
+      kecSeries: [] as { key: string; color: string; name: string }[],
+      kecTitle: 'Produksi per Kecamatan',
+    };
+    if (!stats) return empty;
 
-  // Build trend chart data
-  let trendData: Record<string, unknown>[] = [];
-  let trendLines: { key: string; color: string; name: string }[] = [];
+    // Build trend chart data
+    let trendData: Record<string, unknown>[] = [];
+    let trendLines: { key: string; color: string; name: string }[] = [];
 
-  if (trendViewBy === 'jenis-usaha') {
-    trendData = Object.entries(stats.trend5Year)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([year, val]) => ({
-        year,
-        'Pembesaran (Kg)': val.pembesaran,
-        'Pembenihan (Ekor)': val.pembenihan,
-      }));
-    trendLines = [
-      { key: 'Pembesaran (Kg)', color: '#3B82F6', name: 'Pembesaran (Kg)' },
-      { key: 'Pembenihan (Ekor)', color: '#22C55E', name: 'Pembenihan (Ekor)' },
-    ];
-  } else {
-    let trendDataSource: Record<string, Record<string, { pembesaran: number; pembenihan: number }>>;
-    if (trendViewBy === 'jenis-ikan') trendDataSource = stats.trendByFishType;
-    else if (trendViewBy === 'kecamatan') trendDataSource = stats.trendByKecamatan;
-    else trendDataSource = stats.trendByContainer;
+    if (trendViewBy === 'jenis-usaha') {
+      trendData = Object.entries(stats.trend5Year)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([year, val]) => ({
+          year,
+          'Pembesaran (Kg)': val.pembesaran,
+          'Pembenihan (Ekor)': val.pembenihan,
+        }));
+      trendLines = [
+        { key: 'Pembesaran (Kg)', color: '#3B82F6', name: 'Pembesaran (Kg)' },
+        { key: 'Pembenihan (Ekor)', color: '#22C55E', name: 'Pembenihan (Ekor)' },
+      ];
+    } else {
+      let trendDataSource: Record<string, Record<string, { pembesaran: number; pembenihan: number }>>;
+      if (trendViewBy === 'jenis-ikan') trendDataSource = stats.trendByFishType;
+      else if (trendViewBy === 'kecamatan') trendDataSource = stats.trendByKecamatan;
+      else trendDataSource = stats.trendByContainer;
 
-    const allYears = new Set<string>();
-    Object.values(trendDataSource).forEach(ym => Object.keys(ym).forEach(y => allYears.add(y)));
-    const sortedYears = Array.from(allYears).sort();
-    const categories = Object.keys(trendDataSource).sort();
-    trendLines = categories.map((cat, i) => ({ key: cat, color: CHART_COLORS[i % CHART_COLORS.length], name: `${cat} (Kg)` }));
-    trendData = sortedYears.map(year => {
-      const row: Record<string, unknown> = { year };
-      categories.forEach(cat => {
-        const val = trendDataSource[cat]?.[year];
-        // Use only pembesaran (Kg) — pembenihan (Ekor) has different units
-        row[cat] = val ? val.pembesaran : 0;
+      const allYears = new Set<string>();
+      Object.values(trendDataSource).forEach(ym => Object.keys(ym).forEach(y => allYears.add(y)));
+      const sortedYears = Array.from(allYears).sort();
+      const categories = Object.keys(trendDataSource).sort();
+      trendLines = categories.map((cat, i) => ({ key: cat, color: CHART_COLORS[i % CHART_COLORS.length], name: `${cat} (Kg)` }));
+      trendData = sortedYears.map(year => {
+        const row: Record<string, unknown> = { year };
+        categories.forEach(cat => {
+          const val = trendDataSource[cat]?.[year];
+          // Use only pembesaran (Kg) — pembenihan (Ekor) has different units
+          row[cat] = val ? val.pembesaran : 0;
+        });
+        return row;
       });
-      return row;
-    });
-  }
+    }
 
-  // Build produksi data
-  const produksiData = getProduksiData(stats, produksiViewBy);
-  const produksiTitle = `Produksi per ${PRODUKSI_VIEWS.find(v => v.id === produksiViewBy)?.label ?? ''}`;
+    // Build produksi data
+    const produksiData = getProduksiData(stats, produksiViewBy);
+    const produksiTitle = `Produksi per ${PRODUKSI_VIEWS.find(v => v.id === produksiViewBy)?.label ?? ''}`;
 
-  // Pie data for produksi PDF
-  const pembesaranPieData = produksiData
-    .filter(d => (d['Pembesaran (Kg)'] as number) > 0)
-    .map(d => ({ name: d.name, value: d['Pembesaran (Kg)'] as number }));
-  const pembenihanPieData = produksiData
-    .filter(d => (d['Pembenihan (Ekor)'] as number) > 0)
-    .map(d => ({ name: d.name, value: d['Pembenihan (Ekor)'] as number }));
+    // Pie data for produksi PDF
+    const pembesaranPieData = produksiData
+      .filter(d => (d['Pembesaran (Kg)'] as number) > 0)
+      .map(d => ({ name: d.name, value: d['Pembesaran (Kg)'] as number }));
+    const pembenihanPieData = produksiData
+      .filter(d => (d['Pembenihan (Ekor)'] as number) > 0)
+      .map(d => ({ name: d.name, value: d['Pembenihan (Ekor)'] as number }));
 
-  // Build kecamatan chart data
-  let kecData: Record<string, unknown>[] = [];
-  let kecSeries: { key: string; color: string; name: string }[] = [];
-  const allKecForPdf = Object.keys(stats.productionByKecamatanDetail).sort();
+    // Build kecamatan chart data
+    let kecData: Record<string, unknown>[] = [];
+    let kecSeries: { key: string; color: string; name: string }[] = [];
+    const allKecForPdf = Object.keys(stats.productionByKecamatanDetail).sort();
 
-  if (kecamatanViewBy === 'produksi' || kecamatanViewBy === 'jenis-usaha') {
-    kecData = allKecForPdf.map(kec => {
-      const val = stats.productionByKecamatanDetail[kec];
-      return { name: kec, 'Pembesaran': val.pembesaranProduction, 'Pembenihan': val.pembenihanProduction };
-    });
-    kecSeries = [
-      { key: 'Pembesaran', color: '#3B82F6', name: 'Pembesaran' },
-      { key: 'Pembenihan', color: '#22C55E', name: 'Pembenihan' },
-    ];
-  } else if (kecamatanViewBy === 'jenis-ikan') {
-    const crossData = stats.productionByKecamatanByFishType;
-    const allFT = new Set<string>();
-    Object.values(crossData).forEach(ft => Object.keys(ft).forEach(f => allFT.add(f)));
-    const sortedFT = Array.from(allFT).sort();
-    kecSeries = sortedFT.map((ft, i) => ({ key: ft, color: CHART_COLORS[i % CHART_COLORS.length], name: `${ft} (Kg)` }));
-    kecData = allKecForPdf.map(kec => {
-      const row: Record<string, unknown> = { name: kec };
-      sortedFT.forEach(ft => { const val = crossData[kec]?.[ft]; row[ft] = val ? val.pembesaran : 0; });
-      return row;
-    });
-  } else if (kecamatanViewBy === 'wadah') {
-    const crossData = stats.productionByKecamatanByContainer;
-    const allCT = new Set<string>();
-    Object.values(crossData).forEach(ct => Object.keys(ct).forEach(c => allCT.add(c)));
-    const sortedCT = Array.from(allCT).sort();
-    kecSeries = sortedCT.map((ct, i) => ({ key: ct, color: CHART_COLORS[i % CHART_COLORS.length], name: `${ct} (Kg)` }));
-    kecData = allKecForPdf.map(kec => {
-      const row: Record<string, unknown> = { name: kec };
-      sortedCT.forEach(ct => { const val = crossData[kec]?.[ct]; row[ct] = val ? val.pembesaran : 0; });
-      return row;
-    });
-  } else if (kecamatanViewBy === 'pelaku-usaha') {
-    kecData = allKecForPdf.map(kec => {
-      const val = stats.productionByKecamatanDetail[kec];
-      return { name: kec, 'Pembesaran': val.pembesaranFarmer, 'Pembenihan': val.pembenihanFarmer };
-    });
-    kecSeries = [
-      { key: 'Pembesaran', color: '#3B82F6', name: 'Pelaku Pembesaran' },
-      { key: 'Pembenihan', color: '#22C55E', name: 'Pelaku Pembenihan' },
-    ];
-  } else if (kecamatanViewBy === 'kelompok') {
-    kecData = allKecForPdf.map(kec => {
-      const val = stats.productionByKecamatanDetail[kec];
-      return { name: kec, 'Pembesaran': val.pembesaranGroup, 'Pembenihan': val.pembenihanGroup };
-    });
-    kecSeries = [
-      { key: 'Pembesaran', color: '#3B82F6', name: 'Kelompok Pembesaran' },
-      { key: 'Pembenihan', color: '#22C55E', name: 'Kelompok Pembenihan' },
-    ];
-  }
+    if (kecamatanViewBy === 'produksi' || kecamatanViewBy === 'jenis-usaha') {
+      kecData = allKecForPdf.map(kec => {
+        const val = stats.productionByKecamatanDetail[kec];
+        return { name: kec, 'Pembesaran': val.pembesaranProduction, 'Pembenihan': val.pembenihanProduction };
+      });
+      kecSeries = [
+        { key: 'Pembesaran', color: '#3B82F6', name: 'Pembesaran' },
+        { key: 'Pembenihan', color: '#22C55E', name: 'Pembenihan' },
+      ];
+    } else if (kecamatanViewBy === 'jenis-ikan') {
+      const crossData = stats.productionByKecamatanByFishType;
+      const allFT = new Set<string>();
+      Object.values(crossData).forEach(ft => Object.keys(ft).forEach(f => allFT.add(f)));
+      const sortedFT = Array.from(allFT).sort();
+      kecSeries = sortedFT.map((ft, i) => ({ key: ft, color: CHART_COLORS[i % CHART_COLORS.length], name: `${ft} (Kg)` }));
+      kecData = allKecForPdf.map(kec => {
+        const row: Record<string, unknown> = { name: kec };
+        sortedFT.forEach(ft => { const val = crossData[kec]?.[ft]; row[ft] = val ? val.pembesaran : 0; });
+        return row;
+      });
+    } else if (kecamatanViewBy === 'wadah') {
+      const crossData = stats.productionByKecamatanByContainer;
+      const allCT = new Set<string>();
+      Object.values(crossData).forEach(ct => Object.keys(ct).forEach(c => allCT.add(c)));
+      const sortedCT = Array.from(allCT).sort();
+      kecSeries = sortedCT.map((ct, i) => ({ key: ct, color: CHART_COLORS[i % CHART_COLORS.length], name: `${ct} (Kg)` }));
+      kecData = allKecForPdf.map(kec => {
+        const row: Record<string, unknown> = { name: kec };
+        sortedCT.forEach(ct => { const val = crossData[kec]?.[ct]; row[ct] = val ? val.pembesaran : 0; });
+        return row;
+      });
+    } else if (kecamatanViewBy === 'pelaku-usaha') {
+      kecData = allKecForPdf.map(kec => {
+        const val = stats.productionByKecamatanDetail[kec];
+        return { name: kec, 'Pembesaran': val.pembesaranFarmer, 'Pembenihan': val.pembenihanFarmer };
+      });
+      kecSeries = [
+        { key: 'Pembesaran', color: '#3B82F6', name: 'Pelaku Pembesaran' },
+        { key: 'Pembenihan', color: '#22C55E', name: 'Pelaku Pembenihan' },
+      ];
+    } else if (kecamatanViewBy === 'kelompok') {
+      kecData = allKecForPdf.map(kec => {
+        const val = stats.productionByKecamatanDetail[kec];
+        return { name: kec, 'Pembesaran': val.pembesaranGroup, 'Pembenihan': val.pembenihanGroup };
+      });
+      kecSeries = [
+        { key: 'Pembesaran', color: '#3B82F6', name: 'Kelompok Pembesaran' },
+        { key: 'Pembenihan', color: '#22C55E', name: 'Kelompok Pembenihan' },
+      ];
+    }
 
-  const kecTitle = 'Produksi per Kecamatan';
+    const kecTitle = 'Produksi per Kecamatan';
 
-  // Sort kecData by total descending (same as visible chart)
-  kecData.sort((a, b) => {
-    const totalA = kecSeries.reduce((s, ser) => s + ((a[ser.key] as number) || 0), 0);
-    const totalB = kecSeries.reduce((s, ser) => s + ((b[ser.key] as number) || 0), 0);
-    return totalB - totalA;
-  });
+    // Sort kecData by total descending (same as visible chart)
+    kecData.sort((a, b) => {
+      const totalA = kecSeries.reduce((s, ser) => s + ((a[ser.key] as number) || 0), 0);
+      const totalB = kecSeries.reduce((s, ser) => s + ((b[ser.key] as number) || 0), 0);
+      return totalB - totalA;
+    });
+
+    return {
+      trendData, trendLines, produksiData, produksiTitle,
+      pembesaranPieData, pembenihanPieData,
+      kecData, kecSeries, kecTitle,
+    };
+  }, [stats, trendViewBy, produksiViewBy, kecamatanViewBy]);
+
+  // [H-12] Hoist the per-Bar label closures out of renderPdfKecamatanChart's
+  // JSX .map. Same O(N²) pattern as ProduksiKecamatanChart — `kecSeries.map`
+  // was running once per Bar per render. Now memoized on [kecSeries, kecData].
+  // Placed BEFORE the `if (!stats) return null` early return to satisfy the
+  // rules-of-hooks (kecSeries/kecData default to [] when stats is null).
+  const pdfStackedBarLabels = useMemo(
+    () => kecSeries.map(s => createStackedBarLabel(s.key, s.name, kecSeries.map(ss => ss.key), kecData)),
+    [kecSeries, kecData],
+  );
+
+  if (!stats) return null;
 
   const pdfTextStyle = { fill: '#1A2332', fontSize: 11 };
   const pdfGridStyle = { stroke: '#E0E0E0', strokeDasharray: '3 3' };
@@ -982,8 +1060,8 @@ export function PdfDashboardCharts() {
             <Tooltip contentStyle={{ background: '#fff', border: '1px solid #ccc', borderRadius: 4, fontSize: 12 }}
               formatter={(value: number) => new Intl.NumberFormat('id-ID').format(value)} />
             <Legend wrapperStyle={{ fontSize: 10, color: '#333' }} />
-            {kecSeries.map(s => (
-              <Bar key={s.key} dataKey={s.key} fill={s.color} stackId="a" name={s.name} label={createStackedBarLabel(s.key, s.name, kecSeries.map(ss => ss.key), kecData)} />
+            {kecSeries.map((s, i) => (
+              <Bar key={s.key} dataKey={s.key} fill={s.color} stackId="a" name={s.name} label={pdfStackedBarLabels[i]} />
             ))}
           </BarChart>
         </ResponsiveContainer>

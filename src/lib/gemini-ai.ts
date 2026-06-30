@@ -55,9 +55,22 @@ const DEFAULT_MAX_TOKENS = 2048;
 const MAX_RETRIES = 1; // Reduced from 2 to 1 — avoid consuming rate limit budget
 const RETRY_DELAY_MS = 2000;
 
-// NOTE: Singleton pattern removed — apiKey is always passed directly
-// to geminiChatCompletion() from ai-sdk.ts (which resolves keys from
-// env vars + DB each call). No module-level caching of instances.
+// [H-3] Per-apiKey instance cache. The `GoogleGenerativeAI` constructor is
+// cheap but allocation-per-call is wasteful when the same key is reused.
+// Keyed by apiKey string so different keys (e.g. env vs DB-stored) get their
+// own instances. NOTE: previous comment said "Singleton pattern removed —
+// no module-level caching"; that was true for the global-singleton variant
+// (which broke when apiKey changed at runtime). This Map-based cache avoids
+// that issue while still avoiding per-call allocation.
+const geminiInstances = new Map<string, GoogleGenerativeAI>();
+function getGemini(apiKey: string): GoogleGenerativeAI {
+  let inst = geminiInstances.get(apiKey);
+  if (!inst) {
+    inst = new GoogleGenerativeAI(apiKey);
+    geminiInstances.set(apiKey, inst);
+  }
+  return inst;
+}
 
 /**
  * Check if Google Gemini API is configured.
@@ -200,8 +213,8 @@ export async function geminiChatCompletion(
     };
   }
 
-  // Create instance with the resolved key (always fresh — no singleton issues)
-  const genAI = new GoogleGenerativeAI(apiKey);
+  // Create instance with the resolved key — cached per apiKey [H-3]
+  const genAI = getGemini(apiKey);
 
   const primaryModel = options.model || getGeminiModel();
   // Build the list of models to try: primary first, then fallbacks

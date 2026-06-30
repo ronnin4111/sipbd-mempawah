@@ -65,5 +65,17 @@ export const useFilterStore = create<FilterState & FilterActions>((set) => ({
   setKecamatanChartSegment: (kecamatanChartSegment) => set({ kecamatanChartSegment }),
   setAnalyzeYear: (analyzeYear) => set({ analyzeYear }),
   setAnalyzeSemester: (analyzeSemester) => set({ analyzeSemester }),
-  resetFilters: () => set(initialState),
+  // Reset only the data filters — preserve activeSection, isAdmin, and
+  // kecamatanChartSegment so admins don't get logged out / bounced to dashboard.
+  resetFilters: () =>
+    set({
+      years: [],
+      kecamatan: [],
+      desa: [],
+      groupName: [],
+      fishType: [],
+      containerType: [],
+      businessType: [],
+      search: '',
+    }),
 }));

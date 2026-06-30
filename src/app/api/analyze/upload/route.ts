@@ -528,19 +528,11 @@ export async function POST(request: NextRequest) {
     // =============================================
     // 4. Delete existing upload with same year (replace mode)
     // =============================================
-    const existingUploads = await db.analyzeUpload.findMany({
-      where: { year },
-      select: { id: true },
-    });
+    // Cascade delete (via schema's onDelete: Cascade) still removes related
+    // AnalyzeRow and AnalyzePopulasi — single statement replaces N+1 loop.
+    const deleteResult = await db.analyzeUpload.deleteMany({ where: { year } });
 
-    for (const existing of existingUploads) {
-      // Cascade delete will remove related AnalyzeRow and AnalyzePopulasi
-      await db.analyzeUpload.delete({
-        where: { id: existing.id },
-      });
-    }
-
-    const deletedCount = existingUploads.length;
+    const deletedCount = deleteResult.count;
 
     // =============================================
     // 5. Create new AnalyzeUpload with rows

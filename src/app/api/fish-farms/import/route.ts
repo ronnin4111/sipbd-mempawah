@@ -225,29 +225,32 @@ export async function POST(request: NextRequest) {
       deletedCount = deleteResult.count;
     } else {
       // Delete existing records with same composite keys
-      const compositeKeys = new Map<string, ImportFishFarm>();
-      for (const record of validRecords) {
-        const key = `${record.year}|${record.kecamatan}|${record.desa}|${record.fishType}|${record.containerType}|${record.businessType}`;
-        if (!compositeKeys.has(key)) {
-          compositeKeys.set(key, record);
-        }
-      }
-      for (const record of compositeKeys.values()) {
+      // [Q-2] Optimization: previously fired N sequential deleteMany calls (one per composite
+      //       key). Now: ONE deleteMany with an OR clause — one round trip instead of N.
+      const compositeKeys = [...new Map(validRecords.map(r => [
+        `${r.year}|${r.kecamatan}|${r.desa}|${r.fishType}|${r.containerType}|${r.businessType}`,
+        r,
+      ])).values()];
+      if (compositeKeys.length > 0) {
         await db.fishFarm.deleteMany({
           where: {
-            year: Number(record.year),
-            kecamatan: String(record.kecamatan || '').trim() || DEFAULT_KECAMATAN,
-            desa: String(record.desa || '').trim() || DEFAULT_DESA,
-            fishType: String(record.fishType || '').trim() || DEFAULT_FISH_TYPE,
-            containerType: normalizeContainerType(String(record.containerType || '')),
-            businessType: String(record.businessType).trim(),
+            OR: compositeKeys.map(k => ({
+              year: Number(k.year),
+              kecamatan: String(k.kecamatan || '').trim() || DEFAULT_KECAMATAN,
+              desa: String(k.desa || '').trim() || DEFAULT_DESA,
+              fishType: String(k.fishType || '').trim() || DEFAULT_FISH_TYPE,
+              containerType: normalizeContainerType(String(k.containerType || '')),
+              businessType: String(k.businessType).trim(),
+            })),
           },
         });
       }
     }
 
-    // Step 2: Insert in small batches (outside transaction for stability)
-    const BATCH_SIZE = 10;
+    // Step 2: Insert in batches (outside transaction for stability)
+    // [Q-18] Bumped BATCH_SIZE from 10 to 100 — Turso/libSQL supports batched inserts of
+    //        100-500 rows in a single statement, dramatically reducing round trips.
+    const BATCH_SIZE = 100;
     for (let i = 0; i < formattedRecords.length; i += BATCH_SIZE) {
       const batch = formattedRecords.slice(i, i + BATCH_SIZE);
       await db.fishFarm.createMany({

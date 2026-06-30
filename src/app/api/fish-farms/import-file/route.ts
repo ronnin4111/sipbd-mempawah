@@ -168,24 +168,34 @@ export async function POST(request: NextRequest) {
       });
       deletedCount = r.count;
     } else {
-      // Delete records matching composite keys — batch by year for fewer queries
-      const yearKecMap = new Map<string, { year: number; kecamatan: string }>();
-      for (const record of formattedRecords) {
-        const key = `${record.year}|${record.kecamatan}`;
-        if (!yearKecMap.has(key)) {
-          yearKecMap.set(key, { year: Number(record.year), kecamatan: String(record.kecamatan) });
-        }
-      }
-      // Batch delete per year+kecamatan combo (much fewer queries than per composite key)
-      for (const { year, kecamatan } of yearKecMap.values()) {
+      // Delete records matching composite keys
+      // [Q-2] Optimization: previously fired N sequential deleteMany calls (one per year+kec
+      //       pair, which also over-deleted rows whose desa/fishType/etc differed from the
+      //       import). Now: ONE deleteMany with an OR clause on the full composite key — one
+      //       round trip and narrower (correct) scope, matching import/route.ts behavior.
+      const compositeKeys = [...new Map(formattedRecords.map(r => [
+        `${r.year}|${r.kecamatan}|${r.desa}|${r.fishType}|${r.containerType}|${r.businessType}`,
+        r,
+      ])).values()];
+      if (compositeKeys.length > 0) {
         const result = await db.fishFarm.deleteMany({
-          where: { year, kecamatan },
+          where: {
+            OR: compositeKeys.map((k) => ({
+              year: Number(k.year),
+              kecamatan: String(k.kecamatan || '').trim() || DEFAULT_KECAMATAN,
+              desa: String(k.desa || '').trim() || DEFAULT_DESA,
+              fishType: String(k.fishType || '').trim() || DEFAULT_FISH_TYPE,
+              containerType: normalizeContainerType(String(k.containerType || '')),
+              businessType: String(k.businessType).trim(),
+            })),
+          },
         });
-        deletedCount += result.count;
+        deletedCount = result.count;
       }
     }
 
     // Insert in larger batches for performance (100 per batch)
+    // [Q-18] BATCH_SIZE is already 100 (good — Turso/libSQL supports 100-500 row batches).
     let count = 0;
     const BATCH_SIZE = 100;
     for (let i = 0; i < formattedRecords.length; i += BATCH_SIZE) {

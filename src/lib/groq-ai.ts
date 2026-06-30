@@ -64,9 +64,22 @@ const DEFAULT_MAX_TOKENS = 2048;
 const MAX_RETRIES = 1; // Reduced from 2 to 1 — avoid consuming rate limit budget
 const RETRY_DELAY_MS = 2000;
 
-// NOTE: Singleton pattern removed — apiKey is always passed directly
-// to groqChatCompletion() from ai-sdk.ts (which resolves keys from
-// env vars + DB each call). No module-level caching of instances.
+// [H-3] Per-apiKey instance cache. The `Groq` constructor opens an HTTP
+// client internally; allocating one per call is wasteful when the same key
+// is reused. Keyed by apiKey string so different keys (e.g. env vs DB-stored)
+// get their own instances. NOTE: previous comment said "Singleton pattern
+// removed — no module-level caching"; that was true for the global-singleton
+// variant (which broke when apiKey changed at runtime). This Map-based cache
+// avoids that issue while still avoiding per-call allocation.
+const groqInstances = new Map<string, Groq>();
+function getGroq(apiKey: string): Groq {
+  let inst = groqInstances.get(apiKey);
+  if (!inst) {
+    inst = new Groq({ apiKey });
+    groqInstances.set(apiKey, inst);
+  }
+  return inst;
+}
 
 /**
  * Check if Groq API is configured.
@@ -130,8 +143,8 @@ export async function groqChatCompletion(
     };
   }
 
-  // Create a fresh Groq instance with the resolved key (no singleton issues)
-  const groq = new Groq({ apiKey });
+  // Create a Groq instance with the resolved key — cached per apiKey [H-3]
+  const groq = getGroq(apiKey);
 
   const primaryModel = options.model || getGroqModel();
   const modelsToTry = [primaryModel, ...FALLBACK_MODELS.filter(m => m !== primaryModel)];

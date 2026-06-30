@@ -66,10 +66,16 @@ export async function POST(request: NextRequest) {
     let sentCount = 0;
     const expiredEndpoints: string[] = [];
 
-    // Send to each subscription
-    for (const sub of subscriptions) {
-      try {
-        await sendPushNotification(
+    // [M-7] Send to each subscription concurrently with Promise.allSettled.
+    //       Previously a sequential for...of awaited each push one at a time,
+    //       which serializes N independent HTTP round-trips to the push
+    //       service. allSettled preserves the per-item try/catch semantics:
+    //       SUBSCRIPTION_EXPIRED rejections are still harvested for cleanup,
+    //       other rejections are still logged per-endpoint. sentCount /
+    //       expiredEndpoints accounting is unchanged.
+    const results = await Promise.allSettled(
+      subscriptions.map(sub =>
+        sendPushNotification(
           {
             endpoint: sub.endpoint,
             keys: {
@@ -78,16 +84,21 @@ export async function POST(request: NextRequest) {
             },
           },
           payload
-        );
+        )
+      )
+    );
+    results.forEach((result, idx) => {
+      if (result.status === 'fulfilled') {
         sentCount++;
-      } catch (error) {
-        if (error instanceof Error && error.message === 'SUBSCRIPTION_EXPIRED') {
-          expiredEndpoints.push(sub.endpoint);
+      } else {
+        const reason = result.reason;
+        if (reason instanceof Error && reason.message === 'SUBSCRIPTION_EXPIRED') {
+          expiredEndpoints.push(subscriptions[idx].endpoint);
         } else {
-          console.error(`[notifications/send] Failed for ${sub.endpoint}:`, error);
+          console.error(`[notifications/send] Failed for ${subscriptions[idx].endpoint}:`, reason);
         }
       }
-    }
+    });
 
     // Remove expired subscriptions
     if (expiredEndpoints.length > 0) {

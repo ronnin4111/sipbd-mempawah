@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { ensureTablesExist } from '@/lib/db-init';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     await ensureTablesExist();

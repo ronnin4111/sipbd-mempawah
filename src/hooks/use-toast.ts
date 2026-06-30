@@ -9,7 +9,10 @@ import type {
 } from "@/components/ui/toast"
 
 const TOAST_LIMIT = 1
-const TOAST_REMOVE_DELAY = 1000000
+// [M-12] Was 1_000_000ms (~16min) which kept dismissed toasts in memory
+// indefinitely. 5s is long enough for the auto-dismiss animation to play
+// before the toast is fully removed from state.
+const TOAST_REMOVE_DELAY = 5_000
 
 type ToasterToast = ToastProps & {
   id: string
@@ -182,7 +185,10 @@ function useToast() {
         listeners.splice(index, 1)
       }
     }
-  }, [state])
+    // [M-12] `setState` is stable across renders (React guarantee), so this
+    // listener only needs to be registered once. Previously `[state]` caused
+    // the listener to be re-registered on every toast state change.
+  }, [])
 
   return {
     ...state,

@@ -55,8 +55,29 @@ export async function GET(request: NextRequest) {
       if (list.length > 0) where.businessType = { in: list };
     }
 
-    // Fetch records
-    const records = await db.fishFarm.findMany({ where });
+    // Fetch records — select only fields used downstream + hard cap (AUDIT-DB [Q-9])
+    const records = await db.fishFarm.findMany({
+      where,
+      select: {
+        year: true,
+        farmerId: true,
+        farmerName: true,
+        groupName: true,
+        kecamatan: true,
+        desa: true,
+        fishType: true,
+        businessType: true,
+        containerType: true,
+        farmerCount: true,
+        rtpCount: true,
+        productionQty: true,
+        productionValue: true,
+        kusuka: true,
+        cpib: true,
+        cbib: true,
+      },
+      take: 5000,
+    });
 
     // === Group Summary ===
     // Aggregate by group name + kecamatan (NOT desa — desa is farmer's address)

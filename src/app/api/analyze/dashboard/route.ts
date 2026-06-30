@@ -236,23 +236,95 @@ function buildUploadResponse(
     luasLahan: number;
   }[]
 ) {
+  // [A-2] fix: single-pass accumulator over `rows` (replaces 4 reduces + 8 for-ofs)
+  // and a single-pass accumulator over `populasi` (replaces 3 reduces + 1 for-of).
+  // All maps + running totals are updated in one for-of each. Output shape unchanged.
+  let totalProduksiTonRaw = 0;
+  let totalNilaiRpRaw = 0;
+  const monthlyMap = new Map<number, { produksi: number; nilai: number; tw: number }>();
+  const monthlyKomMap = new Map<number, Map<string, number>>(); // bulanNum -> (komoditas -> produksiTon)
+  const twMap = new Map<number, { produksi: number; nilai: number }>();
+  const komoditasMap = new Map<string, { produksi: number; nilai: number; pakan: number; benih: number }>();
+  const wadahProdMap = new Map<string, { produksi: number; nilai: number }>();
+  const komoditasSet = new Set<string>();
+  const wadahSet = new Set<string>();
+  const matrixMap = new Map<string, number>(); // key: "komoditas|wadah" -> produksiTon
+  const prodMap = new Map<string, { sum: number; count: number }>(); // key: "komoditas|wadah" -> {sum, count}
+
+  for (const r of rows) {
+    totalProduksiTonRaw += r.produksiTon;
+    totalNilaiRpRaw += r.nilaiRp;
+
+    // monthly
+    const m = monthlyMap.get(r.bulanNum) || { produksi: 0, nilai: 0, tw: r.tw };
+    m.produksi += r.produksiTon;
+    m.nilai += r.nilaiRp;
+    m.tw = r.tw;
+    monthlyMap.set(r.bulanNum, m);
+
+    // monthly by komoditas (pivot)
+    if (!monthlyKomMap.has(r.bulanNum)) monthlyKomMap.set(r.bulanNum, new Map());
+    const kMap = monthlyKomMap.get(r.bulanNum)!;
+    kMap.set(r.komoditas, (kMap.get(r.komoditas) || 0) + r.produksiTon);
+
+    // tw
+    const t = twMap.get(r.tw) || { produksi: 0, nilai: 0 };
+    t.produksi += r.produksiTon;
+    t.nilai += r.nilaiRp;
+    twMap.set(r.tw, t);
+
+    // komoditas
+    const k = komoditasMap.get(r.komoditas) || { produksi: 0, nilai: 0, pakan: 0, benih: 0 };
+    k.produksi += r.produksiTon;
+    k.nilai += r.nilaiRp;
+    k.pakan += r.pakanKg;
+    k.benih += r.agregatBenih;
+    komoditasMap.set(r.komoditas, k);
+
+    // wadah
+    const w = wadahProdMap.get(r.jenisWadah) || { produksi: 0, nilai: 0 };
+    w.produksi += r.produksiTon;
+    w.nilai += r.nilaiRp;
+    wadahProdMap.set(r.jenisWadah, w);
+
+    // sets + matrix + productivity
+    komoditasSet.add(r.komoditas);
+    wadahSet.add(r.jenisWadah);
+    const mk = `${r.komoditas}|${r.jenisWadah}`;
+    matrixMap.set(mk, (matrixMap.get(mk) || 0) + r.produksiTon);
+    if (r.produktifitas > 0) {
+      const p = prodMap.get(mk) || { sum: 0, count: 0 };
+      p.sum += r.produktifitas;
+      p.count += 1;
+      prodMap.set(mk, p);
+    }
+  }
+
+  // Single-pass over populasi: running totals + wadahPopMap
+  let totalRtp = 0;
+  let totalPembudidaya = 0;
+  let totalLuasLahanRaw = 0;
+  const wadahPopMap = new Map<string, { rtp: number; pembudidaya: number; luasLahan: number }>();
+  for (const p of populasi) {
+    totalRtp += p.jumlahRtp;
+    totalPembudidaya += p.jumlahPembudidaya;
+    totalLuasLahanRaw += p.luasLahan;
+    const wp = wadahPopMap.get(p.jenisWadah) || { rtp: 0, pembudidaya: 0, luasLahan: 0 };
+    wp.rtp += p.jumlahRtp;
+    wp.pembudidaya += p.jumlahPembudidaya;
+    wp.luasLahan += p.luasLahan;
+    wadahPopMap.set(p.jenisWadah, wp);
+  }
+
   // --- Summary ---
-  const totalProduksiTon = fmtNum(rows.reduce((s, r) => s + r.produksiTon, 0));
-  const totalNilaiRp = rows.reduce((s, r) => s + r.nilaiRp, 0);
-  const totalNilaiMiliar = fmtNum(totalNilaiRp / 1_000_000_000);
-  const totalRtp = populasi.reduce((s, p) => s + p.jumlahRtp, 0);
-  const totalPembudidaya = populasi.reduce((s, p) => s + p.jumlahPembudidaya, 0);
-  const totalLuasLahan = fmtNum(populasi.reduce((s, p) => s + p.luasLahan, 0));
+  const totalProduksiTon = fmtNum(totalProduksiTonRaw);
+  const totalNilaiRp = totalNilaiRpRaw;
+  const totalNilaiMiliar = fmtNum(totalNilaiRpRaw / 1_000_000_000);
+  const totalLuasLahan = fmtNum(totalLuasLahanRaw);
+  const totalProduksiForPct = totalProduksiTonRaw || 1;
+  const wadahTotalProduksi = totalProduksiTonRaw || 1;
 
   // --- Monthly data ---
-  const monthlyMap = new Map<number, { produksi: number; nilai: number; tw: number }>();
-  for (const r of rows) {
-    const existing = monthlyMap.get(r.bulanNum) || { produksi: 0, nilai: 0, tw: r.tw };
-    existing.produksi += r.produksiTon;
-    existing.nilai += r.nilaiRp;
-    existing.tw = r.tw;
-    monthlyMap.set(r.bulanNum, existing);
-  }
   const monthlyData = Array.from(monthlyMap.entries())
     .sort(([a], [b]) => a - b)
     .map(([bulanNum, d]) => ({
@@ -265,12 +337,6 @@ function buildUploadResponse(
 
   // --- Monthly by Komoditas (pivot for bar+line chart) ---
   // Each entry: { bulan, bulanNum, [komoditas1]: ton, [komoditas2]: ton, ..., total: ton }
-  const monthlyKomMap = new Map<number, Map<string, number>>(); // bulanNum -> (komoditas -> produksiTon)
-  for (const r of rows) {
-    if (!monthlyKomMap.has(r.bulanNum)) monthlyKomMap.set(r.bulanNum, new Map());
-    const kMap = monthlyKomMap.get(r.bulanNum)!;
-    kMap.set(r.komoditas, (kMap.get(r.komoditas) || 0) + r.produksiTon);
-  }
   const monthlyByKomoditas = Array.from(monthlyKomMap.entries())
     .sort(([a], [b]) => a - b)
     .map(([bulanNum, kMap]) => {
@@ -288,13 +354,6 @@ function buildUploadResponse(
     });
 
   // --- Triwulan data ---
-  const twMap = new Map<number, { produksi: number; nilai: number }>();
-  for (const r of rows) {
-    const existing = twMap.get(r.tw) || { produksi: 0, nilai: 0 };
-    existing.produksi += r.produksiTon;
-    existing.nilai += r.nilaiRp;
-    twMap.set(r.tw, existing);
-  }
   const triwulanData = Array.from(twMap.entries())
     .sort(([a], [b]) => a - b)
     .map(([tw, d]) => ({
@@ -304,16 +363,6 @@ function buildUploadResponse(
     }));
 
   // --- Komoditas data ---
-  const komoditasMap = new Map<string, { produksi: number; nilai: number; pakan: number; benih: number }>();
-  for (const r of rows) {
-    const existing = komoditasMap.get(r.komoditas) || { produksi: 0, nilai: 0, pakan: 0, benih: 0 };
-    existing.produksi += r.produksiTon;
-    existing.nilai += r.nilaiRp;
-    existing.pakan += r.pakanKg;
-    existing.benih += r.agregatBenih;
-    komoditasMap.set(r.komoditas, existing);
-  }
-  const totalProduksiForPct = rows.reduce((s, r) => s + r.produksiTon, 0) || 1;
   const komoditasData = Array.from(komoditasMap.entries())
     .sort(([, a], [, b]) => b.produksi - a.produksi)
     .map(([name, d]) => ({
@@ -326,24 +375,6 @@ function buildUploadResponse(
     }));
 
   // --- Wadah data ---
-  // Production data from rows
-  const wadahProdMap = new Map<string, { produksi: number; nilai: number }>();
-  for (const r of rows) {
-    const existing = wadahProdMap.get(r.jenisWadah) || { produksi: 0, nilai: 0 };
-    existing.produksi += r.produksiTon;
-    existing.nilai += r.nilaiRp;
-    wadahProdMap.set(r.jenisWadah, existing);
-  }
-  // Populasi data from AnalyzePopulasi
-  const wadahPopMap = new Map<string, { rtp: number; pembudidaya: number; luasLahan: number }>();
-  for (const p of populasi) {
-    const existing = wadahPopMap.get(p.jenisWadah) || { rtp: 0, pembudidaya: 0, luasLahan: 0 };
-    existing.rtp += p.jumlahRtp;
-    existing.pembudidaya += p.jumlahPembudidaya;
-    existing.luasLahan += p.luasLahan;
-    wadahPopMap.set(p.jenisWadah, existing);
-  }
-  const wadahTotalProduksi = rows.reduce((s, r) => s + r.produksiTon, 0) || 1;
   const wadahData = Array.from(wadahProdMap.entries())
     .sort(([, a], [, b]) => b.produksi - a.produksi)
     .map(([name, d]) => {
@@ -360,20 +391,8 @@ function buildUploadResponse(
     });
 
   // --- Matrix data (komoditas × jenisWadah pivot) ---
-  const komoditasSet = new Set<string>();
-  const wadahSet = new Set<string>();
-  for (const r of rows) {
-    komoditasSet.add(r.komoditas);
-    wadahSet.add(r.jenisWadah);
-  }
   const komoditasList = Array.from(komoditasSet).sort();
   const wadahList = Array.from(wadahSet).sort();
-
-  const matrixMap = new Map<string, number>(); // key: "komoditas|wadah" -> produksiTon
-  for (const r of rows) {
-    const key = `${r.komoditas}|${r.jenisWadah}`;
-    matrixMap.set(key, (matrixMap.get(key) || 0) + r.produksiTon);
-  }
 
   const matrixData = komoditasList.map((komoditas) => {
     const entry: Record<string, string | number> = { komoditas };
@@ -385,17 +404,6 @@ function buildUploadResponse(
   });
 
   // --- Productivity data (komoditas × jenisWadah, avg produktifitas) ---
-  const prodMap = new Map<string, { sum: number; count: number }>(); // key: "komoditas|wadah" -> {sum, count}
-  for (const r of rows) {
-    if (r.produktifitas > 0) {
-      const key = `${r.komoditas}|${r.jenisWadah}`;
-      const existing = prodMap.get(key) || { sum: 0, count: 0 };
-      existing.sum += r.produktifitas;
-      existing.count += 1;
-      prodMap.set(key, existing);
-    }
-  }
-
   const productivityData = komoditasList.map((komoditas) => {
     const entry: Record<string, string | number> = { name: komoditas };
     for (const wadah of wadahList) {
@@ -466,13 +474,53 @@ function buildDisaggResponse(
     triwulan: string;
   }[]
 ) {
+  // [A-2] fix: single-pass accumulator over `allFishFarms` (replaces 4 reduces +
+  // 5 for-ofs). The two `batches` loops (twMap + twKomMap) stay separate because
+  // they group by triwulan string at the batch level, not by individual fish farm.
+  let totalProduksiKg = 0;
+  let totalNilaiRpRaw = 0;
+  let totalRtp = 0;
+  let totalPembudidaya = 0;
+  const komoditasMap = new Map<string, { produksi: number; nilai: number }>();
+  const wadahProdMap = new Map<string, { produksi: number; nilai: number; rtp: number; pembudidaya: number }>();
+  const komoditasSet = new Set<string>();
+  const wadahSet = new Set<string>();
+  const matrixMap = new Map<string, number>();
+
+  for (const ff of allFishFarms) {
+    totalProduksiKg += ff.productionQty;
+    totalNilaiRpRaw += ff.productionValue;
+    totalRtp += ff.rtpCount;
+    totalPembudidaya += ff.farmerCount;
+
+    // komoditas (fishType)
+    const k = komoditasMap.get(ff.fishType) || { produksi: 0, nilai: 0 };
+    k.produksi += ff.productionQty / 1000; // kg to ton
+    k.nilai += ff.productionValue;
+    komoditasMap.set(ff.fishType, k);
+
+    // wadah (containerType)
+    const w = wadahProdMap.get(ff.containerType) || { produksi: 0, nilai: 0, rtp: 0, pembudidaya: 0 };
+    w.produksi += ff.productionQty / 1000;
+    w.nilai += ff.productionValue;
+    w.rtp += ff.rtpCount;
+    w.pembudidaya += ff.farmerCount;
+    wadahProdMap.set(ff.containerType, w);
+
+    // sets + matrix
+    komoditasSet.add(ff.fishType);
+    wadahSet.add(ff.containerType);
+    const mk = `${ff.fishType}|${ff.containerType}`;
+    matrixMap.set(mk, (matrixMap.get(mk) || 0) + ff.productionQty / 1000);
+  }
+
   // --- Summary ---
-  const totalProduksiTon = fmtNum(allFishFarms.reduce((s, f) => s + f.productionQty, 0) / 1000); // kg to ton
-  const totalNilaiRp = allFishFarms.reduce((s, f) => s + f.productionValue, 0);
-  const totalNilaiMiliar = fmtNum(totalNilaiRp / 1_000_000_000);
-  const totalRtp = allFishFarms.reduce((s, f) => s + f.rtpCount, 0);
-  const totalPembudidaya = allFishFarms.reduce((s, f) => s + f.farmerCount, 0);
+  const totalProduksiTon = fmtNum(totalProduksiKg / 1000); // kg to ton
+  const totalNilaiRp = totalNilaiRpRaw;
+  const totalNilaiMiliar = fmtNum(totalNilaiRpRaw / 1_000_000_000);
   const totalLuasLahan = 0; // Not available in disaggregation data
+  const totalProduksiForPct = totalProduksiKg / 1000 || 1;
+  const wadahTotalProduksi = totalProduksiKg / 1000 || 1;
 
   // --- Monthly/Triwulan data ---
   // Disaggregation only has triwulan, not monthly, so we map triwulan to approximate months
@@ -546,14 +594,6 @@ function buildDisaggResponse(
   }
 
   // --- Komoditas data ---
-  const komoditasMap = new Map<string, { produksi: number; nilai: number }>();
-  for (const ff of allFishFarms) {
-    const existing = komoditasMap.get(ff.fishType) || { produksi: 0, nilai: 0 };
-    existing.produksi += ff.productionQty / 1000; // kg to ton
-    existing.nilai += ff.productionValue;
-    komoditasMap.set(ff.fishType, existing);
-  }
-  const totalProduksiForPct = allFishFarms.reduce((s, f) => s + f.productionQty, 0) / 1000 || 1;
   const komoditasData = Array.from(komoditasMap.entries())
     .sort(([, a], [, b]) => b.produksi - a.produksi)
     .map(([name, d]) => ({
@@ -566,16 +606,6 @@ function buildDisaggResponse(
     }));
 
   // --- Wadah data ---
-  const wadahProdMap = new Map<string, { produksi: number; nilai: number; rtp: number; pembudidaya: number }>();
-  for (const ff of allFishFarms) {
-    const existing = wadahProdMap.get(ff.containerType) || { produksi: 0, nilai: 0, rtp: 0, pembudidaya: 0 };
-    existing.produksi += ff.productionQty / 1000;
-    existing.nilai += ff.productionValue;
-    existing.rtp += ff.rtpCount;
-    existing.pembudidaya += ff.farmerCount;
-    wadahProdMap.set(ff.containerType, existing);
-  }
-  const wadahTotalProduksi = allFishFarms.reduce((s, f) => s + f.productionQty, 0) / 1000 || 1;
   const wadahData = Array.from(wadahProdMap.entries())
     .sort(([, a], [, b]) => b.produksi - a.produksi)
     .map(([name, d]) => ({
@@ -589,20 +619,8 @@ function buildDisaggResponse(
     }));
 
   // --- Matrix data (komoditas × containerType pivot) ---
-  const komoditasSet = new Set<string>();
-  const wadahSet = new Set<string>();
-  for (const ff of allFishFarms) {
-    komoditasSet.add(ff.fishType);
-    wadahSet.add(ff.containerType);
-  }
   const komoditasList = Array.from(komoditasSet).sort();
   const wadahList = Array.from(wadahSet).sort();
-
-  const matrixMap = new Map<string, number>();
-  for (const ff of allFishFarms) {
-    const key = `${ff.fishType}|${ff.containerType}`;
-    matrixMap.set(key, (matrixMap.get(key) || 0) + ff.productionQty / 1000);
-  }
 
   const matrixData = komoditasList.map((komoditas) => {
     const entry: Record<string, string | number> = { komoditas };

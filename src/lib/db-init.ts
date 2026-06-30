@@ -124,6 +124,12 @@ const CREATE_TABLES_SQL = [
   `CREATE INDEX IF NOT EXISTS FishFarm_businessType_idx ON FishFarm(businessType)`,
   `CREATE INDEX IF NOT EXISTS FishFarm_year_idx ON FishFarm(year)`,
   `CREATE INDEX IF NOT EXISTS FishFarm_farmerId_idx ON FishFarm(farmerId)`,
+  `CREATE INDEX IF NOT EXISTS FishFarm_containerType_idx ON FishFarm(containerType)`,
+  `CREATE INDEX IF NOT EXISTS FishFarm_groupName_idx ON FishFarm(groupName)`,
+  `CREATE INDEX IF NOT EXISTS FishFarm_year_kecamatan_idx ON FishFarm(year, kecamatan)`,
+  `CREATE INDEX IF NOT EXISTS FishFarm_year_businessType_idx ON FishFarm(year, businessType)`,
+  `CREATE INDEX IF NOT EXISTS FishFarm_year_triwulan_idx ON FishFarm(year, triwulan)`,
+  `CREATE INDEX IF NOT EXISTS FishFarm_disaggregationBatchId_idx ON FishFarm(disaggregationBatchId)`,
 
   // CommodityPrice table
   `CREATE TABLE IF NOT EXISTS CommodityPrice (
@@ -154,6 +160,7 @@ const CREATE_TABLES_SQL = [
   )`,
   `CREATE INDEX IF NOT EXISTS ChatMemory_sessionId_category_idx ON ChatMemory(sessionId, category)`,
   `CREATE INDEX IF NOT EXISTS ChatMemory_sessionId_key_idx ON ChatMemory(sessionId, key)`,
+  `CREATE INDEX IF NOT EXISTS ChatMemory_sessionId_updatedAt_idx ON ChatMemory(sessionId, updatedAt)`,
   `CREATE INDEX IF NOT EXISTS ChatMemory_expiresAt_idx ON ChatMemory(expiresAt)`,
 
   // KusukaRegistration table
@@ -185,6 +192,9 @@ const CREATE_TABLES_SQL = [
   `CREATE INDEX IF NOT EXISTS KusukaRegistration_noKusuka_idx ON KusukaRegistration(noKusuka)`,
   `CREATE INDEX IF NOT EXISTS KusukaRegistration_statusKusuka_idx ON KusukaRegistration(statusKusuka)`,
   `CREATE INDEX IF NOT EXISTS KusukaRegistration_profesiUtama_idx ON KusukaRegistration(profesiUtama)`,
+  `CREATE INDEX IF NOT EXISTS KusukaRegistration_bentukUsaha_idx ON KusukaRegistration(bentukUsaha)`,
+  `CREATE INDEX IF NOT EXISTS KusukaRegistration_nama_idx ON KusukaRegistration(nama)`,
+  `CREATE INDEX IF NOT EXISTS KusukaRegistration_tglDibuat_idx ON KusukaRegistration(tglDibuat)`,
 
   // KnowledgeDocument table
   `CREATE TABLE IF NOT EXISTS KnowledgeDocument (
@@ -203,6 +213,7 @@ const CREATE_TABLES_SQL = [
   )`,
   `CREATE INDEX IF NOT EXISTS KnowledgeDocument_category_idx ON KnowledgeDocument(category)`,
   `CREATE INDEX IF NOT EXISTS KnowledgeDocument_isActive_idx ON KnowledgeDocument(isActive)`,
+  `CREATE INDEX IF NOT EXISTS KnowledgeDocument_isActive_createdAt_idx ON KnowledgeDocument(isActive, createdAt)`,
   `CREATE INDEX IF NOT EXISTS KnowledgeDocument_contentHash_idx ON KnowledgeDocument(contentHash)`,
 
   // KnowledgeChunk table
@@ -218,9 +229,7 @@ const CREATE_TABLES_SQL = [
     updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (documentId) REFERENCES KnowledgeDocument(id) ON DELETE CASCADE
   )`,
-  `CREATE INDEX IF NOT EXISTS KnowledgeChunk_documentId_idx ON KnowledgeChunk(documentId)`,
-  `CREATE INDEX IF NOT EXISTS KnowledgeChunk_chunkIndex_idx ON KnowledgeChunk(chunkIndex)`,
-  `CREATE INDEX IF NOT EXISTS KnowledgeChunk_keywords_idx ON KnowledgeChunk(keywords)`,
+  `CREATE INDEX IF NOT EXISTS KnowledgeChunk_documentId_chunkIndex_idx ON KnowledgeChunk(documentId, chunkIndex)`,
 
   // PushSubscription table (for web push notifications)
   `CREATE TABLE IF NOT EXISTS PushSubscription (
@@ -232,6 +241,8 @@ const CREATE_TABLES_SQL = [
     createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS PushSubscription_endpoint_key ON PushSubscription(endpoint)`,
+  `CREATE INDEX IF NOT EXISTS PushSubscription_userId_idx ON PushSubscription(userId)`,
 
   // AnalyzeUpload — stores metadata for uploaded Excel analysis data
   `CREATE TABLE IF NOT EXISTS AnalyzeUpload (
@@ -290,10 +301,17 @@ const CREATE_TABLES_SQL = [
   `CREATE INDEX IF NOT EXISTS idx_analyze_row_komoditas ON AnalyzeRow(komoditas)`,
   `CREATE INDEX IF NOT EXISTS idx_analyze_row_jenisWadah ON AnalyzeRow(jenisWadah)`,
   `CREATE INDEX IF NOT EXISTS idx_analyze_row_bulanNum ON AnalyzeRow(bulanNum)`,
+  `CREATE INDEX IF NOT EXISTS idx_analyze_row_uploadId_semester ON AnalyzeRow(uploadId, semester)`,
+  `CREATE INDEX IF NOT EXISTS idx_analyze_row_uploadId_bulanNum ON AnalyzeRow(uploadId, bulanNum)`,
+  `CREATE INDEX IF NOT EXISTS idx_analyze_row_uploadId_komoditas_jenisWadah ON AnalyzeRow(uploadId, komoditas, jenisWadah)`,
   `CREATE INDEX IF NOT EXISTS idx_analyze_upload_year ON AnalyzeUpload(year)`,
   `CREATE INDEX IF NOT EXISTS idx_analyze_upload_semester ON AnalyzeUpload(semester)`,
+  `CREATE INDEX IF NOT EXISTS idx_analyze_upload_year_createdAt ON AnalyzeUpload(year, createdAt)`,
   `CREATE INDEX IF NOT EXISTS idx_analyze_populasi_uploadId ON AnalyzePopulasi(uploadId)`,
   `CREATE INDEX IF NOT EXISTS idx_analyze_populasi_jenisWadah ON AnalyzePopulasi(jenisWadah)`,
+
+  // DisaggregationBatch createdAt index (for ORDER BY createdAt DESC)
+  `CREATE INDEX IF NOT EXISTS DisaggregationBatch_createdAt_idx ON DisaggregationBatch(createdAt)`,
 ];
 
 const ALTER_TABLES_SQL = [

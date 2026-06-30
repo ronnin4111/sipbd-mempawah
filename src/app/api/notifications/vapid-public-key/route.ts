@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getVapidPublicKey } from '@/lib/web-push';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/notifications/vapid-public-key
  * Returns the VAPID public key for the frontend to use for push subscription.

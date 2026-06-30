@@ -1897,28 +1897,34 @@ export function DisagregasiSection() {
     const fetchExistingUploads = useCallback(async () => {
       setLoadingUploads(true);
       try {
-        const res = await fetch('/api/analyze/dashboard?year=0');
-        if (res.ok) {
-          const data = await res.json();
-          // Get available years and fetch details for each
-          const years: number[] = data.availableYears || [];
-          const uploads: { year: number; fileName: string; rows: number; createdAt: string }[] = [];
-          for (const y of years) {
-            const yr = await fetch(`/api/analyze/dashboard?year=${y}`);
-            if (yr.ok) {
-              const yd = await yr.json();
-              if (yd.hasData) {
-                uploads.push({
-                  year: y,
-                  fileName: yd.source === 'upload' ? 'Excel Upload' : 'Disagregasi DB',
-                  rows: yd.summary?.totalRtp || 0,
-                  createdAt: new Date().toISOString(),
-                });
-              }
-            }
-          }
-          setExistingUploads(uploads);
+        // Fetch all years in parallel; availableYears is returned by every
+        // per-year response, so we no longer need a separate year=0 call.
+        const yearsRes = await fetch(`/api/analyze/dashboard?year=${new Date().getFullYear()}`);
+        let years: number[] = [];
+        if (yearsRes.ok) {
+          const yearsData = await yearsRes.json();
+          years = yearsData.availableYears || [];
         }
+        const uploads: { year: number; fileName: string; rows: number; createdAt: string }[] = [];
+        const results = await Promise.all(
+          years.map((y) =>
+            fetch(`/api/analyze/dashboard?year=${y}`)
+              .then((r) => (r.ok ? r.json().then((d) => ({ year: y, d })) : null))
+              .catch(() => null),
+          ),
+        );
+        for (const entry of results) {
+          if (entry && entry.d && entry.d.hasData) {
+            const yd = entry.d;
+            uploads.push({
+              year: entry.year,
+              fileName: yd.source === 'upload' ? 'Excel Upload' : 'Disagregasi DB',
+              rows: yd.summary?.totalRtp || 0,
+              createdAt: new Date().toISOString(),
+            });
+          }
+        }
+        setExistingUploads(uploads);
       } catch {
         // Silently fail
       } finally {

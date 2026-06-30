@@ -31,9 +31,22 @@ model FishFarm {
   cpib            Boolean  @default(false)
   cbib            Boolean  @default(false)
   disaggregationBatchId String?
-  disaggregationBatch   DisaggregationBatch? @relation(fields: [disaggregationBatchId], references: [id])
+  disaggregationBatch   DisaggregationBatch? @relation(fields: [disaggregationBatchId], references: [id], onDelete: SetNull)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+
+  @@index([year])
+  @@index([kecamatan])
+  @@index([desa])
+  @@index([fishType])
+  @@index([businessType])
+  @@index([containerType])
+  @@index([groupName])
+  @@index([farmerId])
+  @@index([year, kecamatan])
+  @@index([year, businessType])
+  @@index([year, triwulan])
+  @@index([disaggregationBatchId])
 }
 
 model DisaggregationBatch {
@@ -49,6 +62,11 @@ model DisaggregationBatch {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   fishFarms       FishFarm[]
+
+  @@index([year])
+  @@index([year, triwulan])
+  @@index([triwulan])
+  @@index([createdAt])
 }
 
 model AnalyzeUpload {
@@ -66,6 +84,7 @@ model AnalyzeUpload {
 
   @@index([year])
   @@index([semester])
+  @@index([year, createdAt])
 }
 
 model AnalyzeRow {
@@ -97,6 +116,9 @@ model AnalyzeRow {
   @@index([komoditas])
   @@index([jenisWadah])
   @@index([bulanNum])
+  @@index([uploadId, semester])
+  @@index([uploadId, bulanNum])
+  @@index([uploadId, komoditas, jenisWadah])
 }
 
 model AnalyzePopulasi {
@@ -147,6 +169,7 @@ model ChatMemory {
 
   @@index([sessionId, category])
   @@index([sessionId, key])
+  @@index([sessionId, updatedAt])
   @@index([expiresAt])
 }
 
@@ -178,6 +201,9 @@ model KusukaRegistration {
   @@index([noKusuka])
   @@index([statusKusuka])
   @@index([profesiUtama])
+  @@index([bentukUsaha])
+  @@index([nama])
+  @@index([tglDibuat])
 }
 
 model KnowledgeDocument {
@@ -197,6 +223,7 @@ model KnowledgeDocument {
 
   @@index([category])
   @@index([isActive])
+  @@index([isActive, createdAt])
   @@index([contentHash])
 }
 
@@ -212,9 +239,7 @@ model KnowledgeChunk {
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
 
-  @@index([documentId])
-  @@index([chunkIndex])
-  @@index([keywords])
+  @@index([documentId, chunkIndex])
 }
 
 model Penyuluh {
@@ -262,4 +287,16 @@ model SocialMediaPost {
   @@index([platform])
   @@index([isActive])
   @@index([sortOrder])
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  endpoint  String   @unique
+  p256dh    String   @default("")
+  auth      String   @default("")
+  userId    String   @default("admin")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
 }

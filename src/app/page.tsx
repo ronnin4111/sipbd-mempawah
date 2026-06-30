@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { AnimatePresence, motion } from 'framer-motion';
 import { AppShell } from '@/components/layout/app-shell';
@@ -404,6 +404,19 @@ function ImportExportSection() {
 
 export default function Home() {
   const activeSection = useFilterStore((s) => s.activeSection);
+  // PdfDashboardCharts is only mounted while a PDF export is in flight,
+  // avoiding ~600 lines of off-screen chart-data building on every filter change.
+  const [pdfChartsReady, setPdfChartsReady] = useState(false);
+  useEffect(() => {
+    const onStart = () => setPdfChartsReady(true);
+    const onEnd = () => setPdfChartsReady(false);
+    window.addEventListener('pdf-export-start', onStart as EventListener);
+    window.addEventListener('pdf-export-end', onEnd as EventListener);
+    return () => {
+      window.removeEventListener('pdf-export-start', onStart as EventListener);
+      window.removeEventListener('pdf-export-end', onEnd as EventListener);
+    };
+  }, []);
 
   const renderSection = () => {
     switch (activeSection) {
@@ -455,8 +468,8 @@ export default function Home() {
 
   return (
     <AppShell>
-      {/* Always-rendered PDF chart container (off-screen) for PDF export capture */}
-      <PdfDashboardCharts />
+      {/* Off-screen PDF chart container — only mounted while a PDF export is in flight */}
+      {pdfChartsReady && <PdfDashboardCharts />}
       <AnimatePresence mode="wait">
         <motion.div
           key={activeSection}

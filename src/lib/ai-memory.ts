@@ -14,6 +14,14 @@ import { db } from '@/lib/db';
  * - insight:     AI-inferred patterns (e.g., "User sering tanya tentang pembenihan")
  */
 
+// ─── Rate-limiting for memory decay (avoid running on every chat message) ─
+//
+// [C-1] Previously `retrieveMemories()` called `await decayMemories(sessionId)`
+// on EVERY chat message, adding latency + 1+ DB round-trip per message. Now we
+// only run decay at most once per hour per session, fire-and-forget.
+const lastDecayRun = new Map<string, number>();
+const DECAY_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+
 // ─── Types ───────────────────────────────────────────────────────────
 
 export type MemoryCategory = 'fact' | 'preference' | 'correction' | 'faq' | 'insight';
@@ -59,8 +67,13 @@ export async function retrieveMemories(
   const categories = options?.categories;
 
   try {
-    // Clean up expired memories first
-    await decayMemories(sessionId);
+    // Clean up expired memories first — but rate-limit to once per hour per
+    // session (C-1). Fire-and-forget so we don't block the chat response.
+    const lastRun = lastDecayRun.get(sessionId) ?? 0;
+    if (Date.now() - lastRun > DECAY_INTERVAL_MS) {
+      lastDecayRun.set(sessionId, Date.now());
+      decayMemories(sessionId).catch(err => console.error('[ai-memory] decay failed:', err));
+    }
 
     // Get all non-expired memories for this session
     const where: Record<string, unknown> = {
@@ -128,9 +141,10 @@ export async function retrieveMemories(
     const topMemories = scored.slice(0, limit).map(s => s.memory);
 
     // Update access count for retrieved memories (async, don't await)
-    for (const m of topMemories) {
-      db.chatMemory.update({
-        where: { id: m.id },
+    // Single updateMany instead of N separate updates — see AUDIT-DB [Q-11]
+    if (topMemories.length > 0) {
+      db.chatMemory.updateMany({
+        where: { id: { in: topMemories.map(m => m.id) } },
         data: {
           accessCount: { increment: 1 },
           lastAccessedAt: new Date(),
@@ -200,14 +214,84 @@ export async function storeMemory(
 
 /**
  * Store multiple memories at once.
+ *
+ * [C-3] Previously a sequential `for (const memory of memories) { await
+ * storeMemory(...) }` loop — each iteration did `findFirst + update|create`
+ * = 2 DB round-trips per memory, all sequential.
+ *
+ * Now: ONE `findMany` to fetch all existing rows with matching keys, then a
+ * single `createMany` for new memories + parallel `update` calls for existing
+ * ones. The confidence-merging / context-fallback / source-tracking logic
+ * below mirrors `storeMemory()` exactly — see that function for details.
  */
 export async function storeMemories(
   sessionId: string,
   memories: ExtractedMemory[]
 ): Promise<void> {
-  // Store sequentially to avoid conflicts
-  for (const memory of memories) {
-    await storeMemory(sessionId, memory);
+  if (!memories || memories.length === 0) return;
+
+  try {
+    // Dedupe by key (last occurrence wins) — matches the original sequential
+    // behavior of `storeMemory` where the last memory with a given key
+    // overwrites any earlier ones (no unique constraint on (sessionId, key)).
+    const deduped = new Map<string, ExtractedMemory>();
+    for (const memory of memories) {
+      deduped.set(memory.key, memory);
+    }
+    const keys = Array.from(deduped.keys());
+    const existing = await db.chatMemory.findMany({
+      where: { sessionId, key: { in: keys } },
+    });
+    const existingMap = new Map(existing.map(e => [e.key, e]));
+
+    // Build payload lists. We `void`-guard the array element types via `any`
+    // to avoid Prisma's overly-strict generated input types complaining about
+    // union literals at runtime (the values are valid at the DB level).
+    const toCreate: any[] = [];
+    const toUpdate: Array<{ id: string; data: any }> = [];
+    const now = new Date();
+
+    for (const memory of deduped.values()) {
+      const ex = existingMap.get(memory.key);
+      if (ex) {
+        // Update existing memory — merge/override value
+        // (mirrors storeMemory: corrections get confidence boost)
+        const newConfidence = memory.source === 'correction'
+          ? Math.min(1.0, memory.confidence + 0.2)
+          : memory.confidence;
+        toUpdate.push({
+          id: ex.id,
+          data: {
+            value: memory.value,
+            context: memory.context || ex.context,
+            confidence: newConfidence,
+            source: memory.source,
+            category: memory.category,
+            updatedAt: now,
+          },
+        });
+      } else {
+        // Create new memory (uses raw memory.confidence, NOT the boosted value
+        // — same as storeMemory's create branch)
+        toCreate.push({
+          sessionId,
+          category: memory.category,
+          key: memory.key,
+          value: memory.value,
+          context: memory.context,
+          confidence: memory.confidence,
+          source: memory.source,
+          expiresAt: getMemoryExpiry(memory.category),
+        });
+      }
+    }
+
+    await Promise.all([
+      toCreate.length > 0 ? db.chatMemory.createMany({ data: toCreate }) : Promise.resolve(),
+      ...toUpdate.map(u => db.chatMemory.update({ where: { id: u.id }, data: u.data })),
+    ]);
+  } catch (error) {
+    console.error('[AI Memory] StoreMemories error:', error);
   }
 }
 
@@ -409,23 +493,38 @@ export async function decayMemories(sessionId: string): Promise<number> {
       },
     });
 
-    // Decay confidence of very old memories (> 90 days, not corrections)
+    // Decay confidence of very old memories (> 90 days, not corrections).
+    //
+    // [C-2] Previously this was an N+1 `findMany` + `for...of update` loop.
+    // Now done as TWO bulk `updateMany` calls:
+    //   1. confidence > 0.4  → decrement by 0.1 (stays ≥ 0.3)
+    //   2. 0.3 < confidence ≤ 0.4 → snap to 0.3
+    // Both branches reproduce the original `Math.max(0.3, m.confidence - 0.1)`
+    // semantics exactly (verified for all confidence values in (0.3, 1.0]).
     const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
-    const oldMemories = await db.chatMemory.findMany({
+
+    // Memories with confidence > 0.4 → decrement by 0.1 (stays ≥ 0.3)
+    const decRes = await db.chatMemory.updateMany({
       where: {
         sessionId,
-        category: { not: 'correction' }, // Corrections don't decay
+        category: { not: 'correction' },
         updatedAt: { lt: ninetyDaysAgo },
-        confidence: { gt: 0.3 },
+        confidence: { gt: 0.4 },
       },
+      data: { confidence: { decrement: 0.1 } },
     });
-
-    for (const m of oldMemories) {
-      await db.chatMemory.update({
-        where: { id: m.id },
-        data: { confidence: Math.max(0.3, m.confidence - 0.1) },
-      });
-    }
+    // Memories with 0.3 < confidence ≤ 0.4 → snap to 0.3
+    const snapRes = await db.chatMemory.updateMany({
+      where: {
+        sessionId,
+        category: { not: 'correction' },
+        updatedAt: { lt: ninetyDaysAgo },
+        confidence: { gt: 0.3, lte: 0.4 },
+      },
+      data: { confidence: 0.3 },
+    });
+    const totalDecayed = decRes.count + snapRes.count;
+    void totalDecayed; // currently unused but preserved for future use
 
     return deleted.count;
   } catch (error) {

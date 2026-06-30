@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Search, X, RotateCcw, ChevronDown, ChevronUp, Filter } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,8 +20,9 @@ import {
   CommandList,
 } from '@/components/ui/command';
 import { useFilterStore } from '@/store/filter-store';
-import { useFilterOptions, useFishFarms } from '@/hooks/use-fish-farms';
+import { useFilterOptions } from '@/hooks/use-fish-farms';
 import { useMemo } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 
 interface MultiSelectFilterProps {
   label: string;
@@ -92,11 +93,33 @@ function MultiSelectFilter({
 
 export function FilterBar({ compact = false }: { compact?: boolean }) {
   const [isOpen, setIsOpen] = useState(false);
-  const {
-    years, kecamatan, desa, groupName, fishType, containerType, businessType, search,
-    setYears, setKecamatan, setDesa, setGroupName, setFishType, setContainerType, setBusinessType, setSearch,
-    resetFilters,
-  } = useFilterStore();
+  const { years, kecamatan, desa, groupName, fishType, containerType, businessType, search } =
+    useFilterStore(
+      useShallow((s) => ({
+        years: s.years,
+        kecamatan: s.kecamatan,
+        desa: s.desa,
+        groupName: s.groupName,
+        fishType: s.fishType,
+        containerType: s.containerType,
+        businessType: s.businessType,
+        search: s.search,
+      })),
+    );
+  const { setYears, setKecamatan, setDesa, setGroupName, setFishType, setContainerType, setBusinessType, setSearch, resetFilters } =
+    useFilterStore(
+      useShallow((s) => ({
+        setYears: s.setYears,
+        setKecamatan: s.setKecamatan,
+        setDesa: s.setDesa,
+        setGroupName: s.setGroupName,
+        setFishType: s.setFishType,
+        setContainerType: s.setContainerType,
+        setBusinessType: s.setBusinessType,
+        setSearch: s.setSearch,
+        resetFilters: s.resetFilters,
+      })),
+    );
 
   // Fetch all filter options dynamically from the database
   const { data: filterOptionsData } = useFilterOptions();
@@ -162,11 +185,35 @@ export function FilterBar({ compact = false }: { compact?: boolean }) {
   const hasActiveFilters = years.length > 0 || kecamatan.length > 0 || desa.length > 0 ||
     groupName.length > 0 || fishType.length > 0 || containerType.length > 0 || businessType.length > 0 || search.length > 0;
 
-  // Fetch total count for display
-  const { data: countData } = useFishFarms(1, 1);
-  const totalResults = countData?.total ?? 0;
+  // [H-7] Removed the redundant `useFishFarms(1, 1)` call — DataTable already
+  // shows the total count at the table header (~line 601 of data-table.tsx),
+  // so this duplicate count display was triggering an extra API fetch on every
+  // FilterBar mount.
 
   const filterCount = years.length + kecamatan.length + desa.length + groupName.length + fishType.length + containerType.length + businessType.length + (search.length > 0 ? 1 : 0);
+
+  // [H-8] Debounce the search input by 300ms so per-keystroke store updates
+  // don't trigger an immediate re-fetch of the fish-farms list. Local value
+  // is shown immediately for responsiveness; the store is updated after the
+  // debounce window elapses.
+  const [localSearch, setLocalSearch] = useState(search);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onChangeSearch = useCallback(
+    (v: string) => {
+      setLocalSearch(v);
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => setSearch(v), 300);
+    },
+    [setSearch],
+  );
+  // Clear the X button immediately resets both the local + debounced store value.
+  const clearSearch = useCallback(() => {
+    setLocalSearch('');
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    setSearch('');
+  }, [setSearch]);
+  // Cleanup any pending timeout on unmount.
+  useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
 
   return (
     <div className={compact ? "overflow-hidden rounded-lg" : "glass-card overflow-hidden"}>
@@ -181,11 +228,6 @@ export function FilterBar({ compact = false }: { compact?: boolean }) {
         <div className="flex items-center gap-2">
           <Filter className="h-4 w-4" style={{ color: '#06B6D4' }} />
           <span className="text-sm font-semibold" style={{ color: 'var(--foreground)' }}>Filter Data</span>
-          {hasActiveFilters && totalResults > 0 && (
-            <span className="text-[10px] font-semibold" style={{ color: '#06B6D4' }}>
-              {new Intl.NumberFormat('id-ID').format(totalResults)} data ditemukan
-            </span>
-          )}
           {hasActiveFilters && (
             <Badge
               className="h-5 px-1.5 text-[10px]"
@@ -225,13 +267,13 @@ export function FilterBar({ compact = false }: { compact?: boolean }) {
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
               <Input
                 placeholder="Cari data..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                value={localSearch}
+                onChange={(e) => onChangeSearch(e.target.value)}
                 className="h-8 text-xs pl-8 pr-8"
               />
               {search && (
                 <button
-                  onClick={() => setSearch('')}
+                  onClick={clearSearch}
                   className="absolute right-2 top-1/2 -translate-y-1/2"
                 >
                   <X className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />

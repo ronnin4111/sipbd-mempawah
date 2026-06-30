@@ -15,6 +15,45 @@ import { db } from "@/lib/db";
 let kbContextCache: { content: string; timestamp: number } | null = null;
 const KB_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
+// [H-6] Hoisted module-scope stop-words sets (previously rebuilt inside the
+// functions on every call). Two separate sets because the two callers use
+// slightly different word lists:
+//   - EXTRACT_KEYWORDS_STOP_WORDS: used by `extractKeywordsFromContent`
+//     (keeps personnel-field terms like "jabatan", "nip", "golongan" out of
+//     the stored keyword index)
+//   - QUERY_KEYWORDS_STOP_WORDS: used by `extractQueryKeywords` (also excludes
+//     question-context words like "jabatan", "posisi", "peran" from search)
+const EXTRACT_KEYWORDS_STOP_WORDS = new Set([
+  "yang", "dan", "di", "ke", "dari", "dengan", "untuk", "pada", "adalah",
+  "ini", "itu", "atau", "dalam", "tidak", "akan", "oleh", "juga", "sudah",
+  "ada", "karena", "seperti", "lebih", "setelah", "bisa", "buat", "lain",
+  "saja", "hanya", "masih", "sangat", "serta", "bahwa", "apakah", "berapa",
+  "bagaimana", "mengapa", "kapan", "dimana", "siapa", "apa", "sih", "dong",
+  "kok", "kan", "lah", "pun", "per", "tentang", "menurut", "seberapa",
+  "the", "a", "an", "is", "are", "was", "were", "be", "been", "what",
+  "how", "why", "when", "where", "who", "which", "can", "do", "does",
+  "nomor", "nama", "tanggal", "alamat", "telepon", "email", "status",
+  "jenis", "tipe", "kode", "id", "no", "nrp", "nip", "jabatan", "golongan",
+  "unit", "bidang", "seksi", "sub", "bagian", "lapangan", "kantor",
+  "kabupaten", "kecamatan", "desa", "kelurahan", "provinsi", "kota",
+  "dinas", "badan", "inspektorat", "sekretariat", "kepala",
+  // NOTE: "pegawai" removed from stop words — it's an important search keyword
+  // for personnel documents. Without it, keyword search can't find pegawai data.
+  "tahun", "bulan", "hari", "kerja", "pensiun", "mutasi", "pangkat",
+]);
+
+const QUERY_KEYWORDS_STOP_WORDS = new Set([
+  "yang", "dan", "di", "ke", "dari", "dengan", "untuk", "pada", "adalah",
+  "ini", "itu", "atau", "dalam", "tidak", "akan", "oleh", "juga", "sudah",
+  "ada", "karena", "seperti", "lebih", "setelah", "bisa", "buat", "lain",
+  "saja", "hanya", "masih", "sangat", "serta", "bahwa", "apakah", "berapa",
+  "bagaimana", "mengapa", "kapan", "dimana", "siapa", "apa", "sih", "dong",
+  "kok", "kan", "lah", "pun", "per", "tentang", "menurut", "seberapa",
+  "the", "a", "an", "is", "are", "was", "were", "be", "been", "what",
+  "how", "why", "when", "where", "who", "which", "can", "do", "does",
+  "jabatan", "posisi", "peran", "fungsi", "tugas", // These are question context, not search terms
+]);
+
 /**
  * Delete a document and its chunks
  */
@@ -76,24 +115,7 @@ export async function listDocuments(category?: string) {
  * - Multi-word entities (consecutive capitalized words)
  */
 export function extractKeywordsFromContent(text: string): string[] {
-  const stopWords = new Set([
-    "yang", "dan", "di", "ke", "dari", "dengan", "untuk", "pada", "adalah",
-    "ini", "itu", "atau", "dalam", "tidak", "akan", "oleh", "juga", "sudah",
-    "ada", "karena", "seperti", "lebih", "setelah", "bisa", "buat", "lain",
-    "saja", "hanya", "masih", "sangat", "serta", "bahwa", "apakah", "berapa",
-    "bagaimana", "mengapa", "kapan", "dimana", "siapa", "apa", "sih", "dong",
-    "kok", "kan", "lah", "pun", "per", "tentang", "menurut", "seberapa",
-    "the", "a", "an", "is", "are", "was", "were", "be", "been", "what",
-    "how", "why", "when", "where", "who", "which", "can", "do", "does",
-    "nomor", "nama", "tanggal", "alamat", "telepon", "email", "status",
-    "jenis", "tipe", "kode", "id", "no", "nrp", "nip", "jabatan", "golongan",
-    "unit", "bidang", "seksi", "sub", "bagian", "lapangan", "kantor",
-    "kabupaten", "kecamatan", "desa", "kelurahan", "provinsi", "kota",
-    "dinas", "badan", "inspektorat", "sekretariat", "kepala",
-    // NOTE: "pegawai" removed from stop words — it's an important search keyword
-    // for personnel documents. Without it, keyword search can't find pegawai data.
-    "tahun", "bulan", "hari", "kerja", "pensiun", "mutasi", "pangkat",
-  ]);
+  const stopWords = EXTRACT_KEYWORDS_STOP_WORDS;
 
   const keywords = new Set<string>();
 
@@ -160,14 +182,23 @@ export async function searchKnowledgeBase(
 
   if (queryKeywords.length === 0) return [];
 
-  // Get all active chunks
+  // Get all active chunks — pre-filter by query keywords at the DB level
+  // [C-4] Previously fetched EVERY active chunk with no `take` cap and no
+  // keyword filter, then scored in memory. Now we narrow the candidate set
+  // with an OR clause over `keywords`/`content` and cap at 200 chunks.
+  const where: any = { document: { isActive: true } };
+  if (queryKeywords.length > 0) {
+    where.OR = queryKeywords.flatMap(kw => [
+      { keywords: { contains: kw } },
+      { content: { contains: kw } },
+    ]);
+  }
   const chunks = await db.knowledgeChunk.findMany({
-    where: {
-      document: { isActive: true },
-    },
+    where,
     include: {
       document: { select: { title: true, category: true } },
     },
+    take: 200, // cap at 200 chunks
   });
 
   if (chunks.length === 0) return [];
@@ -229,9 +260,11 @@ export async function searchKnowledgeBase(
   }
 
   // Update access count for used chunks (fire and forget)
-  for (const item of diverseResults) {
-    db.knowledgeChunk.update({
-      where: { id: item.chunk.id },
+  // [C-5] Previously an N+1 loop of separate `update` calls; now a single
+  // `updateMany` with `id IN (...)`.
+  if (diverseResults.length > 0) {
+    db.knowledgeChunk.updateMany({
+      where: { id: { in: diverseResults.map(r => r.chunk.id) } },
       data: { accessCount: { increment: 1 } },
     }).catch(() => {}); // Ignore errors
   }
@@ -354,14 +387,22 @@ export async function countMatchingChunks(query: string): Promise<number> {
 
   if (queryKeywords.length === 0) return 0;
 
+  // [C-4] Same keyword pre-filter + cap as `searchKnowledgeBase` — avoids
+  // loading ALL active chunks just to count matches in memory.
+  const where: any = { document: { isActive: true } };
+  if (queryKeywords.length > 0) {
+    where.OR = queryKeywords.flatMap(kw => [
+      { keywords: { contains: kw } },
+      { content: { contains: kw } },
+    ]);
+  }
   const chunks = await db.knowledgeChunk.findMany({
-    where: {
-      document: { isActive: true },
-    },
+    where,
     select: {
       content: true,
       keywords: true,
     },
+    take: 200,
   });
 
   if (chunks.length === 0) return 0;
@@ -415,13 +456,24 @@ export async function countMatchingChunks(query: string): Promise<number> {
  * whether names are single-word or multi-word.
  */
 export async function countUniquePegawai(): Promise<number> {
+  // [C-4] Pre-filter to chunks whose parent document is pegawai-related —
+  // avoids loading ALL active chunks just to scan for NIP patterns in memory.
+  // Cap at 500 chunks (pegawai data is typically concentrated in 1-3 docs).
   const chunks = await db.knowledgeChunk.findMany({
     where: {
-      document: { isActive: true },
+      document: {
+        isActive: true,
+        OR: [
+          { title: { contains: 'pegawai' } },
+          { title: { contains: 'struktur' } },
+          { category: { contains: 'pegawai' } },
+        ],
+      },
     },
     select: {
       content: true,
     },
+    take: 500,
   });
 
   const names = new Set<string>();
@@ -599,9 +651,20 @@ export async function getAllPegawaiChunks(): Promise<string[]> {
   } catch (error) {
     console.error('[KB] getAllPegawaiChunks error:', error);
     // Ultimate fallback: get all chunks and let the AI sort it out
+    // [C-4] Same pegawai-related pre-filter as `countUniquePegawai` — avoids
+    // loading the entire KB just to JS-filter it down to pegawai chunks.
     try {
       const allChunks = await db.knowledgeChunk.findMany({
-        where: { document: { isActive: true } },
+        where: {
+          document: {
+            isActive: true,
+            OR: [
+              { title: { contains: 'pegawai' } },
+              { title: { contains: 'struktur' } },
+              { category: { contains: 'pegawai' } },
+            ],
+          },
+        },
         include: { document: { select: { title: true, category: true } } },
         take: 100,
       });
@@ -661,17 +724,7 @@ export function invalidateKbCache() {
  * Improved: preserves multi-word entities, extracts names.
  */
 function extractQueryKeywords(query: string): string[] {
-  const stopWords = new Set([
-    "yang", "dan", "di", "ke", "dari", "dengan", "untuk", "pada", "adalah",
-    "ini", "itu", "atau", "dalam", "tidak", "akan", "oleh", "juga", "sudah",
-    "ada", "karena", "seperti", "lebih", "setelah", "bisa", "buat", "lain",
-    "saja", "hanya", "masih", "sangat", "serta", "bahwa", "apakah", "berapa",
-    "bagaimana", "mengapa", "kapan", "dimana", "siapa", "apa", "sih", "dong",
-    "kok", "kan", "lah", "pun", "per", "tentang", "menurut", "seberapa",
-    "the", "a", "an", "is", "are", "was", "were", "be", "been", "what",
-    "how", "why", "when", "where", "who", "which", "can", "do", "does",
-    "jabatan", "posisi", "peran", "fungsi", "tugas", // These are question context, not search terms
-  ]);
+  const stopWords = QUERY_KEYWORDS_STOP_WORDS;
 
   const keywords = new Set<string>();
 

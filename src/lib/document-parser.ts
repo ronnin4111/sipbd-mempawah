@@ -24,6 +24,28 @@ export interface ParsedDocument {
 // Maximum chunk size in characters (for AI context injection)
 const MAX_CHUNK_SIZE = 2000;
 
+// [H-6] Hoisted module-scope stop-words set (previously rebuilt inside
+// `extractKeywords` on every call — 80+ entries re-allocated per invocation,
+// called from many parse paths). Word list copied verbatim from the original
+// in-function Set.
+const STOP_WORDS = new Set([
+  "yang", "dan", "di", "ke", "dari", "dengan", "untuk", "pada", "adalah",
+  "ini", "itu", "atau", "dalam", "tidak", "akan", "oleh", "juga", "sudah",
+  "ada", "karena", "seperti", "lebih", "setelah", "bisa", "buat", "lain",
+  "saja", "hanya", "masih", "sangat", "serta", "bahwa", "kemudian", "namun",
+  "saat", "sebuah", "seorang", "sebagai", "melalui", "tentang", "antar",
+  "secara", "tersebut", "berdasarkan", "masing", "mungkin", "apakah",
+  "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
+  "have", "has", "had", "do", "does", "did", "will", "would", "could",
+  "should", "may", "might", "can", "shall", "to", "of", "in", "for",
+  "on", "with", "at", "by", "from", "as", "into", "through", "during",
+  "before", "after", "above", "below", "between", "out", "off", "over",
+  "under", "again", "further", "then", "once", "and", "but", "or", "nor",
+  "not", "so", "yet", "both", "either", "neither", "each", "every",
+  "all", "any", "few", "more", "most", "other", "some", "such", "no",
+  "only", "own", "same", "than", "too", "very", "just", "because",
+]);
+
 /**
  * Parse a file buffer into structured chunks
  */
@@ -301,23 +323,7 @@ function splitLargeChunks(chunks: ParsedChunk[]): ParsedChunk[] {
  * - Keep meaningful terms
  */
 function extractKeywords(text: string): string[] {
-  const stopWords = new Set([
-    "yang", "dan", "di", "ke", "dari", "dengan", "untuk", "pada", "adalah",
-    "ini", "itu", "atau", "dalam", "tidak", "akan", "oleh", "juga", "sudah",
-    "ada", "karena", "seperti", "lebih", "setelah", "bisa", "buat", "lain",
-    "saja", "hanya", "masih", "sangat", "serta", "bahwa", "kemudian", "namun",
-    "saat", "sebuah", "seorang", "sebagai", "melalui", "tentang", "antar",
-    "secara", "tersebut", "berdasarkan", "masing", "mungkin", "apakah",
-    "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
-    "have", "has", "had", "do", "does", "did", "will", "would", "could",
-    "should", "may", "might", "can", "shall", "to", "of", "in", "for",
-    "on", "with", "at", "by", "from", "as", "into", "through", "during",
-    "before", "after", "above", "below", "between", "out", "off", "over",
-    "under", "again", "further", "then", "once", "and", "but", "or", "nor",
-    "not", "so", "yet", "both", "either", "neither", "each", "every",
-    "all", "any", "few", "more", "most", "other", "some", "such", "no",
-    "only", "own", "same", "than", "too", "very", "just", "because",
-  ]);
+  const stopWords = STOP_WORDS;
 
   // Tokenize and filter
   const words = text

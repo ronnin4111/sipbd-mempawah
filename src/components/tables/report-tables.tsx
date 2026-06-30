@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useFishFarmStats } from '@/hooks/use-fish-farms';
@@ -22,6 +23,55 @@ function Trend5YearTable() {
   const { data: stats, isLoading } = useFishFarmStats();
   const years = useFilterStore((s) => s.years);
 
+  // [A-13] Wrap rawEntries and data in useMemo (called BEFORE any early return
+  // so the hook order is stable). When stats is null, returns empty arrays.
+  const { rawEntries, data } = useMemo(() => {
+    if (!stats) return { rawEntries: [], data: [] };
+    const rawEntries = Object.entries(stats.trend5Year)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([year, val]) => ({
+        year,
+        pembesaran: val.pembesaran,
+        pembenihan: val.pembenihan,
+        total: val.pembesaran + val.pembenihan,
+      }));
+
+    // Build data with trend (compare with previous year) - separate for each business type
+    const data = rawEntries.map((row, idx) => {
+      let trendPctPembesaran: number | null = null;
+      let trendDirectionPembesaran: 'up' | 'down' | 'flat' | null = null;
+      let trendPctPembenihan: number | null = null;
+      let trendDirectionPembenihan: 'up' | 'down' | 'flat' | null = null;
+
+      if (idx > 0) {
+        const prev = rawEntries[idx - 1];
+        // Pembesaran trend
+        if (prev.pembesaran > 0) {
+          trendPctPembesaran = ((row.pembesaran - prev.pembesaran) / prev.pembesaran) * 100;
+          if (trendPctPembesaran > 0.5) trendDirectionPembesaran = 'up';
+          else if (trendPctPembesaran < -0.5) trendDirectionPembesaran = 'down';
+          else trendDirectionPembesaran = 'flat';
+        } else if (row.pembesaran > 0) {
+          trendPctPembesaran = 100;
+          trendDirectionPembesaran = 'up';
+        }
+        // Pembenihan trend
+        if (prev.pembenihan > 0) {
+          trendPctPembenihan = ((row.pembenihan - prev.pembenihan) / prev.pembenihan) * 100;
+          if (trendPctPembenihan > 0.5) trendDirectionPembenihan = 'up';
+          else if (trendPctPembenihan < -0.5) trendDirectionPembenihan = 'down';
+          else trendDirectionPembenihan = 'flat';
+        } else if (row.pembenihan > 0) {
+          trendPctPembenihan = 100;
+          trendDirectionPembenihan = 'up';
+        }
+      }
+      return { ...row, trendPctPembesaran, trendDirectionPembesaran, trendPctPembenihan, trendDirectionPembenihan };
+    });
+
+    return { rawEntries, data };
+  }, [stats]);
+
   if (isLoading) {
     return (
       <Card>
@@ -36,48 +86,6 @@ function Trend5YearTable() {
   }
 
   if (!stats) return null;
-
-  const rawEntries = Object.entries(stats.trend5Year)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([year, val]) => ({
-      year,
-      pembesaran: val.pembesaran,
-      pembenihan: val.pembenihan,
-      total: val.pembesaran + val.pembenihan,
-    }));
-
-  // Build data with trend (compare with previous year) - separate for each business type
-  const data = rawEntries.map((row, idx) => {
-    let trendPctPembesaran: number | null = null;
-    let trendDirectionPembesaran: 'up' | 'down' | 'flat' | null = null;
-    let trendPctPembenihan: number | null = null;
-    let trendDirectionPembenihan: 'up' | 'down' | 'flat' | null = null;
-
-    if (idx > 0) {
-      const prev = rawEntries[idx - 1];
-      // Pembesaran trend
-      if (prev.pembesaran > 0) {
-        trendPctPembesaran = ((row.pembesaran - prev.pembesaran) / prev.pembesaran) * 100;
-        if (trendPctPembesaran > 0.5) trendDirectionPembesaran = 'up';
-        else if (trendPctPembesaran < -0.5) trendDirectionPembesaran = 'down';
-        else trendDirectionPembesaran = 'flat';
-      } else if (row.pembesaran > 0) {
-        trendPctPembesaran = 100;
-        trendDirectionPembesaran = 'up';
-      }
-      // Pembenihan trend
-      if (prev.pembenihan > 0) {
-        trendPctPembenihan = ((row.pembenihan - prev.pembenihan) / prev.pembenihan) * 100;
-        if (trendPctPembenihan > 0.5) trendDirectionPembenihan = 'up';
-        else if (trendPctPembenihan < -0.5) trendDirectionPembenihan = 'down';
-        else trendDirectionPembenihan = 'flat';
-      } else if (row.pembenihan > 0) {
-        trendPctPembenihan = 100;
-        trendDirectionPembenihan = 'up';
-      }
-    }
-    return { ...row, trendPctPembesaran, trendDirectionPembesaran, trendPctPembenihan, trendDirectionPembenihan };
-  });
 
   // Dynamic title based on filter
   const yearRange = rawEntries.length >= 2

@@ -85,9 +85,28 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const where = buildWhere(searchParams);
 
+    // [Q-4] Optimization: previously fetched ALL columns (24) with no row cap. Now `select`
+    //       returns only the 10 columns referenced by the summary/kecamatan/target forEach
+    //       passes below (skips id/farmerId/triwulan/year/desa/containerType/farmerName/
+    //       groupCount/latitude/longitude/cpib/cbib/disaggregationBatchId/createdAt/updatedAt)
+    //       and `take: 10000` caps memory use on huge datasets. 10k rows × 10 cols is well
+    //       within a serverless function's memory budget for PDF generation.
     const records = await db.fishFarm.findMany({
       where,
       orderBy: [{ year: 'desc' }, { kecamatan: 'asc' }, { desa: 'asc' }],
+      take: 10000,
+      select: {
+        kecamatan: true,
+        fishType: true,
+        businessType: true,
+        groupName: true,
+        productionQty: true,
+        rtpCount: true,
+        farmerCount: true,
+        targetQty: true,
+        productionValue: true,
+        kusuka: true,
+      },
     });
 
     // Compute stats - separated by business type

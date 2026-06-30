@@ -69,6 +69,9 @@ export function PdfExportDialog({ open, onOpenChange }: PdfExportDialogProps) {
     }
 
     setIsExporting(true);
+    // Notify the page to mount the off-screen PdfDashboardCharts container
+    // before capture begins (and unmount it when finished) — see [A-4].
+    window.dispatchEvent(new CustomEvent('pdf-export-start'));
 
     try {
       // Fetch data for tables
@@ -619,6 +622,7 @@ export function PdfExportDialog({ open, onOpenChange }: PdfExportDialogProps) {
       toast.error('Gagal meng-export PDF. Silakan coba lagi.');
     } finally {
       setIsExporting(false);
+      window.dispatchEvent(new CustomEvent('pdf-export-end'));
     }
   }, [selectedSections, stats, years, kecamatan, filterStore, onOpenChange]);
 

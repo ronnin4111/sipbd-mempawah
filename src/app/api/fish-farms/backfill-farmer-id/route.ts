@@ -23,9 +23,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Find all records with empty farmerId
+    // Find all records with empty farmerId.
+    // [M-2] Add `select` to project only the columns actually referenced by
+    //       generateFarmerId() (farmerName/groupName/kecamatan/desa) plus id.
     const records = await db.fishFarm.findMany({
       where: { farmerId: '' },
+      select: { id: true, farmerName: true, groupName: true, kecamatan: true, desa: true },
     });
 
     if (records.length === 0) {
@@ -37,7 +40,10 @@ export async function POST(request: NextRequest) {
     }
 
     let updatedCount = 0;
-    const BATCH_SIZE = 20;
+    // [M-2] Bumped from 20 → 100 — each item in the batch is a separate UPDATE
+    //       (no transaction), so a larger batch reduces outer-loop iterations
+    //       without materially increasing memory or failure blast radius.
+    const BATCH_SIZE = 100;
 
     for (let i = 0; i < records.length; i += BATCH_SIZE) {
       const batch = records.slice(i, i + BATCH_SIZE);

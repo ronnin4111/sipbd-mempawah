@@ -4,6 +4,8 @@ import { ensureTablesExist } from '@/lib/db-init';
 import { DEFAULT_COMMODITY_PRICES, DEFAULT_PEMBENIHAN_PRICES, FISH_TYPES, CONTAINER_TYPES } from '@/lib/constants';
 import { verifyPassword } from '@/lib/passwords';
 
+export const dynamic = 'force-dynamic';
+
 // GET /api/commodity-prices - Get all commodity prices in matrix format
 export async function GET() {
   try {
@@ -65,34 +67,36 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    let upserted = 0;
-
-    // Use sequential upserts instead of $transaction
-    // Turso/libSQL does not support Prisma interactive transactions
-    for (const item of data) {
-      if (!item.fishType || !item.containerType) continue;
-
-      try {
-        await db.commodityPrice.upsert({
-          where: {
-            fishType_containerType: {
-              fishType: item.fishType,
-              containerType: item.containerType,
-            },
-          },
-          update: { price: Number(item.price) || 0, updatedAt: new Date() },
-          create: {
-            fishType: item.fishType,
-            containerType: item.containerType,
-            price: Number(item.price) || 0,
-          },
-        });
-        upserted++;
-      } catch (itemErr) {
-        console.error(`Failed to upsert ${item.fishType}/${item.containerType}:`, itemErr);
-        // Continue with other items even if one fails
-      }
-    }
+    // [Q-19] fix: run upserts concurrently with Promise.all instead of a sequential
+    // for...of loop. Per-item failures are caught and reported without aborting the
+    // batch, preserving the original "continue on failure" semantics.
+    const upsertResults = await Promise.all(
+      data
+        .filter(item => item.fishType && item.containerType)
+        .map(item =>
+          db.commodityPrice
+            .upsert({
+              where: {
+                fishType_containerType: {
+                  fishType: item.fishType,
+                  containerType: item.containerType,
+                },
+              },
+              update: { price: Number(item.price) || 0, updatedAt: new Date() },
+              create: {
+                fishType: item.fishType,
+                containerType: item.containerType,
+                price: Number(item.price) || 0,
+              },
+            })
+            .then(() => true)
+            .catch(itemErr => {
+              console.error(`Failed to upsert ${item.fishType}/${item.containerType}:`, itemErr);
+              return false;
+            })
+        )
+    );
+    const upserted = upsertResults.filter(Boolean).length;
 
     return NextResponse.json({ success: true, count: upserted });
   } catch (error) {
@@ -130,32 +134,36 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let upserted = 0;
-
-    // Use sequential upserts instead of $transaction
-    for (const item of data) {
-      if (!item.fishType || !item.containerType) continue;
-
-      try {
-        await db.commodityPrice.upsert({
-          where: {
-            fishType_containerType: {
-              fishType: item.fishType,
-              containerType: item.containerType,
-            },
-          },
-          update: { price: Number(item.price) || 0, updatedAt: new Date() },
-          create: {
-            fishType: item.fishType,
-            containerType: item.containerType,
-            price: Number(item.price) || 0,
-          },
-        });
-        upserted++;
-      } catch (itemErr) {
-        console.error(`Failed to upsert ${item.fishType}/${item.containerType}:`, itemErr);
-      }
-    }
+    // [Q-19] fix: run upserts concurrently with Promise.all instead of a sequential
+    // for...of loop. Per-item failures are caught and reported without aborting the
+    // batch, preserving the original "continue on failure" semantics.
+    const upsertResults = await Promise.all(
+      data
+        .filter(item => item.fishType && item.containerType)
+        .map(item =>
+          db.commodityPrice
+            .upsert({
+              where: {
+                fishType_containerType: {
+                  fishType: item.fishType,
+                  containerType: item.containerType,
+                },
+              },
+              update: { price: Number(item.price) || 0, updatedAt: new Date() },
+              create: {
+                fishType: item.fishType,
+                containerType: item.containerType,
+                price: Number(item.price) || 0,
+              },
+            })
+            .then(() => true)
+            .catch(itemErr => {
+              console.error(`Failed to upsert ${item.fishType}/${item.containerType}:`, itemErr);
+              return false;
+            })
+        )
+    );
+    const upserted = upsertResults.filter(Boolean).length;
 
     return NextResponse.json({ success: true, count: upserted });
   } catch (error) {

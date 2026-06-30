@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { useAllFishFarms } from '@/hooks/use-fish-farms';
+import type { FishFarm } from '@/hooks/use-fish-farms';
 import { KECAMATAN_COORDS, DESA_COORDS } from '@/lib/constants';
 import { generateFarmerId } from '@/lib/farmer-id';
 import L from 'leaflet';
@@ -103,6 +104,78 @@ const GEOJSON_FILES = [
   { file: '/geojson/id6104090_sungai_pinyuh.geojson', kecamatan: 'Sungai Pinyuh' },
   { file: '/geojson/id6104120_toho.geojson', kecamatan: 'Toho' },
 ];
+
+// [A-10] Hoisted to module scope — these divIcons don't depend on `data` and
+// were previously recreated on every React Query refetch.
+const dotIcon = L.divIcon({
+  html: `<div style="
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #2563eb;
+    border: 2.5px solid white;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.45);
+  "></div>`,
+  className: '',
+  iconSize: [14, 14],
+  iconAnchor: [7, 7],
+  popupAnchor: [0, -9],
+});
+
+// Dot icon for markers near group base (slightly different shade)
+const dotGroupIcon = L.divIcon({
+  html: `<div style="
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #16a34a;
+    border: 2.5px solid white;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.45);
+  "></div>`,
+  className: '',
+  iconSize: [14, 14],
+  iconAnchor: [7, 7],
+  popupAnchor: [0, -9],
+});
+
+// Dot icon for estimated location (desa-level)
+const dotEstIcon = L.divIcon({
+  html: `<div style="
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #f59e0b;
+    border: 2.5px solid white;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.45);
+  "></div>`,
+  className: '',
+  iconSize: [14, 14],
+  iconAnchor: [7, 7],
+  popupAnchor: [0, -9],
+});
+
+// [A-10] Hoisted to module scope — createPopup only uses `farm` + coord params.
+function createPopup(farm: FishFarm, coordLabel: string, lat: number, lng: number) {
+  const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+  const googleStreetUrl = `https://www.google.com/maps/@${lat},${lng},17z/data=!3m1!1e3`;
+  return `
+    <div style="font-size:13px;min-width:220px;max-width:300px;color:#1e293b;background:#ffffff;padding:10px 12px;border-radius:8px;">
+      <strong style="font-size:15px;color:#0d9488;display:block;margin-bottom:6px;">${farm.kecamatan} - ${farm.desa}</strong>
+      ${coordLabel}
+      <table style="margin-top:4px;border-collapse:collapse;font-size:12px;width:100%;">
+        <tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:4px 8px 4px 0;color:#334155;font-weight:700;white-space:nowrap;">Jenis Ikan</td><td style="padding:4px 0;color:#0f172a;">${farm.fishType || '-'}</td></tr>
+        <tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:4px 8px 4px 0;color:#334155;font-weight:700;white-space:nowrap;">Wadah Budidaya</td><td style="padding:4px 0;color:#0f172a;">${farm.containerType || '-'}</td></tr>
+        <tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:4px 8px 4px 0;color:#334155;font-weight:700;white-space:nowrap;">Jenis Usaha</td><td style="padding:4px 0;color:#0f172a;">${farm.businessType || '-'}</td></tr>
+        <tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:4px 8px 4px 0;color:#334155;font-weight:700;white-space:nowrap;">Pembudidaya</td><td style="padding:4px 0;color:#0f172a;">${farm.farmerName || '-'}</td></tr>
+        <tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:4px 8px 4px 0;color:#334155;font-weight:700;white-space:nowrap;">Kelompok</td><td style="padding:4px 0;color:#0f172a;">${farm.groupName || '-'}</td></tr>
+      </table>
+      <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
+        <a href="${googleMapsUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:5px;background:#0d9488;color:#fff;text-decoration:none;font-size:11px;font-weight:600;">📍 Navigasi</a>
+        <a href="${googleStreetUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:5px;background:#2563eb;color:#fff;text-decoration:none;font-size:11px;font-weight:600;">🏙️ Street View</a>
+      </div>
+    </div>
+  `;
+}
 
 export default function MapInner() {
   const { data } = useAllFishFarms();
@@ -305,75 +378,7 @@ export default function MapInner() {
     }
     const dedupedData = Array.from(farmerMap.values());
 
-    // Simple round dot icon — one color for all markers
-    const dotIcon = L.divIcon({
-      html: `<div style="
-        width: 14px;
-        height: 14px;
-        border-radius: 50%;
-        background: #2563eb;
-        border: 2.5px solid white;
-        box-shadow: 0 1px 4px rgba(0,0,0,0.45);
-      "></div>`,
-      className: '',
-      iconSize: [14, 14],
-      iconAnchor: [7, 7],
-      popupAnchor: [0, -9],
-    });
-
-    // Dot icon for markers near group base (slightly different shade)
-    const dotGroupIcon = L.divIcon({
-      html: `<div style="
-        width: 14px;
-        height: 14px;
-        border-radius: 50%;
-        ,background: #16a34a;
-        border: 2.5px solid white;
-        box-shadow: 0 1px 4px rgba(0,0,0,0.45);
-      "></div>`,
-      className: '',
-      iconSize: [14, 14],
-      iconAnchor: [7, 7],
-      popupAnchor: [0, -9],
-    });
-
-    // Dot icon for estimated location (desa-level)
-    const dotEstIcon = L.divIcon({
-      html: `<div style="
-        width: 14px;
-        height: 14px;
-        border-radius: 50%;
-        background: #f59e0b;
-        border: 2.5px solid white;
-        box-shadow: 0 1px 4px rgba(0,0,0,0.45);
-      "></div>`,
-      className: '',
-      iconSize: [14, 14],
-      iconAnchor: [7, 7],
-      popupAnchor: [0, -9],
-    });
-
-            function createPopup(farm: typeof dedupedData[0], coordLabel: string, lat: number, lng: number) {
-      const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
-      const googleStreetUrl = `https://www.google.com/maps/@${lat},${lng},17z/data=!3m1!1e3`;
-      return `
-        <div style="font-size:13px;min-width:220px;max-width:300px;color:#1e293b;background:#ffffff;padding:10px 12px;border-radius:8px;">
-          <strong style="font-size:15px;color:#0d9488;display:block;margin-bottom:6px;">${farm.kecamatan} - ${farm.desa}</strong>
-          ${coordLabel}
-          <table style="margin-top:4px;border-collapse:collapse;font-size:12px;width:100%;">
-            <tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:4px 8px 4px 0;color:#334155;font-weight:700;white-space:nowrap;">Jenis Ikan</td><td style="padding:4px 0;color:#0f172a;">${farm.fishType || '-'}</td></tr>
-            <tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:4px 8px 4px 0;color:#334155;font-weight:700;white-space:nowrap;">Wadah Budidaya</td><td style="padding:4px 0;color:#0f172a;">${farm.containerType || '-'}</td></tr>
-            <tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:4px 8px 4px 0;color:#334155;font-weight:700;white-space:nowrap;">Jenis Usaha</td><td style="padding:4px 0;color:#0f172a;">${farm.businessType || '-'}</td></tr>
-            <tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:4px 8px 4px 0;color:#334155;font-weight:700;white-space:nowrap;">Pembudidaya</td><td style="padding:4px 0;color:#0f172a;">${farm.farmerName || '-'}</td></tr>
-            <tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:4px 8px 4px 0;color:#334155;font-weight:700;white-space:nowrap;">Kelompok</td><td style="padding:4px 0;color:#0f172a;">${farm.groupName || '-'}</td></tr>
-          </table>
-          <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
-            <a href="${googleMapsUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:5px;background:#0d9488;color:#fff;text-decoration:none;font-size:11px;font-weight:600;">📍 Navigasi</a>
-            <a href="${googleStreetUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:5px;background:#2563eb;color:#fff;text-decoration:none;font-size:11px;font-weight:600;">🏙️ Street View</a>
-          </div>
-        </div>
-      `;
-    }
+    // [A-10] dotIcon / dotGroupIcon / dotEstIcon / createPopup are now module-scope constants
 
     // Group farms by groupName (using deduped data)
     const groupMap = new Map<string, typeof dedupedData[0][]>();
