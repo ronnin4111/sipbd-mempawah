@@ -347,7 +347,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Step 1: Create DisaggregationBatch
+    // Step 1: Delete old batches (and their FishFarm records) for the same
+    // (year, triwulan, businessType) before creating a new one.
+    // This prevents duplicate batches from accumulating when the user re-disaggregates
+    // the same triwulan+businessType (e.g., correcting a wrong upload).
+    const oldBatches = await db.disaggregationBatch.findMany({
+      where: { year, triwulan, businessType },
+      select: { id: true },
+    });
+
+    if (oldBatches.length > 0) {
+      const oldBatchIds = oldBatches.map((b) => b.id);
+      // Delete FishFarm records linked to old batches (they will be replaced by new ones)
+      await db.fishFarm.deleteMany({
+        where: { disaggregationBatchId: { in: oldBatchIds } },
+      });
+      // Delete the old batch records themselves
+      await db.disaggregationBatch.deleteMany({
+        where: { id: { in: oldBatchIds } },
+      });
+    }
+
+    // Step 2: Create DisaggregationBatch
     const batch = await db.disaggregationBatch.create({
       data: {
         year,
@@ -361,12 +382,12 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Step 2: Create FishFarm records for each farmer
+    // Step 3: Create FishFarm records for each farmer
     // [Q-1] Optimization: previously fired N findFirst + N create queries inside an async .map
     //       (2N round trips). Now: ONE findMany with `farmerId IN [...]` to build a metadata
     //       Map<farmerId, latestRecord>, then a single createMany loop in batches of 100.
 
-    // 2a) Compute farmerId + farmer-specific kecamatan/fishType/containerType for each farmer
+    // 3a) Compute farmerId + farmer-specific kecamatan/fishType/containerType for each farmer
     const farmersWithIds = farmers.map((farmer) => {
       let farmerId = farmer.farmerId || '';
       const farmerKecamatan = farmer.kecamatan || kecamatanList[0];
@@ -385,7 +406,7 @@ export async function POST(request: NextRequest) {
       return { farmer, farmerId, farmerKecamatan, farmerFishType, farmerContainerType };
     });
 
-    // 2b) ONE query for all existing farmers' latest metadata (sorted by year desc)
+    // 3b) ONE query for all existing farmers' latest metadata (sorted by year desc)
     const existingFarmerIds = farmersWithIds
       .filter((f) => !f.farmer.isNew && f.farmerId)
       .map((f) => f.farmerId);
@@ -413,7 +434,7 @@ export async function POST(request: NextRequest) {
       if (!metaByFarmer.has(r.farmerId)) metaByFarmer.set(r.farmerId, r);
     }
 
-    // 2c) Build insert payload in memory
+    // 3c) Build insert payload in memory
     const insertData = farmersWithIds.map(({ farmer, farmerId, farmerKecamatan, farmerFishType, farmerContainerType }) => {
       const meta = (!farmer.isNew && farmerId) ? metaByFarmer.get(farmerId) : undefined;
 
@@ -443,7 +464,7 @@ export async function POST(request: NextRequest) {
       };
     });
 
-    // 2d) Batch insert in chunks of 100 (was 10)
+    // 3d) Batch insert in chunks of 100 (was 10)
     const INSERT_BATCH_SIZE = 100;
     for (let i = 0; i < insertData.length; i += INSERT_BATCH_SIZE) {
       await db.fishFarm.createMany({ data: insertData.slice(i, i + INSERT_BATCH_SIZE) });

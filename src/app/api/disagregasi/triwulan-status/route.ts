@@ -83,8 +83,12 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
     });
 
-    // Group batches by triwulan
+    // Group batches by triwulan, keeping only the LATEST batch per (triwulan, businessType).
+    // This prevents double-counting when a user re-disaggregates the same triwulan+businessType:
+    // old batches from previous uploads are ignored in favor of the most recent one.
+    // (Batches are already sorted by createdAt DESC from the query above.)
     const batchesByTriwulan = new Map<Triwulan, typeof batches>();
+    const seenTwBt = new Set<string>(); // tracks "triwulan|businessType" we've already kept
 
     for (const triwulan of TRIWULANS) {
       batchesByTriwulan.set(triwulan, []);
@@ -92,9 +96,11 @@ export async function GET(request: NextRequest) {
 
     for (const batch of batches) {
       const tw = batch.triwulan as Triwulan;
-      if (TRIWULANS.includes(tw)) {
-        batchesByTriwulan.get(tw)!.push(batch);
-      }
+      if (!TRIWULANS.includes(tw)) continue;
+      const dedupKey = `${tw}|${batch.businessType}`;
+      if (seenTwBt.has(dedupKey)) continue; // skip old duplicate batch
+      seenTwBt.add(dedupKey);
+      batchesByTriwulan.get(tw)!.push(batch);
     }
 
     // Build triwulan status map
