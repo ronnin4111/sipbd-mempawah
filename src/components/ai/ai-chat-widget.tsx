@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageSquare, X, Send, Bot, User, Sparkles, Trash2, Loader2, Settings, Key, CheckCircle2, AlertCircle, Eye, EyeOff, Wifi, WifiOff } from 'lucide-react';
+import { MessageSquare, X, Send, Bot, User, Sparkles, Trash2, Loader2, Settings, Key, CheckCircle2, AlertCircle, Eye, EyeOff, Wifi, WifiOff, Camera, CameraOff } from 'lucide-react';
 import { useFilterStore } from '@/store/filter-store';
 import { useQueryClient } from '@tanstack/react-query';
 import type { StatsResponse } from '@/hooks/use-fish-farms';
@@ -150,6 +150,8 @@ export function AIChatWidget() {
   const [showGroqKey, setShowGroqKey] = useState(false);
   const [isTestingAI, setIsTestingAI] = useState(false);
   const [testResult, setTestResult] = useState<AITestResult | null>(null);
+  const [screenshotMode, setScreenshotMode] = useState(false); // 📸 VLM Mode toggle
+  const [screenshotError, setScreenshotError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -269,6 +271,57 @@ export function AIChatWidget() {
     }
   };
 
+  /**
+   * 📸 Capture screenshot of current page (excluding the chat widget itself).
+   * Uses html2canvas-pro (handles modern CSS like oklch colors).
+   * Returns a JPEG data URL compressed to ~70% quality, max 1280px wide.
+   *
+   * The chat widget is temporarily hidden during capture to avoid recursion.
+   */
+  const captureScreenshot = async (): Promise<string | null> => {
+    try {
+      // Dynamic import — html2canvas-pro is heavy, only load when needed
+      const html2canvas = (await import('html2canvas-pro')).default;
+
+      // Hide the chat widget container during capture so it doesn't appear in screenshot
+      // Find the chat widget's outermost container (the AnimatePresence motion.div parent)
+      const chatWidgetEl = document.querySelector('[data-ai-chat-widget]') as HTMLElement | null;
+
+      // Capture the main page content (document.body minus chat widget)
+      const target = document.body;
+
+      const canvas = await html2canvas(target, {
+        // Skip the chat widget itself + any fixed/overlay UI we don't want
+        ignoreElements: (el) => {
+          // Skip the chat widget container
+          if (chatWidgetEl && (chatWidgetEl.contains(el) || el === chatWidgetEl)) return true;
+          // Skip elements explicitly marked
+          if (el.dataset && el.dataset.html2canvasIgnore !== undefined) return true;
+          return false;
+        },
+        // Limit max dimensions to keep payload reasonable
+        windowWidth: Math.min(window.innerWidth, 1280),
+        windowHeight: window.innerHeight,
+        scale: window.innerWidth < 768 ? 1 : 1.5, // lower scale on mobile to reduce size
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+      });
+
+      // Compress to JPEG at 70% quality — small enough for API but readable
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+      console.log(`[Screenshot] Captured: ${canvas.width}x${canvas.height}, size=${Math.round(dataUrl.length / 1024)}KB`);
+      return dataUrl;
+    } catch (err) {
+      console.error('[Screenshot] Capture failed:', err);
+      const errMsg = err instanceof Error ? err.message : 'Unknown error';
+      setScreenshotError(`Gagal capture screenshot: ${errMsg.substring(0, 100)}`);
+      // Clear error after 5 seconds
+      setTimeout(() => setScreenshotError(null), 5000);
+      return null;
+    }
+  };
+
   const sendMessage = async (text: string) => {
     if (!text.trim() || isLoading) return;
 
@@ -281,6 +334,25 @@ export function AIChatWidget() {
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
+
+    // 📸 If Screenshot Mode is ON, capture the page before sending
+    let screenshotDataUrl: string | null = null;
+    if (screenshotMode) {
+      console.log('[AI Chat] Screenshot mode ON — capturing page...');
+      // Show loading indicator immediately, then capture
+      // Brief delay so React can render the loading state before html2canvas blocks
+      await new Promise(resolve => setTimeout(resolve, 100));
+      screenshotDataUrl = await captureScreenshot();
+      if (!screenshotDataUrl) {
+        // Capture failed — inform user but still send text-only
+        const failMsg: Message = {
+          role: 'assistant',
+          content: '⚠️ **Gagal mengambil screenshot halaman.** Pertanyaan Anda tetap dikirim tanpa screenshot (mode teks). Coba aktifkan kembali Mode Lihat Halaman atau refresh halaman.',
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, failMsg]);
+      }
+    }
 
     try {
       // Build conversation history (last 10 messages)
@@ -365,6 +437,7 @@ export function AIChatWidget() {
           statsContext,
           filters,
           sessionId,  // 🧠 Session ID for memory persistence
+          ...(screenshotDataUrl ? { screenshot: screenshotDataUrl } : {}),  // 📸 VLM mode
         }),
       });
 
@@ -445,7 +518,7 @@ export function AIChatWidget() {
   };
 
   return (
-    <>
+    <div data-ai-chat-widget>
       {/* Floating button */}
       <AnimatePresence>
         {!isOpen && (
@@ -860,6 +933,26 @@ export function AIChatWidget() {
               className="shrink-0 p-3 border-t"
               style={{ borderColor: 'var(--border)', background: 'var(--card)' }}
             >
+              {/* 📸 Screenshot mode indicator */}
+              {screenshotMode && (
+                <div
+                  className="mb-2 px-2 py-1.5 rounded-lg flex items-center gap-1.5 text-[10px]"
+                  style={{ background: 'rgba(6, 182, 212, 0.1)', color: '#06B6D4' }}
+                >
+                  <Camera className="h-3 w-3" />
+                  <span className="flex-1">📸 Mode Lihat Halaman AKTIF — AI akan melihat screenshot halaman ini</span>
+                </div>
+              )}
+              {/* Screenshot error (auto-dismiss) */}
+              {screenshotError && (
+                <div
+                  className="mb-2 px-2 py-1.5 rounded-lg flex items-center gap-1.5 text-[10px]"
+                  style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#EF4444' }}
+                >
+                  <AlertCircle className="h-3 w-3 shrink-0" />
+                  <span className="flex-1 truncate">{screenshotError}</span>
+                </div>
+              )}
               <div
                 className="flex items-center gap-2 rounded-xl px-3 py-2 border"
                 style={{ borderColor: 'var(--border)', background: 'var(--background)' }}
@@ -870,11 +963,27 @@ export function AIChatWidget() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="Tanyakan tentang kelompok, produksi, RTP..."
+                  placeholder={screenshotMode ? "AI bisa lihat halaman ini — tanyakan apa saja..." : "Tanyakan tentang kelompok, produksi, RTP..."}
                   className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
                   style={{ color: 'var(--foreground)' }}
                   disabled={isLoading}
                 />
+                {/* 📸 Toggle Screenshot Mode button */}
+                <button
+                  onClick={() => setScreenshotMode(prev => !prev)}
+                  disabled={isLoading}
+                  title={screenshotMode ? "Nonaktifkan Mode Lihat Halaman" : "Aktifkan Mode Lihat Halaman (AI bisa melihat screenshot halaman)"}
+                  className="w-7 h-7 rounded-lg flex items-center justify-center transition-all shrink-0 disabled:opacity-30"
+                  style={{
+                    background: screenshotMode ? 'linear-gradient(135deg, #06B6D4, #0891B2)' : 'var(--muted)',
+                  }}
+                >
+                  {screenshotMode ? (
+                    <Camera className="h-3.5 w-3.5 text-white" />
+                  ) : (
+                    <CameraOff className="h-3.5 w-3.5" style={{ color: 'var(--muted-foreground)' }} />
+                  )}
+                </button>
                 <button
                   onClick={() => sendMessage(input)}
                   disabled={!input.trim() || isLoading}
@@ -887,12 +996,14 @@ export function AIChatWidget() {
                 </button>
               </div>
               <div className="text-[9px] text-center mt-1.5" style={{ color: 'var(--muted-foreground)', opacity: 0.5 }}>
-                Data dari filter aktif · AI bisa membuat kesalahan
+                {screenshotMode
+                  ? '📸 Screenshot halaman aktif akan dikirim · Vision mode lebih lambat (3-5s)'
+                  : 'Data dari filter aktif · AI bisa membuat kesalahan'}
               </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
-    </>
+    </div>
   );
 }

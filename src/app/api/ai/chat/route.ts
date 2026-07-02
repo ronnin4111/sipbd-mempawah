@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { callAI } from '@/lib/ai-sdk';
+import { callAI, callVisionAI } from '@/lib/ai-sdk';
 import { retrieveMemories, storeMemories, extractMemoriesFromConversation, formatMemoriesForPrompt, clearMemories } from '@/lib/ai-memory';
 import { db } from '@/lib/db';
 import { ensureTablesExist } from '@/lib/db-init';
@@ -1852,6 +1852,7 @@ export async function POST(request: NextRequest) {
       messages = [],
       statsContext,
       filters,
+      screenshot,
     } = body as {
       message?: string;
       messages?: Array<{ role: 'user' | 'assistant'; content: string }>;
@@ -1865,6 +1866,7 @@ export async function POST(request: NextRequest) {
         businessType: string[];
       };
       sessionId?: string;
+      screenshot?: string; // data:image/jpeg;base64,... — when present, use VLM mode
     };
 
     if (!message || typeof message !== 'string') {
@@ -1872,6 +1874,15 @@ export async function POST(request: NextRequest) {
         { error: 'Message is required and must be a string' },
         { status: 400 }
       );
+    }
+
+    // Validate screenshot if present — must be a data URL with image/*
+    const hasValidScreenshot = screenshot && typeof screenshot === 'string' && screenshot.startsWith('data:image/');
+    if (screenshot && !hasValidScreenshot) {
+      console.warn('[AI Chat] Invalid screenshot format received — ignoring screenshot');
+    }
+    if (hasValidScreenshot) {
+      console.log(`[AI Chat] Screenshot mode ENABLED, image size=${Math.round(screenshot!.length / 1024)}KB`);
     }
 
     // Get session ID for memory persistence (default to 'default')
@@ -2349,16 +2360,68 @@ export async function POST(request: NextRequest) {
       { role: 'user' as const, content: message },
     ];
 
-    // Call AI (Gemini primary → Groq fallback → z-ai last resort)
     // Use higher max_tokens for listing questions to avoid truncated responses
     const isListingQuestion = /semua|seluruh|daftar|tampilkan|sebutkan/i.test(message);
     const maxTokens = isListingQuestion ? 4096 : 2048;
 
-    const result = await callAI({
-      messages: chatMessages,
-      temperature: 0.7,
-      max_tokens: maxTokens,
-    });
+    // ============================================================
+    // VISION MODE (Screenshot Mode)
+    // If a valid screenshot was sent, use Z.AI Vision (GLM-4V) instead of text-only AI.
+    // The vision model receives:
+    //   - The SAME system prompt (peran, aturan, data context from DB)
+    //   - The user's text question
+    //   - The screenshot image as image_url
+    // This lets AI "see" the charts/tables/UI the user is currently viewing.
+    // ============================================================
+    let result;
+    if (hasValidScreenshot) {
+      // Add a small visual instruction to the system prompt so AI knows the screenshot is the page
+      const visionSystemPrompt = systemPrompt + `
+
+=== MODE VISION (SCREENSHOT HALAMAN AKTIF) ===
+User mengirim screenshot halaman web yang sedang dia lihat (dashboard, chart, tabel, atau UI lain).
+Screenshot ini menunjukkan VISUAL halaman — AI bisa melihat layout, warna chart, label sumbu, angka di tabel, dll.
+
+PANDUAN MENJAWAB DENGAN SCREENSHOT:
+- Gunakan screenshot sebagai KONTEKS VISUAL tambahan — apa yang user lihat di layar
+- Jika user bertanya tentang chart/tabel yang terlihat di screenshot, DESKRIPSIKAN apa yang Anda lihat
+- Jika ada pertanyaan tentang angka, PRIORITASKAN angka dari DATA CONTEXT (database) — bukan dari OCR screenshot
+- Screenshot membantu memahami KONTEKS pertanyaan, bukan sebagai sumber angka utama
+- Jika screenshot menunjukkan chart/tabel, Anda bisa menjelaskan tren, pola, atau anomali visual yang terlihat
+- Tetap ikuti semua aturan ANTI-HALLUCINASI — angka resmi tetap dari DATA CONTEXT
+=== AKHIR MODE VISION ===`;
+
+      console.log('[AI Chat] Using VISION mode (GLM-4V) — screenshot attached');
+      result = await callVisionAI({
+        systemPrompt: visionSystemPrompt,
+        userText: message,
+        imageDataUrl: screenshot!,
+        history: Array.isArray(messages)
+          ? messages.slice(-6).map((m) => ({
+              role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+              content: String(m.content),
+            }))
+          : [],
+        temperature: 0.7,
+      });
+
+      // If vision fails, FALLBACK to text-only mode (don't lose the user's question)
+      if (!result.success) {
+        console.warn('[AI Chat] Vision mode failed, falling back to text mode:', result.error?.substring(0, 200));
+        result = await callAI({
+          messages: chatMessages,
+          temperature: 0.7,
+          max_tokens: maxTokens,
+        });
+      }
+    } else {
+      // Normal text mode — Z.AI → NaraRouter → Gemini → Groq fallback chain
+      result = await callAI({
+        messages: chatMessages,
+        temperature: 0.7,
+        max_tokens: maxTokens,
+      });
+    }
 
     if (!result.success) {
       console.error('AI Chat error:', result.error);

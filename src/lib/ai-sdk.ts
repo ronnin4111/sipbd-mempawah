@@ -35,6 +35,22 @@ export interface UnifiedAIOptions {
   max_tokens?: number;
 }
 
+/**
+ * Options for Vision AI (VLM) — AI can "see" images.
+ * Uses Z.AI's createVision API (glm-4v model).
+ */
+export interface VisionAIOptions {
+  /** System prompt — same role as in text mode (peran, aturan, data context) */
+  systemPrompt: string;
+  /** User's text question */
+  userText: string;
+  /** Image data URL — e.g. "data:image/jpeg;base64,..." or "data:image/png;base64,..." */
+  imageDataUrl: string;
+  /** Optional conversation history */
+  history?: Array<{ role: 'user' | 'assistant'; content: string }>;
+  temperature?: number;
+}
+
 export interface UnifiedAIResult {
   success: boolean;
   content: string;
@@ -675,6 +691,109 @@ export async function callAI(options: UnifiedAIOptions): Promise<UnifiedAIResult
     error: `Semua provider AI gagal. ${errorParts.join(' | ')}`,
     provider: 'all-failed',
   };
+}
+
+/**
+ * Call Z.AI Vision model (GLM-4V) — AI can "see" images.
+ *
+ * Used for Screenshot Mode in AI chat: when user enables "📸 Mode Lihat Halaman",
+ * the frontend captures a screenshot of the current page and sends it here.
+ * The vision model analyzes both the image AND the user's text question,
+ * with the same system prompt (peran, aturan, data context) as text mode.
+ *
+ * Note: Vision model is slower (3-5s) and uses more tokens than text mode.
+ * Only use when image context is genuinely needed (charts, tables, layouts).
+ *
+ * @returns UnifiedAIResult — same interface as callAI
+ */
+export async function callVisionAI(options: VisionAIOptions): Promise<UnifiedAIResult> {
+  try {
+    // Reuse the memoized Z.AI instance (same as callZAI)
+    const zai = await getZai();
+
+    // Build user message content: text + image
+    const userContent = [
+      { type: 'text' as const, text: options.userText },
+      { type: 'image_url' as const, image_url: { url: options.imageDataUrl } },
+    ];
+
+    // Z.AI uses 'assistant' role for system prompts (same convention as callZAI)
+    const messages: Array<{ role: 'assistant' | 'user'; content: any }> = [
+      { role: 'assistant', content: options.systemPrompt },
+      ...(options.history || []).map(m => ({
+        role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+        content: m.content,
+      })),
+      { role: 'user', content: userContent },
+    ];
+
+    console.log(`[AI SDK] Calling Z.AI Vision (GLM-4V), image size=${Math.round(options.imageDataUrl.length / 1024)}KB, history=${options.history?.length || 0}msgs`);
+
+    const completion = await withTimeout(
+      zai.chat.completions.createVision({
+        messages,
+        thinking: { type: 'disabled' },
+      }),
+      60000,
+      'Z.AI-Vision'
+    );
+
+    // Handle API-level error responses (same pattern as callZAI)
+    if (completion && typeof completion === 'object' && !completion.choices) {
+      const apiError = completion as Record<string, unknown>;
+      const code = apiError.code;
+      const msg = apiError.msg || apiError.message || '';
+      if (code || apiError.success === false) {
+        const errorDetail = `Z.AI Vision API error (code=${code}): ${msg}`;
+        console.warn('[AI SDK] Z.AI Vision API returned error:', errorDetail);
+        return {
+          success: false,
+          content: '',
+          error: code === 1000
+            ? `Z.AI API key tidak valid untuk Vision. Gunakan API key resmi dari https://chat.z.ai → Settings.`
+            : errorDetail,
+          provider: 'z-ai-vision',
+        };
+      }
+    }
+
+    const content = completion.choices?.[0]?.message?.content || '';
+
+    if (!content || !content.trim()) {
+      console.warn('[AI SDK] Z.AI Vision returned empty content');
+      return {
+        success: false,
+        content: '',
+        error: 'Model vision mengembalikan respons kosong. Coba ulangi atau nonaktifkan Mode Lihat Halaman.',
+        provider: 'z-ai-vision',
+      };
+    }
+
+    console.log(`[AI SDK] Z.AI Vision SUCCESS, content length=${content.length}`);
+    return {
+      success: true,
+      content,
+      provider: 'z-ai-vision',
+      model: completion.model || 'glm-4v',
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    console.warn('[AI SDK] Z.AI Vision error:', message);
+    let helpfulError = message;
+    if (message.includes('status 404')) {
+      helpfulError = `Endpoint vision tidak ditemukan (404). Pastikan Z.AI SDK versi terbaru. Detail: ${message}`;
+    } else if (message.includes('Authentication Failed') || message.includes('1000')) {
+      helpfulError = `Z.AI API key tidak valid. Dapatkan API key dari https://chat.z.ai → Settings. Detail: ${message}`;
+    } else if (message.includes('timed out')) {
+      helpfulError = `Vision model timeout — model butuh waktu lebih dari 60s. Coba gambar lebih kecil atau ulangi.`;
+    }
+    return {
+      success: false,
+      content: '',
+      error: helpfulError,
+      provider: 'z-ai-vision',
+    };
+  }
 }
 
 /**
