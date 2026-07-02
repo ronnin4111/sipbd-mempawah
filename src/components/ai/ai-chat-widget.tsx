@@ -15,12 +15,14 @@ interface Message {
 
 interface AIConfig {
   zai: { available: boolean; model: string; note?: string };
+  nara: { configured: boolean; source: string; model: string; keyHint: string | null };
   gemini: { configured: boolean; source: string; model: string; keyHint: string | null };
   groq: { configured: boolean; source: string; model: string; keyHint: string | null };
 }
 
 interface AITestResult {
   zai: { available: boolean; testResult: string; latencyMs: number; error: string | null; model?: string };
+  nara: { keyFound: boolean; keySource: string; keyHint: string | null; testResult: string; latencyMs: number; error: string | null; model?: string };
   gemini: { keyFound: boolean; keySource: string; keyHint: string | null; testResult: string; latencyMs: number; error: string | null };
   groq: { keyFound: boolean; keySource: string; keyHint: string | null; testResult: string; latencyMs: number; error: string | null };
   dbConnection: { ok: boolean; error: string | null };
@@ -137,11 +139,13 @@ export function AIChatWidget() {
   const [isLoading, setIsLoading] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
   const [aiConfig, setAiConfig] = useState<AIConfig | null>(null);
+  const [configNaraKey, setConfigNaraKey] = useState('');
   const [configGeminiKey, setConfigGeminiKey] = useState('');
   const [configGroqKey, setConfigGroqKey] = useState('');
   const [configPassword, setConfigPassword] = useState('');
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [configMessage, setConfigMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [showNaraKey, setShowNaraKey] = useState(false);
   const [showGeminiKey, setShowGeminiKey] = useState(false);
   const [showGroqKey, setShowGroqKey] = useState(false);
   const [isTestingAI, setIsTestingAI] = useState(false);
@@ -208,6 +212,7 @@ export function AIChatWidget() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           password: configPassword,
+          naraApiKey: configNaraKey || undefined,
           geminiApiKey: configGeminiKey || undefined,
           groqApiKey: configGroqKey || undefined,
         }),
@@ -215,6 +220,7 @@ export function AIChatWidget() {
       const data = await res.json();
       if (data.success) {
         setConfigMessage({ type: 'success', text: '✅ Konfigurasi AI berhasil disimpan!' });
+        setConfigNaraKey('');
         setConfigGeminiKey('');
         setConfigGroqKey('');
         setConfigPassword('');
@@ -242,6 +248,7 @@ export function AIChatWidget() {
       } else {
         setTestResult({
           zai: { available: false, testResult: 'failed', latencyMs: 0, error: 'Failed to fetch test results' },
+          nara: { keyFound: false, keySource: 'none', keyHint: null, testResult: 'failed', latencyMs: 0, error: 'Failed to fetch test results' },
           gemini: { keyFound: false, keySource: 'none', keyHint: null, testResult: 'failed', latencyMs: 0, error: 'Failed to fetch test results' },
           groq: { keyFound: false, keySource: 'none', keyHint: null, testResult: 'failed', latencyMs: 0, error: 'Failed to fetch test results' },
           dbConnection: { ok: false, error: 'Test endpoint failed' },
@@ -251,6 +258,7 @@ export function AIChatWidget() {
     } catch (err) {
       setTestResult({
         zai: { available: false, testResult: 'failed', latencyMs: 0, error: 'Network error' },
+        nara: { keyFound: false, keySource: 'none', keyHint: null, testResult: 'failed', latencyMs: 0, error: 'Network error' },
         gemini: { keyFound: false, keySource: 'none', keyHint: null, testResult: 'failed', latencyMs: 0, error: 'Network error' },
         groq: { keyFound: false, keySource: 'none', keyHint: null, testResult: 'failed', latencyMs: 0, error: 'Network error' },
         dbConnection: { ok: false, error: 'Network error' },
@@ -378,7 +386,7 @@ export function AIChatWidget() {
         const errorMessage: Message = {
           role: 'assistant',
           content: isKeyMissing
-            ? '⚠️ **Provider AI tidak tersedia.**\n\nZ.AI sedang tidak dapat diakses, dan API key Gemini/Groq belum dikonfigurasi.\n\nKlik ikon ⚙️ di header chat untuk:\n- Cek status Z.AI\n- Atur API key Gemini/Groq sebagai fallback\n\n**Gratis & mudah:**\n- Gemini: https://aistudio.google.com/apikey\n- Groq: https://console.groq.com'
+            ? '⚠️ **Provider AI tidak tersedia.**\n\nZ.AI sedang tidak dapat diakses, dan API key NaraRouter/Gemini/Groq belum dikonfigurasi.\n\nKlik ikon ⚙️ di header chat untuk:\n- Cek status Z.AI\n- Atur API key NaraRouter (https://router.bynara.id — akses Claude & Mistral gratis) / Gemini / Groq sebagai fallback\n\n**Gratis & mudah:**\n- NaraRouter: https://router.bynara.id (Claude Sonnet 4.5, Mistral Large)\n- Gemini: https://aistudio.google.com/apikey\n- Groq: https://console.groq.com'
             : isRateLimited
               ? `⏳ **Batas permintaan tercapai.**\n\n${errorDetail}\n\nTunggu 1-2 menit lalu coba lagi. Gunakan ⚙️ → Test Koneksi untuk diagnose.`
               : isInvalidKey
@@ -420,7 +428,7 @@ export function AIChatWidget() {
   };
 
   // Check if any AI provider is available
-  const isAIConfigured = aiConfig?.zai?.available || aiConfig?.gemini?.configured || aiConfig?.groq?.configured;
+  const isAIConfigured = aiConfig?.zai?.available || aiConfig?.nara?.configured || aiConfig?.gemini?.configured || aiConfig?.groq?.configured;
 
   // [H-10] `formatContent` and the message list rendering have been hoisted
   // out to module scope (see `formatContent` and `MessageList` above). The
@@ -537,7 +545,7 @@ export function AIChatWidget() {
                       <Key className="h-3.5 w-3.5" /> Konfigurasi AI Provider
                     </div>
                     <p className="text-[10px]" style={{ color: 'var(--muted-foreground)' }}>
-                      Z.AI (chat.z.ai) adalah provider utama — otomatis tersedia, tanpa API key! Gemini/Groq sebagai fallback opsional.
+                      Z.AI (chat.z.ai) adalah provider utama — otomatis tersedia, tanpa API key! NaraRouter (akses Claude & Mistral gratis), Gemini, dan Groq sebagai fallback opsional.
                     </p>
 
                     {/* Status indicators */}
@@ -545,6 +553,11 @@ export function AIChatWidget() {
                       <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] ${aiConfig?.zai?.available ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
                         {aiConfig?.zai?.available ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
                         Z.AI {aiConfig?.zai?.available ? '✓' : '✗'} <span className="opacity-60">(primary)</span>
+                      </div>
+                      <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] ${aiConfig?.nara?.configured ? 'bg-green-50 text-green-700' : 'bg-gray-50 text-gray-500'}`}>
+                        {aiConfig?.nara?.configured ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
+                        NaraRouter {aiConfig?.nara?.configured ? '✓' : '✗'}
+                        {aiConfig?.nara?.keyHint && <span className="opacity-60">({aiConfig.nara.keyHint})</span>}
                       </div>
                       <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] ${aiConfig?.gemini?.configured ? 'bg-green-50 text-green-700' : 'bg-gray-50 text-gray-500'}`}>
                         {aiConfig?.gemini?.configured ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
@@ -558,10 +571,34 @@ export function AIChatWidget() {
                       </div>
                     </div>
 
+                    {/* NaraRouter Key Input */}
+                    <div>
+                      <label className="text-[10px] font-medium block mb-1" style={{ color: 'var(--foreground)' }}>
+                        NaraRouter API Key <span className="opacity-50">(fallback 1 — https://router.bynara.id — Claude & Mistral gratis)</span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showNaraKey ? 'text' : 'password'}
+                          value={configNaraKey}
+                          onChange={(e) => setConfigNaraKey(e.target.value)}
+                          placeholder={aiConfig?.nara?.configured ? 'Kosongkan jika tidak ingin mengubah' : 'sk-nry-...'}
+                          className="w-full text-[11px] px-3 py-1.5 rounded-lg border pr-8 outline-none focus:ring-1 focus:ring-cyan-400"
+                          style={{ borderColor: 'var(--border)', background: 'var(--background)', color: 'var(--foreground)' }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowNaraKey(!showNaraKey)}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 opacity-40 hover:opacity-70"
+                        >
+                          {showNaraKey ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                        </button>
+                      </div>
+                    </div>
+
                     {/* Gemini Key Input */}
                     <div>
                       <label className="text-[10px] font-medium block mb-1" style={{ color: 'var(--foreground)' }}>
-                        Gemini API Key <span className="opacity-50">(fallback opsional — https://aistudio.google.com/apikey)</span>
+                        Gemini API Key <span className="opacity-50">(fallback 2 — https://aistudio.google.com/apikey)</span>
                       </label>
                       <div className="relative">
                         <input
@@ -585,7 +622,7 @@ export function AIChatWidget() {
                     {/* Groq Key Input */}
                     <div>
                       <label className="text-[10px] font-medium block mb-1" style={{ color: 'var(--foreground)' }}>
-                        Groq API Key <span className="opacity-50">(fallback opsional — https://console.groq.com)</span>
+                        Groq API Key <span className="opacity-50">(fallback 3 — https://console.groq.com)</span>
                       </label>
                       <div className="relative">
                         <input
@@ -692,6 +729,21 @@ export function AIChatWidget() {
                             </div>
                           )}
 
+                          {/* NaraRouter Result */}
+                          {'nara' in testResult && testResult.nara && (
+                            <div className={`px-2 py-1 rounded ${testResult.nara.testResult === 'success' ? 'bg-green-50 text-green-700' : testResult.nara.keyFound ? 'bg-red-50 text-red-700' : 'bg-gray-50 text-gray-500'}`}>
+                              {testResult.nara.testResult === 'success'
+                                ? `✅ NaraRouter OK${testResult.nara.model ? ` (${testResult.nara.model})` : ''} — ${testResult.nara.latencyMs}ms`
+                                : testResult.nara.keyFound
+                                  ? `❌ NaraRouter GAGAL — ${testResult.nara.error?.substring(0, 150) || 'Unknown error'}`
+                                  : '⏸ NaraRouter belum dikonfigurasi (dapatkan key di router.bynara.id)'
+                              }
+                              {testResult.nara.keyFound && (
+                                <span className="opacity-60 ml-1">({testResult.nara.keySource})</span>
+                              )}
+                            </div>
+                          )}
+
                           {/* DB Connection */}
                           <div className={`px-2 py-1 rounded ${testResult.dbConnection?.ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
                             {testResult.dbConnection?.ok ? '✅ Database: Terhubung' : `❌ Database: ${testResult.dbConnection?.error || 'Gagal'}`}
@@ -751,7 +803,7 @@ export function AIChatWidget() {
                   )}
                   {!isAIConfigured && (
                     <div className="mt-3 p-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-[10px]">
-                      ⚠️ Provider AI belum tersedia. Klik ⚙️ di atas untuk mengatur API key (Gemini/Groq) sebagai fallback.
+                      ⚠️ Provider AI belum tersedia. Klik ⚙️ di atas untuk mengatur API key (NaraRouter/Gemini/Groq) sebagai fallback.
                     </div>
                   )}
 

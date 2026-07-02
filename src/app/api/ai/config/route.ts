@@ -6,8 +6,10 @@ import { checkZaiAvailable } from '@/lib/ai-sdk';
 
 // Keys stored in AppSetting table
 const AI_KEY_SETTINGS = {
+  naraApiKey: 'ai_nara_router_api_key',
   geminiApiKey: 'ai_gemini_api_key',
   groqApiKey: 'ai_groq_api_key',
+  naraModel: 'ai_nara_router_model',
   geminiModel: 'ai_gemini_model',
   groqModel: 'ai_groq_model',
 };
@@ -33,10 +35,12 @@ export async function GET() {
     }
 
     // Also check environment variables
+    const envNaraKey = process.env.NARA_ROUTER_API_KEY || null;
     const envGeminiKey = process.env.GEMINI_API_KEY || null;
     const envGroqKey = process.env.GROQ_API_KEY || null;
 
     // Build status — key is "available" if either env var or DB setting exists
+    const naraKey = envNaraKey || results.naraApiKey;
     const geminiKey = envGeminiKey || results.geminiApiKey;
     const groqKey = envGroqKey || results.groqApiKey;
 
@@ -48,6 +52,12 @@ export async function GET() {
         available: zaiAvailable,
         model: zaiAvailable ? 'GLM-4-Plus (auto)' : 'not available',
         note: 'Provider utama — otomatis tersedia tanpa API key',
+      },
+      nara: {
+        configured: !!naraKey,
+        source: envNaraKey ? 'env' : (results.naraApiKey ? 'database' : 'none'),
+        model: results.naraModel || process.env.NARA_ROUTER_MODEL || 'mistral-large',
+        keyHint: naraKey ? `${naraKey.substring(0, 8)}...${naraKey.substring(naraKey.length - 4)}` : null,
       },
       gemini: {
         configured: !!geminiKey,
@@ -76,7 +86,7 @@ export async function PUT(request: NextRequest) {
   try {
     await ensureTablesExist();
     const body = await request.json();
-    const { password, geminiApiKey, groqApiKey, geminiModel, groqModel } = body;
+    const { password, naraApiKey, geminiApiKey, groqApiKey, naraModel, geminiModel, groqModel } = body;
 
     // Verify admin password
     if (!password) {
@@ -90,6 +100,20 @@ export async function PUT(request: NextRequest) {
 
     // Save each provided setting
     const updates: string[] = [];
+
+    if (naraApiKey !== undefined) {
+      if (naraApiKey === '') {
+        await db.appSetting.deleteMany({ where: { key: AI_KEY_SETTINGS.naraApiKey } });
+        updates.push('naraApiKey (deleted)');
+      } else {
+        await db.appSetting.upsert({
+          where: { key: AI_KEY_SETTINGS.naraApiKey },
+          update: { value: JSON.stringify(naraApiKey) },
+          create: { key: AI_KEY_SETTINGS.naraApiKey, value: JSON.stringify(naraApiKey) },
+        });
+        updates.push('naraApiKey');
+      }
+    }
 
     if (geminiApiKey !== undefined) {
       if (geminiApiKey === '') {
@@ -117,6 +141,15 @@ export async function PUT(request: NextRequest) {
         });
         updates.push('groqApiKey');
       }
+    }
+
+    if (naraModel !== undefined) {
+      await db.appSetting.upsert({
+        where: { key: AI_KEY_SETTINGS.naraModel },
+        update: { value: JSON.stringify(naraModel) },
+        create: { key: AI_KEY_SETTINGS.naraModel, value: JSON.stringify(naraModel) },
+      });
+      updates.push('naraModel');
     }
 
     if (geminiModel !== undefined) {

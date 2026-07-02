@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { callAI, checkZaiAvailable, getAIProviderStatusAsync } from '@/lib/ai-sdk';
+import { naraChatCompletion } from '@/lib/nara-router';
 import { ensureTablesExist } from '@/lib/db-init';
 import { db } from '@/lib/db';
 
@@ -12,12 +13,14 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   const results: {
     zai: { available: boolean; testResult: string; latencyMs: number; error: string | null; model?: string };
+    nara: { keyFound: boolean; keySource: string; keyHint: string | null; testResult: string; latencyMs: number; error: string | null; model?: string };
     gemini: { keyFound: boolean; keySource: string; keyHint: string | null; testResult: string; latencyMs: number; error: string | null };
     groq: { keyFound: boolean; keySource: string; keyHint: string | null; testResult: string; latencyMs: number; error: string | null };
     dbConnection: { ok: boolean; error: string | null };
     summary: string;
   } = {
     zai: { available: false, testResult: 'not_tested', latencyMs: 0, error: null },
+    nara: { keyFound: false, keySource: 'none', keyHint: null, testResult: 'not_tested', latencyMs: 0, error: null },
     gemini: { keyFound: false, keySource: 'none', keyHint: null, testResult: 'not_tested', latencyMs: 0, error: null },
     groq: { keyFound: false, keySource: 'none', keyHint: null, testResult: 'not_tested', latencyMs: 0, error: null },
     dbConnection: { ok: false, error: null },
@@ -58,7 +61,51 @@ export async function GET() {
     results.zai.error = err instanceof Error ? err.message.substring(0, 200) : 'Unknown error';
   }
 
-  // 2. Check Gemini key
+  // 2. Check NaraRouter key
+  try {
+    const naraKey = process.env.NARA_ROUTER_API_KEY;
+    let dbNaraKey: string | null = null;
+    try {
+      await ensureTablesExist();
+      const setting = await db.appSetting.findUnique({ where: { key: 'ai_nara_router_api_key' } });
+      if (setting?.value) {
+        const parsed = JSON.parse(setting.value);
+        if (typeof parsed === 'string' && parsed.trim()) dbNaraKey = parsed.trim();
+      }
+    } catch { /* DB error */ }
+
+    const effectiveNaraKey = naraKey || dbNaraKey;
+    results.nara.keyFound = !!effectiveNaraKey;
+    results.nara.keySource = naraKey ? 'env' : dbNaraKey ? 'database' : 'none';
+    results.nara.keyHint = effectiveNaraKey
+      ? `${effectiveNaraKey.substring(0, 8)}...${effectiveNaraKey.substring(effectiveNaraKey.length - 4)}`
+      : null;
+
+    if (effectiveNaraKey) {
+      const naraStart = Date.now();
+      const naraResult = await naraChatCompletion({
+        messages: [
+          { role: 'system', content: 'You are a test assistant. Reply with exactly: OK' },
+          { role: 'user', content: 'Test' },
+        ],
+        temperature: 0,
+        max_tokens: 10,
+        apiKey: effectiveNaraKey,
+      });
+      results.nara.latencyMs = Date.now() - naraStart;
+      results.nara.testResult = naraResult.success ? 'success' : 'failed';
+      results.nara.error = naraResult.success ? null : naraResult.error?.substring(0, 200) || null;
+      results.nara.model = naraResult.model;
+    } else {
+      results.nara.testResult = 'not_configured';
+      results.nara.error = 'NARA_ROUTER_API_KEY not set. Get one at https://router.bynara.id';
+    }
+  } catch (err) {
+    results.nara.testResult = 'failed';
+    results.nara.error = err instanceof Error ? err.message.substring(0, 200) : 'Unknown error';
+  }
+
+  // 3. Check Gemini key
   try {
     const geminiKey = process.env.GEMINI_API_KEY;
     let dbGeminiKey: string | null = null;
@@ -100,7 +147,7 @@ export async function GET() {
     results.gemini.error = err instanceof Error ? err.message.substring(0, 200) : 'Unknown error';
   }
 
-  // 3. Check Groq key
+  // 4. Check Groq key
   try {
     const groqKey = process.env.GROQ_API_KEY;
     let dbGroqKey: string | null = null;
@@ -142,7 +189,7 @@ export async function GET() {
     results.groq.error = err instanceof Error ? err.message.substring(0, 200) : 'Unknown error';
   }
 
-  // 4. Test database connection
+  // 5. Test database connection
   try {
     await ensureTablesExist();
     const tableCheck = await db.appSetting.count();
@@ -154,9 +201,10 @@ export async function GET() {
     results.dbConnection.error = err instanceof Error ? err.message.substring(0, 200) : 'Unknown DB error';
   }
 
-  // 5. Summary
+  // 6. Summary
   const workingProviders: string[] = [];
   if (results.zai.testResult === 'success') workingProviders.push(`Z.AI (${results.zai.model || 'glm-4-plus'})`);
+  if (results.nara.testResult === 'success') workingProviders.push(`NaraRouter (${results.nara.model || 'mistral-large'})`);
   if (results.gemini.testResult === 'success') workingProviders.push('Gemini');
   if (results.groq.testResult === 'success') workingProviders.push('Groq');
 

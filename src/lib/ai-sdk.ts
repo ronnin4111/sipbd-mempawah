@@ -1,20 +1,25 @@
 import { geminiChatCompletion, isGeminiConfigured, isGeminiConfiguredAsync, getGeminiModel } from './gemini-ai';
 import { groqChatCompletion, isGroqConfigured, isGroqConfiguredAsync, getGroqModel } from './groq-ai';
+import { naraChatCompletion, isNaraConfigured, isNaraConfiguredAsync, getNaraModel } from './nara-router';
 import { db } from './db';
 
 /**
  * Unified AI SDK helper — Multi-provider with automatic fallback.
  *
- * Strategy (UPDATED — Z.AI as primary):
+ * Strategy (UPDATED — NaraRouter added as priority 2):
  * 1. Z.AI API (primary — always available in sandbox/dev, no API key needed)
  *    - Uses z-ai-web-dev-sdk with auto-discovered config
  *    - Models: glm-4-plus, glm-4-flash, etc. (auto-selected by Z.AI)
  *    - No rate limits for sandbox/dev usage
  *    - No API key configuration needed!
- * 2. Google Gemini API (fallback 1 — if API key configured)
+ * 2. NaraRouter API (fallback 1 — OpenAI-compatible Indonesian gateway)
+ *    - Free tier: 7M tokens/day, 10 RPM
+ *    - Models: mistral-large (default), mistral-medium-3-5, claude-sonnet-4.5, claude-haiku-4.5
+ *    - Get key at https://router.bynara.id (starts with sk-nry-)
+ * 3. Google Gemini API (fallback 2 — if API key configured)
  *    - Free: 15 RPM, 1500 RPD for gemini-2.0-flash (default)
  *    - Fallback models: gemini-2.5-flash-preview, gemini-1.5-flash
- * 3. Groq API (fallback 2 — if API key configured)
+ * 4. Groq API (fallback 3 — if API key configured)
  *    - Free: 30 RPM, 6000 RPD for llama-3.3-70b-versatile (default)
  *    - Fallback models: llama-3.1-8b-instant, mixtral-8x7b-32768
  *
@@ -368,7 +373,7 @@ export async function callAI(options: UnifiedAIOptions): Promise<UnifiedAIResult
   // non-empty trimmed string; otherwise null.
   console.log('[AI SDK] Resolving API keys...');
   const settings = await db.appSetting.findMany({
-    where: { key: { in: ['ai_gemini_api_key', 'ai_groq_api_key', 'ai_gemini_model', 'ai_groq_model'] } },
+    where: { key: { in: ['ai_nara_router_api_key', 'ai_gemini_api_key', 'ai_groq_api_key', 'ai_nara_router_model', 'ai_gemini_model', 'ai_groq_model'] } },
   });
   const settingsMap = new Map(settings.map(s => [s.key, s.value]));
   const parseSetting = (k: string): string | null => {
@@ -382,13 +387,15 @@ export async function callAI(options: UnifiedAIOptions): Promise<UnifiedAIResult
       return null;
     }
   };
+  const naraKey = process.env.NARA_ROUTER_API_KEY || parseSetting('ai_nara_router_api_key');
   const geminiKey = process.env.GEMINI_API_KEY || parseSetting('ai_gemini_api_key');
   const groqKey = process.env.GROQ_API_KEY || parseSetting('ai_groq_api_key');
+  const naraModel = process.env.NARA_ROUTER_MODEL || parseSetting('ai_nara_router_model');
   const geminiModel = process.env.GEMINI_MODEL || parseSetting('ai_gemini_model');
   const groqModel = process.env.GROQ_MODEL || parseSetting('ai_groq_model');
 
-  console.log(`[AI SDK] Keys resolved: Gemini=${geminiKey ? 'yes(' + geminiKey.substring(0, 6) + '...)' : 'no'}, Groq=${groqKey ? 'yes(' + groqKey.substring(0, 6) + '...)' : 'no'}`);
-  console.log(`[AI SDK] Models resolved: Gemini=${geminiModel || 'default'}, Groq=${groqModel || 'default'}`);
+  console.log(`[AI SDK] Keys resolved: NaraRouter=${naraKey ? 'yes(' + naraKey.substring(0, 8) + '...)' : 'no'}, Gemini=${geminiKey ? 'yes(' + geminiKey.substring(0, 6) + '...)' : 'no'}, Groq=${groqKey ? 'yes(' + groqKey.substring(0, 6) + '...)' : 'no'}`);
+  console.log(`[AI SDK] Models resolved: NaraRouter=${naraModel || 'default'}, Gemini=${geminiModel || 'default'}, Groq=${groqModel || 'default'}`);
 
   // ============================================================
   // 1. Try Z.AI first — always available in sandbox/dev!
@@ -405,7 +412,55 @@ export async function callAI(options: UnifiedAIOptions): Promise<UnifiedAIResult
   console.warn('[AI SDK] Z.AI failed:', (zaiResult.error || '').substring(0, 200));
 
   // ============================================================
-  // 2. Try Google Gemini as fallback — if API key available
+  // 2. Try NaraRouter as fallback 1 — OpenAI-compatible Indonesian gateway
+  // Free tier: 7M tokens/day, 10 RPM, access to Mistral Large + Claude.
+  // ============================================================
+  if (naraKey) {
+    console.log('[AI SDK] Trying NaraRouter (fallback 1)...');
+    try {
+      const naraStart = Date.now();
+      const result = await withTimeout(
+        naraChatCompletion({
+          messages: options.messages,
+          temperature: options.temperature,
+          max_tokens: options.max_tokens,
+          apiKey: naraKey,
+          model: naraModel || undefined,
+        }),
+        30000,
+        'NaraRouter'
+      );
+      const naraElapsed = Date.now() - naraStart;
+
+      if (result.success) {
+        console.log(`[AI SDK] NaraRouter SUCCESS in ${naraElapsed}ms, model=${result.model}`);
+        return {
+          success: true,
+          content: result.content,
+          provider: 'nara-router',
+          model: result.model || naraModel || 'mistral-large',
+        };
+      }
+
+      const errDetail = result.error || 'Unknown error';
+      errors.push({ provider: 'NaraRouter', detail: errDetail });
+      console.warn(`[AI SDK] NaraRouter FAILED in ${naraElapsed}ms:`, errDetail.substring(0, 200));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      errors.push({ provider: 'NaraRouter', detail: msg.substring(0, 300) });
+      console.warn('[AI SDK] NaraRouter exception:', msg.substring(0, 200));
+    }
+  } else {
+    console.log('[AI SDK] Skipping NaraRouter — no API key');
+  }
+
+  // Add delay before trying next provider to avoid rapid rate limit hits
+  if (naraKey && geminiKey) {
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+
+  // ============================================================
+  // 3. Try Google Gemini as fallback 2 — if API key available
   // ============================================================
   if (geminiKey) {
     console.log('[AI SDK] Trying Google Gemini (fallback)...');
@@ -452,10 +507,10 @@ export async function callAI(options: UnifiedAIOptions): Promise<UnifiedAIResult
   }
 
   // ============================================================
-  // 3. Try Groq as fallback — if API key available
+  // 4. Try Groq as fallback 3 — if API key available
   // ============================================================
   if (groqKey) {
-    console.log('[AI SDK] Trying Groq (fallback)...');
+    console.log('[AI SDK] Trying Groq (fallback 3)...');
     try {
       const groqStart = Date.now();
       const result = await withTimeout(
@@ -507,6 +562,34 @@ export async function callAI(options: UnifiedAIOptions): Promise<UnifiedAIResult
     if (retryZai.success) {
       console.log('[AI SDK] Z.AI retry SUCCESS');
       return retryZai;
+    }
+
+    // Try NaraRouter (it's independent of Gemini/Groq rate limits)
+    if (naraKey) {
+      try {
+        const result = await withTimeout(
+          naraChatCompletion({
+            messages: options.messages,
+            temperature: options.temperature,
+            max_tokens: options.max_tokens,
+            apiKey: naraKey,
+            model: naraModel || undefined,
+          }),
+          30000,
+          'NaraRouter-retry'
+        );
+        if (result.success) {
+          console.log('[AI SDK] NaraRouter retry SUCCESS');
+          return {
+            success: true,
+            content: result.content,
+            provider: 'nara-router-retry',
+            model: result.model || naraModel || 'mistral-large',
+          };
+        }
+      } catch {
+        // retry failed, continue to next provider
+      }
     }
 
     if (geminiKey) {
@@ -568,11 +651,11 @@ export async function callAI(options: UnifiedAIOptions): Promise<UnifiedAIResult
   console.error(`[AI SDK] ALL providers failed in ${totalElapsed}ms. Errors:`, JSON.stringify(errors));
 
   // All providers failed — return combined error with helpful message
-  if (!geminiKey && !groqKey && errors.some(e => e.provider === 'z-ai')) {
+  if (!naraKey && !geminiKey && !groqKey && errors.some(e => e.provider === 'z-ai')) {
     return {
       success: false,
       content: '',
-      error: `Z.AI tidak tersedia: ${errors.find(e => e.provider === 'z-ai')?.detail || 'Unknown'}. Untuk fallback, konfigurasi API key Gemini/Groq via ikon ⚙️ di chat AI.`,
+      error: `Z.AI tidak tersedia: ${errors.find(e => e.provider === 'z-ai')?.detail || 'Unknown'}. Untuk fallback, konfigurasi API key NaraRouter (https://router.bynara.id) / Gemini / Groq via ikon ⚙️ di chat AI.`,
       provider: 'none',
     };
   }
@@ -599,7 +682,7 @@ export async function callAI(options: UnifiedAIOptions): Promise<UnifiedAIResult
  * Note: Z.AI is checked dynamically at call time
  */
 export function isAIAvailable(): boolean {
-  return isGeminiConfigured() || isGroqConfigured(); // z-ai is dynamically checked
+  return isNaraConfigured() || isGeminiConfigured() || isGroqConfigured(); // z-ai is dynamically checked
 }
 
 /**
@@ -607,12 +690,13 @@ export function isAIAvailable(): boolean {
  * This is the accurate check for server-side use.
  */
 export async function isAIAvailableAsync(): Promise<boolean> {
-  const [gemini, groq] = await Promise.all([
+  const [nara, gemini, groq] = await Promise.all([
+    isNaraConfiguredAsync(),
     isGeminiConfiguredAsync(),
     isGroqConfiguredAsync(),
   ]);
   // Z.AI is always potentially available — check dynamically
-  if (gemini || groq) return true;
+  if (nara || gemini || groq) return true;
   // If no key-based providers, check if Z.AI config is available
   return await checkZaiAvailable();
 }
@@ -622,10 +706,12 @@ export async function isAIAvailableAsync(): Promise<boolean> {
  */
 export async function getAIProviderStatusAsync(): Promise<{
   zai: { available: boolean; model: string; priority: number };
+  nara: { configured: boolean; model: string; priority: number };
   gemini: { configured: boolean; model: string; priority: number };
   groq: { configured: boolean; model: string; priority: number };
 }> {
-  const [geminiReady, groqReady, zaiAvailable] = await Promise.all([
+  const [naraReady, geminiReady, groqReady, zaiAvailable] = await Promise.all([
+    isNaraConfiguredAsync(),
     isGeminiConfiguredAsync(),
     isGroqConfiguredAsync(),
     checkZaiAvailable().then(z => z !== null),
@@ -636,15 +722,20 @@ export async function getAIProviderStatusAsync(): Promise<{
       model: 'GLM-4-Plus (auto)',
       priority: 1,
     },
+    nara: {
+      configured: naraReady,
+      model: getNaraModel(),
+      priority: 2,
+    },
     gemini: {
       configured: geminiReady,
       model: getGeminiModel(),
-      priority: 2,
+      priority: 3,
     },
     groq: {
       configured: groqReady,
       model: getGroqModel(),
-      priority: 3,
+      priority: 4,
     },
   };
 }
@@ -655,6 +746,7 @@ export async function getAIProviderStatusAsync(): Promise<{
  */
 export function getAIProviderStatus(): {
   zai: { available: boolean; model: string; priority: number };
+  nara: { configured: boolean; model: string; priority: number };
   gemini: { configured: boolean; model: string; priority: number };
   groq: { configured: boolean; model: string; priority: number };
 } {
@@ -664,15 +756,20 @@ export function getAIProviderStatus(): {
       model: 'GLM-4-Plus (auto)',
       priority: 1,
     },
+    nara: {
+      configured: isNaraConfigured(),
+      model: getNaraModel(),
+      priority: 2,
+    },
     gemini: {
       configured: isGeminiConfigured(),
       model: getGeminiModel(),
-      priority: 2,
+      priority: 3,
     },
     groq: {
       configured: isGroqConfigured(),
       model: getGroqModel(),
-      priority: 3,
+      priority: 4,
     },
   };
 }
