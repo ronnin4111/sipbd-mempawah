@@ -316,18 +316,40 @@ const CREATE_TABLES_SQL = [
 
 const ALTER_TABLES_SQL = [
   // Add fotoUrl and noWa columns if they don't exist (for existing Turso tables)
-  `ALTER TABLE Penyuluh ADD COLUMN fotoUrl TEXT NOT NULL DEFAULT ''`,
-  `ALTER TABLE Penyuluh ADD COLUMN noWa TEXT NOT NULL DEFAULT ''`,
-  `ALTER TABLE Pegawai ADD COLUMN fotoUrl TEXT NOT NULL DEFAULT ''`,
-  `ALTER TABLE Pegawai ADD COLUMN noWa TEXT NOT NULL DEFAULT ''`,
+  { table: 'Penyuluh', column: 'fotoUrl', sql: `ALTER TABLE Penyuluh ADD COLUMN fotoUrl TEXT NOT NULL DEFAULT ''` },
+  { table: 'Penyuluh', column: 'noWa', sql: `ALTER TABLE Penyuluh ADD COLUMN noWa TEXT NOT NULL DEFAULT ''` },
+  { table: 'Pegawai', column: 'fotoUrl', sql: `ALTER TABLE Pegawai ADD COLUMN fotoUrl TEXT NOT NULL DEFAULT ''` },
+  { table: 'Pegawai', column: 'noWa', sql: `ALTER TABLE Pegawai ADD COLUMN noWa TEXT NOT NULL DEFAULT ''` },
 
   // FishFarm — add newer columns in case table exists but was created before these were added
-  `ALTER TABLE FishFarm ADD COLUMN farmerId TEXT NOT NULL DEFAULT ''`,
-  `ALTER TABLE FishFarm ADD COLUMN kusuka TEXT NOT NULL DEFAULT ''`,
-  `ALTER TABLE FishFarm ADD COLUMN cpib INTEGER NOT NULL DEFAULT 0`,
-  `ALTER TABLE FishFarm ADD COLUMN cbib INTEGER NOT NULL DEFAULT 0`,
-  `ALTER TABLE FishFarm ADD COLUMN disaggregationBatchId TEXT`,
+  { table: 'FishFarm', column: 'farmerId', sql: `ALTER TABLE FishFarm ADD COLUMN farmerId TEXT NOT NULL DEFAULT ''` },
+  { table: 'FishFarm', column: 'kusuka', sql: `ALTER TABLE FishFarm ADD COLUMN kusuka TEXT NOT NULL DEFAULT ''` },
+  { table: 'FishFarm', column: 'cpib', sql: `ALTER TABLE FishFarm ADD COLUMN cpib INTEGER NOT NULL DEFAULT 0` },
+  { table: 'FishFarm', column: 'cbib', sql: `ALTER TABLE FishFarm ADD COLUMN cbib INTEGER NOT NULL DEFAULT 0` },
+  { table: 'FishFarm', column: 'disaggregationBatchId', sql: `ALTER TABLE FishFarm ADD COLUMN disaggregationBatchId TEXT` },
 ];
+
+/**
+ * Check if a column exists in a table using PRAGMA table_info.
+ * SQLite has no `ALTER TABLE ADD COLUMN IF NOT EXISTS` clause, so we must
+ * check existence manually before ALTER — otherwise it errors with
+ * "duplicate column name" on every server start.
+ *
+ * Uses db.$queryRawUnsafe to get actual rows back (PRAGMA returns a result set).
+ */
+async function columnExists(tableName: string, columnName: string): Promise<boolean> {
+  try {
+    // PRAGMA table_info returns rows: [{ name: 'id', ... }, { name: 'nama', ... }, ...]
+    // We use $queryRawUnsafe because $executeRawUnsafe doesn't return rows.
+    const rows = await db.$queryRawUnsafe<Array<{ name: string }>>(
+      `PRAGMA table_info(${tableName})`
+    );
+    return rows.some(r => r.name === columnName);
+  } catch {
+    // If PRAGMA fails (table doesn't exist yet, etc.), assume column doesn't exist
+    return false;
+  }
+}
 
 /**
  * Ensure all required tables exist in the database.
@@ -369,10 +391,21 @@ export async function ensureTablesExist(): Promise<void> {
           await Promise.all(indexes.slice(i, i + 10).map(sql => db.$executeRawUnsafe(sql).catch(() => {})));
         }
 
-        // Phase 4: Try to add new columns (will fail silently if column already exists)
-        await Promise.all(ALTER_TABLES_SQL.map(sql =>
-          db.$executeRawUnsafe(sql).catch(() => {})
-        ));
+        // Phase 4: Add new columns — check existence first to avoid "duplicate column name" errors.
+        // SQLite has no `ALTER TABLE ADD COLUMN IF NOT EXISTS`, so we use PRAGMA table_info
+        // to check before attempting ALTER. This keeps the dev log clean (no spurious errors).
+        for (const { table, column, sql } of ALTER_TABLES_SQL) {
+          const exists = await columnExists(table, column);
+          if (!exists) {
+            try {
+              await db.$executeRawUnsafe(sql);
+              console.log(`[db-init] ➕ Added column ${table}.${column}`);
+            } catch (err) {
+              // Race condition: another process added it between check and ALTER — safe to ignore
+              console.warn(`[db-init] ⚠️ Could not add ${table}.${column}:`, err instanceof Error ? err.message : 'unknown');
+            }
+          }
+        }
 
         // Initialize default passwords if not set
         try {
